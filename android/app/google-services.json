@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "553255490272",
+    "project_id": "twezimbeapp",
+    "storage_bucket": "twezimbeapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:553255490272:android:7db729f71324c04c51b685",
+        "android_client_info": {
+          "package_name": "com.example.twezimbeapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoHjCGhUl2bISAdthQmJz0E4OxXf1iNZY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
