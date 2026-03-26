@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
 import 'package:twezimbeapp/features/profile/presentation/pages/personal_info_page.dart';
@@ -10,6 +12,9 @@ class ProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final profile = AppDataRepository.profileForCurrentUser();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Profile'),
@@ -30,8 +35,8 @@ class ProfilePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Namugumya Agnes',
+            Text(
+              profile.fullName,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -40,7 +45,7 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'CUS00001',
+              user?.email ?? profile.customerId,
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey.shade600,
@@ -51,16 +56,20 @@ class ProfilePage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.successGreen.withOpacity(0.1),
+                color: AppColors.successGreen.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.verified, color: AppColors.successGreen, size: 16),
-                  SizedBox(width: 6),
+                  const Icon(
+                    Icons.verified,
+                    color: AppColors.successGreen,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
                   Text(
-                    'KYC Verified',
+                    profile.kycStatus,
                     style: TextStyle(
                       color: AppColors.successGreen,
                       fontWeight: FontWeight.bold,
@@ -119,7 +128,7 @@ class ProfilePage extends StatelessWidget {
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.logout, color: Colors.red),
@@ -151,7 +160,7 @@ class ProfilePage extends StatelessWidget {
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: AppColors.primaryBlue.withOpacity(0.1),
+            color: AppColors.primaryBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: AppColors.primaryBlue),

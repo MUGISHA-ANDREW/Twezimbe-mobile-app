@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
 import 'package:twezimbeapp/features/notifications/presentation/pages/notifications_page.dart';
@@ -15,6 +17,26 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   bool _isBalanceVisible = false;
   bool _isNotificationsPanelOpen = false;
+
+  User? get _currentUser => FirebaseAuth.instance.currentUser;
+
+  String get _greetingName {
+    final displayName = _currentUser?.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+
+    final email = _currentUser?.email?.trim();
+    if (email != null && email.isNotEmpty) {
+      return email.split('@').first;
+    }
+
+    return 'there';
+  }
+
+  String get _accountIdentifier {
+    return AppDataRepository.profileForCurrentUser().customerId;
+  }
 
   final List<Map<String, dynamic>> _notifications = [
     {
@@ -64,6 +86,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = AppDataRepository.profileForCurrentUser();
+    final recentTransactions =
+        AppDataRepository.recentTransactionsForCurrentUser();
+
     return SafeArea(
       child: Stack(
         children: [
@@ -97,15 +123,15 @@ class _DashboardPageState extends State<DashboardPage> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Hi, Agnes!',
+                              Text(
+                                'Hi, $_greetingName!',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               Text(
-                                'CUS00001',
+                                _accountIdentifier,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade600,
@@ -174,7 +200,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primaryBlue.withOpacity(0.3),
+                          color: AppColors.primaryBlue.withValues(alpha: 0.3),
                           blurRadius: 15,
                           offset: const Offset(0, 8),
                         ),
@@ -189,7 +215,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             Text(
                               'Available Balance',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.white.withValues(alpha: 0.9),
                                 fontSize: 14,
                               ),
                             ),
@@ -203,7 +229,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 _isBalanceVisible
                                     ? Icons.visibility
                                     : Icons.visibility_off,
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withValues(alpha: 0.8),
                                 size: 20,
                               ),
                             ),
@@ -211,7 +237,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _isBalanceVisible ? 'UGX 2,500,000' : 'UGX ••••••••',
+                          _isBalanceVisible
+                              ? profile.availableBalance
+                              : 'UGX â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
                           style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
@@ -227,11 +255,11 @@ class _DashboardPageState extends State<DashboardPage> {
                                 vertical: 6,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Text(
-                                'Savings Account',
+                              child: Text(
+                                profile.accountType,
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
@@ -329,33 +357,20 @@ class _DashboardPageState extends State<DashboardPage> {
                   const SizedBox(height: 8),
 
                   // Transactions List
-                  const _TransactionTile(
-                    icon: Icons.send,
-                    iconColor: Colors.red,
-                    iconBgColor: Color(0x1A000000), // Approximate red opacity
-                    title: 'Sent to Maliro Stephen',
-                    subtitle: 'Transfer • Today, 10:24 AM',
-                    amount: '- UGX 100,000',
-                    isCredit: false,
-                  ),
-                  const _TransactionTile(
-                    icon: Icons.download,
-                    iconColor: AppColors.successGreen,
-                    iconBgColor: Color(0x1A4CAF50),
-                    title: 'Received from Lubega S',
-                    subtitle: 'Cash deposit • Yesterday',
-                    amount: '+ UGX 80,000',
-                    isCredit: true,
-                  ),
-                  const _TransactionTile(
-                    icon: Icons.credit_card,
-                    iconColor: AppColors.primaryBlue,
-                    iconBgColor: Color(0x1A1E60E2),
-                    title: 'Loan Disbursed',
-                    subtitle: 'Salary Loan • 12 Nov',
-                    amount: '+ UGX 1,300,000',
-                    isCredit: true,
-                  ),
+                  ...recentTransactions.take(3).map((tx) {
+                    final iconColor = tx.isCredit
+                        ? AppColors.successGreen
+                        : Colors.redAccent;
+                    return _TransactionTile(
+                      icon: tx.isCredit ? Icons.download : Icons.send,
+                      iconColor: iconColor,
+                      iconBgColor: iconColor.withValues(alpha: 0.1),
+                      title: tx.title,
+                      subtitle: tx.subtitle,
+                      amount: tx.amount,
+                      isCredit: tx.isCredit,
+                    );
+                  }),
                 ],
               ),
             ),
@@ -428,7 +443,9 @@ class _DashboardPageState extends State<DashboardPage> {
                               },
                               child: Container(
                                 color: isUnread
-                                    ? AppColors.primaryBlue.withOpacity(0.04)
+                                    ? AppColors.primaryBlue.withValues(
+                                        alpha: 0.04,
+                                      )
                                     : Colors.transparent,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -441,7 +458,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
                                         color: (n['iconColor'] as Color)
-                                            .withOpacity(0.1),
+                                            .withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: Icon(
@@ -577,7 +594,7 @@ class _QuickAction extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),

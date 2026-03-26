@@ -25,7 +25,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withOpacity(0.08),
+                color: AppColors.primaryBlue.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
@@ -130,7 +130,9 @@ class _WithdrawPageState extends State<WithdrawPage> {
                       filled: true,
                       fillColor: Colors.grey.shade50,
                       contentPadding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 16),
+                        vertical: 16,
+                        horizontal: 16,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -162,7 +164,9 @@ class _WithdrawPageState extends State<WithdrawPage> {
                       filled: true,
                       fillColor: Colors.grey.shade50,
                       contentPadding: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 16),
+                        vertical: 16,
+                        horizontal: 16,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -218,7 +222,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryBlue.withOpacity(0.05)
+              ? AppColors.primaryBlue.withValues(alpha: 0.05)
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -231,7 +235,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 20),

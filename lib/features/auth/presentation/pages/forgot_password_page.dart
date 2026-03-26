@@ -57,7 +57,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         Icon(
           Icons.lock_reset,
           size: 64,
-          color: AppColors.primaryBlue.withOpacity(0.7),
+          color: AppColors.primaryBlue.withValues(alpha: 0.7),
         ),
         const SizedBox(height: 24),
         const Text(
@@ -110,7 +110,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         Icon(
           Icons.sms,
           size: 64,
-          color: AppColors.primaryOrange.withOpacity(0.7),
+          color: AppColors.primaryOrange.withValues(alpha: 0.7),
         ),
         const SizedBox(height: 24),
         const Text(
@@ -193,7 +193,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         Icon(
           Icons.verified_user,
           size: 64,
-          color: AppColors.successGreen.withOpacity(0.7),
+          color: AppColors.successGreen.withValues(alpha: 0.7),
         ),
         const SizedBox(height: 24),
         const Text(
@@ -271,7 +271,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.successGreen.withOpacity(0.1),
+                color: AppColors.successGreen.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(

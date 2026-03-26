@@ -123,7 +123,7 @@ class _SignInPageState extends State<SignInPage> {
               const SizedBox(height: 16),
 
               const Text(
-                'Hi Agnes! Nice to see you again.',
+                'Welcome back! Nice to see you again.',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
 

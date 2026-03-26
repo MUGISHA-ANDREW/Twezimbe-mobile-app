@@ -51,7 +51,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
                   ),
                   SizedBox(height: 8),
                   Text(
-                    'Next installment: UGX 70,000 • Due Apr 15',
+                    'Next installment: UGX 70,000 â€¢ Due Apr 15',
                     style: TextStyle(color: Colors.white60, fontSize: 13),
                   ),
                 ],
@@ -234,7 +234,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryBlue.withOpacity(0.05)
+              ? AppColors.primaryBlue.withValues(alpha: 0.05)
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -284,7 +284,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryBlue.withOpacity(0.05)
+              ? AppColors.primaryBlue.withValues(alpha: 0.05)
               : Colors.grey.shade50,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
@@ -297,7 +297,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 20),

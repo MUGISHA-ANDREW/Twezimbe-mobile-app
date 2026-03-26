@@ -112,12 +112,12 @@ class NotificationsPage extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isUnread
-            ? AppColors.primaryBlue.withOpacity(0.04)
+            ? AppColors.primaryBlue.withValues(alpha: 0.04)
             : Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isUnread
-              ? AppColors.primaryBlue.withOpacity(0.15)
+              ? AppColors.primaryBlue.withValues(alpha: 0.15)
               : Colors.grey.shade100,
         ),
       ),
@@ -127,7 +127,7 @@ class NotificationsPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: iconColor, size: 20),

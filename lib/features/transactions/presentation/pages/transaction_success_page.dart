@@ -32,13 +32,15 @@ class TransactionSuccessPage extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: AppColors.successGreen.withOpacity(0.1),
+                          color: AppColors.successGreen.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: AppColors.successGreen.withOpacity(0.2),
+                            color: AppColors.successGreen.withValues(
+                              alpha: 0.2,
+                            ),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
@@ -76,7 +78,7 @@ class TransactionSuccessPage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
+                              color: Colors.black.withValues(alpha: 0.05),
                               blurRadius: 15,
                               offset: const Offset(0, 5),
                             ),

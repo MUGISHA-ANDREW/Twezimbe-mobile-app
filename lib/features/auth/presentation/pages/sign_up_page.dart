@@ -11,6 +11,7 @@ class SignUpPage extends StatefulWidget {
 }
 
 class _SignUpPageState extends State<SignUpPage> {
+  final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -21,6 +22,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -29,7 +31,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _signUp() async {
-    final phone = _phoneController.text.trim();
+    final username = _usernameController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
@@ -38,8 +40,12 @@ class _SignUpPageState extends State<SignUpPage> {
       _showMessage('Please accept terms to continue.');
       return;
     }
+    if (username.isEmpty) {
+      _showMessage('Username is required.');
+      return;
+    }
     if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
-      _showMessage('Email and password fields are required.');
+      _showMessage('Username, email, and password fields are required.');
       return;
     }
     if (password != confirmPassword) {
@@ -56,9 +62,8 @@ class _SignUpPageState extends State<SignUpPage> {
       final credential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
-      if (phone.isNotEmpty) {
-        await credential.user?.updateDisplayName(phone);
-      }
+      await credential.user?.updateDisplayName(username);
+      await credential.user?.reload();
 
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -159,6 +164,13 @@ class _SignUpPageState extends State<SignUpPage> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 32),
+
+              _buildLabel('Username'),
+              _buildTextField(
+                hint: 'Enter your username',
+                controller: _usernameController,
+              ),
+              const SizedBox(height: 16),
 
               _buildLabel('Phone Number'),
               _buildTextField(
