@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
@@ -20,6 +21,11 @@ class _DepositPageState extends State<DepositPage> {
     _amountController.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  int _parseAmount(String raw) {
+    final digitsOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(digitsOnly) ?? 0;
   }
 
   @override
@@ -200,15 +206,40 @@ class _DepositPageState extends State<DepositPage> {
             const SizedBox(height: 40),
 
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
+                final int amountValue = _parseAmount(_amountController.text);
+                if (amountValue <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter a valid amount.')),
+                  );
+                  return;
+                }
+
+                final String phone = _phoneController.text.trim();
+                final String recipient = phone.isEmpty ? 'My Account' : phone;
+                final String displayAmount = AppDataRepository.formatUgx(
+                  amountValue,
+                );
+
+                await AppDataRepository.addTransactionForCurrentUser(
+                  title: 'Deposit via $_selectedMethod',
+                  subtitle: 'Deposit - Just now',
+                  amountValue: amountValue,
+                  isCredit: true,
+                );
+
+                if (!context.mounted) {
+                  return;
+                }
+
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const TransactionSuccessPage(
+                    builder: (context) => TransactionSuccessPage(
                       type: 'Deposit',
-                      amount: 'UGX 100,000',
+                      amount: displayAmount,
                       reference: 'TXN20260308001',
-                      recipient: 'My Account',
+                      recipient: recipient,
                     ),
                   ),
                 );

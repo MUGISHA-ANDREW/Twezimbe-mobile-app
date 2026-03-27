@@ -13,137 +13,148 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final profile = AppDataRepository.profileForCurrentUser();
+    return StreamBuilder<AppProfileData>(
+      stream: AppDataRepository.watchProfileForCurrentUser(),
+      builder: (context, snapshot) {
+        final profile =
+            snapshot.data ?? AppDataRepository.fallbackProfileForCurrentUser();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Profile'),
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            // Avatar & Name
-            const Center(
-              child: CircleAvatar(
-                radius: 50,
-                backgroundImage: NetworkImage(
-                  'https://i.pravatar.cc/150?img=47',
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              profile.fullName,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppColors.darkBlue,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              user?.email ?? profile.customerId,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.successGreen.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.verified,
-                    color: AppColors.successGreen,
-                    size: 16,
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('My Profile'),
+            centerTitle: true,
+            automaticallyImplyLeading: false,
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              children: [
+                // Avatar & Name
+                const Center(
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundImage: NetworkImage(
+                      'https://i.pravatar.cc/150?img=47',
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    profile.kycStatus,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  profile.fullName,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.darkBlue,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  user?.email ?? profile.customerId,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.successGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.verified,
+                        color: AppColors.successGreen,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        profile.kycStatus,
+                        style: TextStyle(
+                          color: AppColors.successGreen,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+
+                // Settings Options
+                _buildProfileOption(
+                  Icons.person_outline,
+                  'Personal Information',
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PersonalInfoPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildProfileOption(Icons.security, 'Security Settings', () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SecuritySettingsPage(),
+                    ),
+                  );
+                }),
+                _buildProfileOption(
+                  Icons.account_balance,
+                  'Linked Accounts',
+                  () {},
+                ),
+                _buildProfileOption(Icons.help_outline, 'Help & Support', () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const HelpSupportPage(),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 16),
+
+                // Logout
+                ListTile(
+                  onTap: () {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SignInPage(),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.logout, color: Colors.red),
+                  ),
+                  title: const Text(
+                    'Logout',
                     style: TextStyle(
-                      color: AppColors.successGreen,
+                      color: Colors.red,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 40),
-
-            // Settings Options
-            _buildProfileOption(
-              Icons.person_outline,
-              'Personal Information',
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const PersonalInfoPage(),
-                  ),
-                );
-              },
-            ),
-            _buildProfileOption(Icons.security, 'Security Settings', () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SecuritySettingsPage(),
                 ),
-              );
-            }),
-            _buildProfileOption(
-              Icons.account_balance,
-              'Linked Accounts',
-              () {},
+              ],
             ),
-            _buildProfileOption(Icons.help_outline, 'Help & Support', () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const HelpSupportPage(),
-                ),
-              );
-            }),
-            const SizedBox(height: 16),
-
-            // Logout
-            ListTile(
-              onTap: () {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignInPage()),
-                  (route) => false,
-                );
-              },
-              leading: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.logout, color: Colors.red),
-              ),
-              title: const Text(
-                'Logout',
-                style: TextStyle(
-                  color: Colors.red,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

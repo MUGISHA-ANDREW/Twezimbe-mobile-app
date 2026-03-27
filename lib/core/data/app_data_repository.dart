@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AppProfileData {
   const AppProfileData({
@@ -74,6 +75,8 @@ class AppFaqData {
 class AppDataRepository {
   const AppDataRepository._();
 
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   static AppSupportData support = const AppSupportData(
     phone: '+256 700 000 000',
     email: 'support@twezimbe.co.ug',
@@ -110,7 +113,7 @@ class AppDataRepository {
     ),
   ];
 
-  static AppProfileData profileForCurrentUser() {
+  static AppProfileData fallbackProfileForCurrentUser() {
     final user = FirebaseAuth.instance.currentUser;
     final int seed = _seedForUser(user);
     final String accountType = seed.isEven
@@ -125,6 +128,63 @@ class AppDataRepository {
       accountType: accountType,
       availableBalance: _formatUgx(balance),
     );
+  }
+
+  static Future<void> ensureProfileForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final docRef = _userDoc(user.uid);
+    final doc = await docRef.get();
+    if (doc.exists) {
+      return;
+    }
+
+    final fallback = fallbackProfileForCurrentUser();
+    await docRef.set({
+      'fullName': fallback.fullName,
+      'customerId': fallback.customerId,
+      'kycStatus': fallback.kycStatus,
+      'accountType': fallback.accountType,
+      'balanceValue': _parseAmountFromDisplay(fallback.availableBalance),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Stream<AppProfileData> watchProfileForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<AppProfileData>.value(fallbackProfileForCurrentUser());
+    }
+
+    ensureProfileForCurrentUser();
+    return _userDoc(user.uid).snapshots().map((snapshot) {
+      final data = snapshot.data();
+      if (data == null) {
+        return fallbackProfileForCurrentUser();
+      }
+
+      final int balanceValue =
+          (data['balanceValue'] as num?)?.toInt() ??
+          _parseAmountFromDisplay(
+            fallbackProfileForCurrentUser().availableBalance,
+          );
+
+      return AppProfileData(
+        fullName: (data['fullName'] as String?)?.trim().isNotEmpty == true
+            ? data['fullName'] as String
+            : _displayNameFor(user),
+        customerId: (data['customerId'] as String?)?.trim().isNotEmpty == true
+            ? data['customerId'] as String
+            : _customerIdFor(user),
+        kycStatus: (data['kycStatus'] as String?) ?? 'KYC Verified',
+        accountType: (data['accountType'] as String?) ?? 'Savings Account',
+        availableBalance: _formatUgx(balanceValue),
+      );
+    });
   }
 
   static AppLoanData activeLoanForCurrentUser() {
@@ -144,46 +204,92 @@ class AppDataRepository {
     );
   }
 
-  static List<AppTransactionData> recentTransactionsForCurrentUser() {
+  static Stream<List<AppTransactionData>>
+  watchRecentTransactionsForCurrentUser({int limit = 100}) {
     final user = FirebaseAuth.instance.currentUser;
-    final int seed = _seedForUser(user);
-    final String displayName = _displayNameFor(user);
-    final int outgoing = 30000 + (seed % 320000);
-    final int incoming = 25000 + ((seed ~/ 2) % 260000);
-    final int repayment = 50000 + ((seed ~/ 3) % 380000);
-    final int disbursed = 500000 + ((seed ~/ 4) % 2800000);
+    if (user == null) {
+      return Stream<List<AppTransactionData>>.value(
+        const <AppTransactionData>[],
+      );
+    }
 
-    return [
-      AppTransactionData(
-        title: 'Sent to $displayName',
-        subtitle: 'Transfer • Today, 10:24 AM',
-        amount: '- ${_formatUgx(outgoing)}',
-        isCredit: false,
-      ),
-      AppTransactionData(
-        title: 'Received from Employer',
-        subtitle: 'Deposit • Yesterday, 02:30 PM',
-        amount: '+ ${_formatUgx(incoming)}',
-        isCredit: true,
-      ),
-      AppTransactionData(
-        title: 'Loan Repayment',
-        subtitle: 'Auto deduct • Yesterday, 09:00 AM',
-        amount: '- ${_formatUgx(repayment)}',
-        isCredit: false,
-      ),
-      AppTransactionData(
-        title: 'Loan Disbursed',
-        subtitle: 'Salary Loan • Nov 12',
-        amount: '+ ${_formatUgx(disbursed)}',
-        isCredit: true,
-      ),
-    ];
+    return _userDoc(user.uid)
+        .collection('transactions')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                final data = doc.data();
+                final int amountValue =
+                    (data['amountValue'] as num?)?.toInt() ?? 0;
+                final bool isCredit = (data['isCredit'] as bool?) ?? false;
+                final String sign = isCredit ? '+' : '-';
+                return AppTransactionData(
+                  title: (data['title'] as String?) ?? 'Transaction',
+                  subtitle: (data['subtitle'] as String?) ?? 'Just now',
+                  amount: '$sign ${_formatUgx(amountValue)}',
+                  isCredit: isCredit,
+                );
+              })
+              .toList(growable: false);
+        });
+  }
+
+  static Future<void> addTransactionForCurrentUser({
+    required String title,
+    required String subtitle,
+    required int amountValue,
+    required bool isCredit,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    await ensureProfileForCurrentUser();
+
+    final userDoc = _userDoc(user.uid);
+    final txDoc = userDoc.collection('transactions').doc();
+
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(userDoc);
+      final data = snapshot.data() ?? <String, dynamic>{};
+      final int seedBalance = _parseAmountFromDisplay(
+        fallbackProfileForCurrentUser().availableBalance,
+      );
+      final int currentBalance =
+          (data['balanceValue'] as num?)?.toInt() ?? seedBalance;
+      final int nextBalance = isCredit
+          ? currentBalance + amountValue
+          : (currentBalance - amountValue).clamp(0, 999999999);
+
+      transaction.set(userDoc, {
+        'balanceValue': nextBalance,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      transaction.set(txDoc, {
+        'title': title,
+        'subtitle': subtitle,
+        'amountValue': amountValue,
+        'isCredit': isCredit,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  static String formatUgx(int amount) {
+    return _formatUgx(amount);
   }
 
   static int _seedForUser(User? user) {
     final String source = user?.uid ?? user?.email ?? 'guest';
-    return source.codeUnits.fold<int>(0, (sum, code) => sum + (code * 31));
+    return source.codeUnits.fold<int>(
+      0,
+      (accumulator, code) => accumulator + (code * 31),
+    );
   }
 
   static String _displayNameFor(User? user) {
@@ -213,6 +319,15 @@ class AppDataRepository {
     final String compact = source.replaceAll(RegExp(r'[^A-Z0-9]'), 'X');
     final String eight = compact.padRight(8, 'X').substring(0, 8);
     return eight;
+  }
+
+  static DocumentReference<Map<String, dynamic>> _userDoc(String uid) {
+    return _firestore.collection('users').doc(uid);
+  }
+
+  static int _parseAmountFromDisplay(String amountText) {
+    final digitsOnly = amountText.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(digitsOnly) ?? 0;
   }
 
   static String _formatUgx(int amount) {

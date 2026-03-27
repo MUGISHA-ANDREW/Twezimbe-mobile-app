@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -64,6 +65,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
       await credential.user?.updateDisplayName(username);
       await credential.user?.reload();
+      await AppDataRepository.ensureProfileForCurrentUser();
 
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(

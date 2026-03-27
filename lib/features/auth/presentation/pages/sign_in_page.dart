@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_up_page.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/forgot_password_page.dart';
@@ -40,6 +41,7 @@ class _SignInPageState extends State<SignInPage> {
         email: email,
         password: password,
       );
+      await AppDataRepository.ensureProfileForCurrentUser();
 
       if (!mounted) return;
       Navigator.pushReplacement(

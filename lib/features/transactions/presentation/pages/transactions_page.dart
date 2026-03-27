@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
 class TransactionsPage extends StatelessWidget {
@@ -6,152 +7,86 @@ class TransactionsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Transactions'),
-          centerTitle: true,
-          automaticallyImplyLeading: false,
-          bottom: const TabBar(
-            labelColor: AppColors.primaryBlue,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: AppColors.primaryBlue,
-            tabs: [
-              Tab(text: 'All'),
-              Tab(text: 'Money In'),
-              Tab(text: 'Money Out'),
+    return StreamBuilder<List<AppTransactionData>>(
+      stream: AppDataRepository.watchRecentTransactionsForCurrentUser(
+        limit: 200,
+      ),
+      builder: (context, snapshot) {
+        final allTransactions = snapshot.data ?? const <AppTransactionData>[];
+        final moneyIn = allTransactions.where((tx) => tx.isCredit).toList();
+        final moneyOut = allTransactions.where((tx) => !tx.isCredit).toList();
+
+        return DefaultTabController(
+          length: 3,
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Transactions'),
+              centerTitle: true,
+              automaticallyImplyLeading: false,
+              bottom: const TabBar(
+                labelColor: AppColors.primaryBlue,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: AppColors.primaryBlue,
+                tabs: [
+                  Tab(text: 'All'),
+                  Tab(text: 'Money In'),
+                  Tab(text: 'Money Out'),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              children: [
+                _buildTransactionList(allTransactions),
+                _buildTransactionList(moneyIn),
+                _buildTransactionList(moneyOut),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTransactionList(List<AppTransactionData> transactions) {
+    if (transactions.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.receipt_long_outlined,
+                size: 56,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No transactions yet',
+                style: TextStyle(
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildTransactionList(),
-            _buildMoneyInList(),
-            _buildMoneyOutList(),
-          ],
-        ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildTransactionList() {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8.0),
-          child: Text(
-            'Today',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textLight,
-            ),
-          ),
-        ),
-        _buildTxTile(
-          Icons.send,
-          Colors.red,
-          'Sent to Maliro Stephen',
-          'Transfer â€¢ 10:24 AM',
-          '- UGX 100,000',
-          false,
-        ),
-
-        const Padding(
-          padding: EdgeInsets.only(top: 16.0, bottom: 8.0),
-          child: Text(
-            'Yesterday',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textLight,
-            ),
-          ),
-        ),
-        _buildTxTile(
-          Icons.download,
-          AppColors.successGreen,
-          'Received from Lubega S',
-          'Deposit â€¢ 02:30 PM',
-          '+ UGX 80,000',
-          true,
-        ),
-        _buildTxTile(
-          Icons.credit_card,
-          AppColors.primaryOrange,
-          'Loan Repayment',
-          'Auto deduct â€¢ 09:00 AM',
-          '- UGX 230,000',
-          false,
-        ),
-
-        const Padding(
-          padding: EdgeInsets.only(top: 16.0, bottom: 8.0),
-          child: Text(
-            'Nov 12, 2025',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textLight,
-            ),
-          ),
-        ),
-        _buildTxTile(
-          Icons.account_balance,
-          AppColors.primaryBlue,
-          'Loan Disbursed',
-          'Salary Loan',
-          '+ UGX 1,300,000',
-          true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMoneyInList() {
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      children: [
-        _buildTxTile(
-          Icons.download,
-          AppColors.successGreen,
-          'Received from Lubega S',
-          'Deposit â€¢ Yesterday, 02:30 PM',
-          '+ UGX 80,000',
-          true,
-        ),
-        _buildTxTile(
-          Icons.account_balance,
-          AppColors.primaryBlue,
-          'Loan Disbursed',
-          'Salary Loan â€¢ Nov 12',
-          '+ UGX 1,300,000',
-          true,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMoneyOutList() {
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      children: [
-        _buildTxTile(
-          Icons.send,
-          Colors.red,
-          'Sent to Maliro Stephen',
-          'Transfer â€¢ Today, 10:24 AM',
-          '- UGX 100,000',
-          false,
-        ),
-        _buildTxTile(
-          Icons.credit_card,
-          AppColors.primaryOrange,
-          'Loan Repayment',
-          'Auto deduct â€¢ Yesterday, 09:00 AM',
-          '- UGX 230,000',
-          false,
-        ),
-      ],
+      children: transactions.map((tx) {
+        final Color color = tx.isCredit ? AppColors.successGreen : Colors.red;
+        return _buildTxTile(
+          tx.isCredit ? Icons.download : Icons.send,
+          color,
+          tx.title,
+          tx.subtitle,
+          tx.amount,
+          tx.isCredit,
+        );
+      }).toList(),
     );
   }
 
