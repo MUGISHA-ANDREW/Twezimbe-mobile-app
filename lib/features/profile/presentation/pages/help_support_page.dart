@@ -1,11 +1,54 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/chatbot/presentation/pages/chatbot_page.dart';
 
-class HelpSupportPage extends StatelessWidget {
+class HelpSupportPage extends StatefulWidget {
   const HelpSupportPage({super.key});
 
   @override
+  State<HelpSupportPage> createState() => _HelpSupportPageState();
+}
+
+class _HelpSupportPageState extends State<HelpSupportPage> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<AppFaqData> _filteredFaqs() {
+    final allFaqs = AppDataRepository.faqs;
+    if (_query.trim().isEmpty) {
+      return allFaqs;
+    }
+
+    final query = _query.toLowerCase();
+    return allFaqs
+        .where((faq) {
+          return faq.question.toLowerCase().contains(query) ||
+              faq.answer.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('$label copied')));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final support = AppDataRepository.support;
+    final filteredFaqs = _filteredFaqs();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Help & Support'), centerTitle: true),
       body: SingleChildScrollView(
@@ -15,6 +58,8 @@ class HelpSupportPage extends StatelessWidget {
           children: [
             // Search
             TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
               decoration: InputDecoration(
                 hintText: 'Search for help...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -40,20 +85,28 @@ class HelpSupportPage extends StatelessWidget {
             _buildContactTile(
               Icons.phone_outlined,
               'Call Us',
-              '+256 700 000 000',
+              support.phone,
               AppColors.primaryBlue,
+              () => _copyToClipboard(support.phone, 'Phone number'),
             ),
             _buildContactTile(
               Icons.email_outlined,
               'Email',
-              'support@twezimbe.co.ug',
+              support.email,
               AppColors.primaryOrange,
+              () => _copyToClipboard(support.email, 'Support email'),
             ),
             _buildContactTile(
               Icons.chat_outlined,
               'Live Chat',
-              'Available 8AM - 6PM',
+              support.liveChatHours,
               AppColors.successGreen,
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatbotPage()),
+                );
+              },
             ),
             const SizedBox(height: 32),
 
@@ -66,26 +119,20 @@ class HelpSupportPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildFaqTile(
-              'How do I apply for a loan?',
-              'To apply for a loan, open the app and navigate to the "Loans" section. Tap "Apply Now", select your desired loan amount and repayment period, then complete the application form. Ensure your profile is fully verified before applying to avoid delays.',
-            ),
-            _buildFaqTile(
-              'How long does loan approval take?',
-              'Loan applications are reviewed and approved within 24 hours. In some cases, additional verification may be required, which can take up to 48 hours. You will receive a notification via SMS and in-app once a decision has been made.',
-            ),
-            _buildFaqTile(
-              'What are the repayment options?',
-              'We offer flexible repayment options including weekly, bi-weekly, and monthly schedules. Repayments can be made via mobile money (MTN or Airtel), bank transfer, or directly through the app. You can also set up automatic repayments to avoid missing due dates.',
-            ),
-            _buildFaqTile(
-              'How do I reset my password?',
-              'On the login screen, tap "Forgot Password?" and enter your registered email address or phone number. You will receive a one-time code to verify your identity. Once verified, you can set a new password. If you continue to experience issues, contact our support team.',
-            ),
-            _buildFaqTile(
-              'Is my data secure?',
-              'Yes. Twezimbe uses industry-standard encryption (AES-256) to protect all your personal and financial data. We never share your information with third parties without your consent. Our systems are regularly audited to ensure compliance with data protection regulations.',
-            ),
+            if (filteredFaqs.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade100),
+                ),
+                child: const Text('No FAQs match your search.'),
+              )
+            else
+              ...filteredFaqs.map(
+                (faq) => _buildFaqTile(faq.question, faq.answer),
+              ),
             const SizedBox(height: 32),
 
             const Text(
@@ -106,9 +153,9 @@ class HelpSupportPage extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _buildInfoRow('Version', '1.0.0'),
+                  _buildInfoRow('Version', support.appVersion),
                   const Divider(height: 24),
-                  _buildInfoRow('Build', '2026.03.08'),
+                  _buildInfoRow('Build', support.buildNumber),
                 ],
               ),
             ),
@@ -123,6 +170,7 @@ class HelpSupportPage extends StatelessWidget {
     String title,
     String subtitle,
     Color color,
+    VoidCallback onTap,
   ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -132,6 +180,7 @@ class HelpSupportPage extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade100),
       ),
       child: ListTile(
+        onTap: onTap,
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(

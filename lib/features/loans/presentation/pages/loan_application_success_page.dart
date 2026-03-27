@@ -2,7 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
 class LoanApplicationSuccessPage extends StatelessWidget {
-  const LoanApplicationSuccessPage({super.key});
+  const LoanApplicationSuccessPage({
+    super.key,
+    required this.applicationId,
+    required this.loanType,
+    required this.amount,
+    required this.period,
+    required this.status,
+  });
+
+  final String applicationId;
+  final String loanType;
+  final String amount;
+  final String period;
+  final String status;
 
   @override
   Widget build(BuildContext context) {
@@ -70,15 +83,15 @@ class LoanApplicationSuccessPage extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _buildRow('Application ID', 'APP20260308001'),
+                    _buildRow('Application ID', applicationId),
                     const Divider(height: 24),
-                    _buildRow('Loan Type', 'Salary Loan'),
+                    _buildRow('Loan Type', loanType),
                     const Divider(height: 24),
-                    _buildRow('Amount', 'UGX 500,000'),
+                    _buildRow('Amount', amount),
                     const Divider(height: 24),
-                    _buildRow('Period', '6 months'),
+                    _buildRow('Period', period),
                     const Divider(height: 24),
-                    _buildRow('Status', 'Pending Review'),
+                    _buildRow('Status', status),
                   ],
                 ),
               ),

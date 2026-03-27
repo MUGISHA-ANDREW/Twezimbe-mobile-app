@@ -241,12 +241,26 @@ class _WithdrawPageState extends State<WithdrawPage> {
                       amountValue,
                     );
 
-                    await AppDataRepository.addTransactionForCurrentUser(
-                      title: 'Withdrawal to $_selectedMethod',
-                      subtitle: 'Withdrawal - Just now',
-                      amountValue: amountValue,
-                      isCredit: false,
-                    );
+                    try {
+                      await AppDataRepository.addTransactionForCurrentUser(
+                        title: 'Withdrawal to $_selectedMethod',
+                        subtitle: 'Withdrawal - Just now',
+                        amountValue: amountValue,
+                        isCredit: false,
+                      );
+                    } catch (_) {
+                      if (!context.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Unable to save transaction. Please try again.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
 
                     if (!context.mounted) {
                       return;

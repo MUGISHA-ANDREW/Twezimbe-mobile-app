@@ -4,6 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class AppProfileData {
   const AppProfileData({
     required this.fullName,
+    required this.email,
+    required this.phoneNumber,
+    required this.dateOfBirth,
+    required this.nationalId,
+    required this.address,
+    required this.photoUrl,
     required this.customerId,
     required this.kycStatus,
     required this.accountType,
@@ -11,10 +17,30 @@ class AppProfileData {
   });
 
   final String fullName;
+  final String email;
+  final String phoneNumber;
+  final String dateOfBirth;
+  final String nationalId;
+  final String address;
+  final String? photoUrl;
   final String customerId;
   final String kycStatus;
   final String accountType;
   final String availableBalance;
+}
+
+class AppSecuritySettingsData {
+  const AppSecuritySettingsData({
+    required this.biometricEnabled,
+    required this.twoFactorEnabled,
+    required this.transactionAlerts,
+    required this.loginAlerts,
+  });
+
+  final bool biometricEnabled;
+  final bool twoFactorEnabled;
+  final bool transactionAlerts;
+  final bool loginAlerts;
 }
 
 class AppLoanData {
@@ -33,6 +59,26 @@ class AppLoanData {
   final String remainingBalance;
   final String nextPaymentDate;
   final String repaymentProgress;
+}
+
+class AppLoanApplicationData {
+  const AppLoanApplicationData({
+    required this.applicationId,
+    required this.loanType,
+    required this.amount,
+    required this.period,
+    required this.purpose,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String applicationId;
+  final String loanType;
+  final String amount;
+  final String period;
+  final String purpose;
+  final String status;
+  final DateTime? createdAt;
 }
 
 class AppTransactionData {
@@ -123,6 +169,12 @@ class AppDataRepository {
 
     return AppProfileData(
       fullName: _displayNameFor(user),
+      email: user?.email ?? 'No email provided',
+      phoneNumber: user?.phoneNumber ?? 'Not set',
+      dateOfBirth: 'Not set',
+      nationalId: 'Not set',
+      address: 'Not set',
+      photoUrl: user?.photoURL,
       customerId: _customerIdFor(user),
       kycStatus: 'KYC Verified',
       accountType: accountType,
@@ -137,21 +189,28 @@ class AppDataRepository {
     }
 
     final docRef = _userDoc(user.uid);
-    final doc = await docRef.get();
-    if (doc.exists) {
-      return;
-    }
-
     final fallback = fallbackProfileForCurrentUser();
     await docRef.set({
       'fullName': fallback.fullName,
+      'email': fallback.email,
+      'phoneNumber': fallback.phoneNumber,
+      'dateOfBirth': fallback.dateOfBirth,
+      'nationalId': fallback.nationalId,
+      'address': fallback.address,
+      'photoUrl': fallback.photoUrl,
       'customerId': fallback.customerId,
       'kycStatus': fallback.kycStatus,
       'accountType': fallback.accountType,
       'balanceValue': _parseAmountFromDisplay(fallback.availableBalance),
+      'security': {
+        'biometricEnabled': false,
+        'twoFactorEnabled': false,
+        'transactionAlerts': true,
+        'loginAlerts': true,
+      },
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
   }
 
   static Stream<AppProfileData> watchProfileForCurrentUser() {
@@ -177,6 +236,18 @@ class AppDataRepository {
         fullName: (data['fullName'] as String?)?.trim().isNotEmpty == true
             ? data['fullName'] as String
             : _displayNameFor(user),
+        email: (data['email'] as String?)?.trim().isNotEmpty == true
+            ? data['email'] as String
+            : (user.email ?? 'No email provided'),
+        phoneNumber: (data['phoneNumber'] as String?)?.trim().isNotEmpty == true
+            ? data['phoneNumber'] as String
+            : (user.phoneNumber ?? 'Not set'),
+        dateOfBirth: (data['dateOfBirth'] as String?) ?? 'Not set',
+        nationalId: (data['nationalId'] as String?) ?? 'Not set',
+        address: (data['address'] as String?) ?? 'Not set',
+        photoUrl: (data['photoUrl'] as String?)?.trim().isNotEmpty == true
+            ? data['photoUrl'] as String
+            : user.photoURL,
         customerId: (data['customerId'] as String?)?.trim().isNotEmpty == true
             ? data['customerId'] as String
             : _customerIdFor(user),
@@ -185,6 +256,125 @@ class AppDataRepository {
         availableBalance: _formatUgx(balanceValue),
       );
     });
+  }
+
+  static Future<void> updatePersonalInfoForCurrentUser({
+    required String fullName,
+    required String phoneNumber,
+    required String dateOfBirth,
+    required String nationalId,
+    required String address,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await _userDoc(user.uid).set({
+      'fullName': fullName.trim(),
+      'phoneNumber': phoneNumber.trim(),
+      'dateOfBirth': dateOfBirth.trim(),
+      'nationalId': nationalId.trim(),
+      'address': address.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> updateProfilePhotoUrlForCurrentUser(
+    String photoUrl,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await _userDoc(user.uid).set({
+      'photoUrl': photoUrl,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await user.updatePhotoURL(photoUrl);
+  }
+
+  static AppSecuritySettingsData fallbackSecuritySettings() {
+    return const AppSecuritySettingsData(
+      biometricEnabled: false,
+      twoFactorEnabled: false,
+      transactionAlerts: true,
+      loginAlerts: true,
+    );
+  }
+
+  static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<AppSecuritySettingsData>.value(fallbackSecuritySettings());
+    }
+
+    ensureProfileForCurrentUser();
+    return _userDoc(user.uid).snapshots().map((snapshot) {
+      final data = snapshot.data() ?? <String, dynamic>{};
+      final security = data['security'] as Map<String, dynamic>?;
+      final fallback = fallbackSecuritySettings();
+
+      return AppSecuritySettingsData(
+        biometricEnabled:
+            (security?['biometricEnabled'] as bool?) ??
+            fallback.biometricEnabled,
+        twoFactorEnabled:
+            (security?['twoFactorEnabled'] as bool?) ??
+            fallback.twoFactorEnabled,
+        transactionAlerts:
+            (security?['transactionAlerts'] as bool?) ??
+            fallback.transactionAlerts,
+        loginAlerts:
+            (security?['loginAlerts'] as bool?) ?? fallback.loginAlerts,
+      );
+    });
+  }
+
+  static Future<void> updateSecuritySettingsForCurrentUser({
+    bool? biometricEnabled,
+    bool? twoFactorEnabled,
+    bool? transactionAlerts,
+    bool? loginAlerts,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    final docRef = _userDoc(user.uid);
+    final snapshot = await docRef.get();
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final currentSecurity = Map<String, dynamic>.from(
+      (data['security'] as Map<String, dynamic>?) ?? <String, dynamic>{},
+    );
+
+    final fallback = fallbackSecuritySettings();
+    final nextSecurity = <String, dynamic>{
+      'biometricEnabled':
+          biometricEnabled ??
+          (currentSecurity['biometricEnabled'] as bool?) ??
+          fallback.biometricEnabled,
+      'twoFactorEnabled':
+          twoFactorEnabled ??
+          (currentSecurity['twoFactorEnabled'] as bool?) ??
+          fallback.twoFactorEnabled,
+      'transactionAlerts':
+          transactionAlerts ??
+          (currentSecurity['transactionAlerts'] as bool?) ??
+          fallback.transactionAlerts,
+      'loginAlerts':
+          loginAlerts ??
+          (currentSecurity['loginAlerts'] as bool?) ??
+          fallback.loginAlerts,
+    };
+
+    await docRef.set({
+      'security': nextSecurity,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   static AppLoanData activeLoanForCurrentUser() {
@@ -201,6 +391,163 @@ class AppDataRepository {
       remainingBalance: _formatUgx(remaining),
       nextPaymentDate: '$day Apr',
       repaymentProgress: '$progress% Paid',
+    );
+  }
+
+  static Future<void> ensureLoanForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final docRef = _userDoc(user.uid).collection('loans').doc('active');
+    final doc = await docRef.get();
+    if (doc.exists) {
+      return;
+    }
+
+    final fallback = activeLoanForCurrentUser();
+    final int remainingValue = _parseAmountFromDisplay(
+      fallback.remainingBalance,
+    );
+    final int progress = _parseProgressPercent(fallback.repaymentProgress);
+
+    await docRef.set({
+      'type': fallback.type,
+      'loanId': fallback.loanId,
+      'status': fallback.status,
+      'remainingBalanceValue': remainingValue,
+      'nextPaymentDate': fallback.nextPaymentDate,
+      'repaymentProgress': progress,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Stream<AppLoanData> watchActiveLoanForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<AppLoanData>.value(activeLoanForCurrentUser());
+    }
+
+    ensureLoanForCurrentUser();
+    return _userDoc(
+      user.uid,
+    ).collection('loans').doc('active').snapshots().map((snapshot) {
+      final data = snapshot.data();
+      if (data == null) {
+        return activeLoanForCurrentUser();
+      }
+
+      final int remainingValue =
+          (data['remainingBalanceValue'] as num?)?.toInt() ??
+          _parseAmountFromDisplay(activeLoanForCurrentUser().remainingBalance);
+      final int progress =
+          (data['repaymentProgress'] as num?)?.toInt() ??
+          _parseProgressPercent(activeLoanForCurrentUser().repaymentProgress);
+
+      return AppLoanData(
+        type: (data['type'] as String?) ?? activeLoanForCurrentUser().type,
+        loanId:
+            (data['loanId'] as String?) ?? activeLoanForCurrentUser().loanId,
+        status: (data['status'] as String?) ?? 'Active',
+        remainingBalance: _formatUgx(remainingValue),
+        nextPaymentDate:
+            (data['nextPaymentDate'] as String?) ??
+            activeLoanForCurrentUser().nextPaymentDate,
+        repaymentProgress: '$progress% Paid',
+      );
+    });
+  }
+
+  static Stream<List<AppLoanApplicationData>>
+  watchLoanApplicationsForCurrentUser({int limit = 100}) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<List<AppLoanApplicationData>>.value(
+        const <AppLoanApplicationData>[],
+      );
+    }
+
+    return _userDoc(user.uid)
+        .collection('loanApplications')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                final data = doc.data();
+                final amountValue = (data['amountValue'] as num?)?.toInt() ?? 0;
+                final createdAtTs = data['createdAt'] as Timestamp?;
+                return AppLoanApplicationData(
+                  applicationId: (data['applicationId'] as String?) ?? doc.id,
+                  loanType: (data['loanType'] as String?) ?? 'Loan',
+                  amount: _formatUgx(amountValue),
+                  period: (data['period'] as String?) ?? '-',
+                  purpose: (data['purpose'] as String?) ?? '-',
+                  status: (data['status'] as String?) ?? 'Pending Review',
+                  createdAt: createdAtTs?.toDate(),
+                );
+              })
+              .toList(growable: false);
+        });
+  }
+
+  static Future<AppLoanApplicationData> submitLoanApplicationForCurrentUser({
+    required String loanType,
+    required int amountValue,
+    required String period,
+    required String purpose,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await ensureLoanForCurrentUser();
+
+    final userDoc = _userDoc(user.uid);
+    final applicationsCol = userDoc.collection('loanApplications');
+    final appDoc = applicationsCol.doc();
+    final applicationId = 'APP${DateTime.now().millisecondsSinceEpoch}';
+    final now = DateTime.now();
+
+    await _firestore.runTransaction((transaction) async {
+      final activeLoanDoc = userDoc.collection('loans').doc('active');
+      final activeSnapshot = await transaction.get(activeLoanDoc);
+      final activeData = activeSnapshot.data() ?? <String, dynamic>{};
+      final currentProgress =
+          (activeData['repaymentProgress'] as num?)?.toInt() ?? 0;
+
+      transaction.set(appDoc, {
+        'applicationId': applicationId,
+        'loanType': loanType,
+        'amountValue': amountValue,
+        'period': period,
+        'purpose': purpose,
+        'status': 'Pending Review',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      transaction.set(activeLoanDoc, {
+        'type': loanType,
+        'status': 'Pending Review',
+        'remainingBalanceValue': amountValue,
+        'nextPaymentDate': 'TBD',
+        'repaymentProgress': currentProgress,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+
+    return AppLoanApplicationData(
+      applicationId: applicationId,
+      loanType: loanType,
+      amount: _formatUgx(amountValue),
+      period: period,
+      purpose: purpose,
+      status: 'Pending Review',
+      createdAt: now,
     );
   }
 
@@ -222,13 +569,18 @@ class AppDataRepository {
           return snapshot.docs
               .map((doc) {
                 final data = doc.data();
+                final Timestamp? createdAtTs = data['createdAt'] as Timestamp?;
                 final int amountValue =
                     (data['amountValue'] as num?)?.toInt() ?? 0;
                 final bool isCredit = (data['isCredit'] as bool?) ?? false;
                 final String sign = isCredit ? '+' : '-';
+                final String fallbackSubtitle =
+                    (data['subtitle'] as String?) ?? 'Just now';
                 return AppTransactionData(
                   title: (data['title'] as String?) ?? 'Transaction',
-                  subtitle: (data['subtitle'] as String?) ?? 'Just now',
+                  subtitle: createdAtTs != null
+                      ? _relativeTimeLabel(createdAtTs.toDate())
+                      : fallbackSubtitle,
                   amount: '$sign ${_formatUgx(amountValue)}',
                   isCredit: isCredit,
                 );
@@ -252,6 +604,7 @@ class AppDataRepository {
 
     final userDoc = _userDoc(user.uid);
     final txDoc = userDoc.collection('transactions').doc();
+    final now = Timestamp.now();
 
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(userDoc);
@@ -275,7 +628,9 @@ class AppDataRepository {
         'subtitle': subtitle,
         'amountValue': amountValue,
         'isCredit': isCredit,
-        'createdAt': FieldValue.serverTimestamp(),
+        // Keep a client-side timestamp so ordering is immediate in live lists.
+        'createdAt': now,
+        'createdAtServer': FieldValue.serverTimestamp(),
       });
     });
   }
@@ -328,6 +683,41 @@ class AppDataRepository {
   static int _parseAmountFromDisplay(String amountText) {
     final digitsOnly = amountText.replaceAll(RegExp(r'[^0-9]'), '');
     return int.tryParse(digitsOnly) ?? 0;
+  }
+
+  static int _parseProgressPercent(String progressText) {
+    final digitsOnly = progressText.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(digitsOnly) ?? 0;
+  }
+
+  static String _relativeTimeLabel(DateTime dateTime) {
+    final Duration delta = DateTime.now().difference(dateTime);
+
+    if (delta.inSeconds < 60) {
+      return 'Just now';
+    }
+    if (delta.inMinutes < 60) {
+      return '${delta.inMinutes} min ago';
+    }
+    if (delta.inHours < 24) {
+      return '${delta.inHours} hr ago';
+    }
+    if (delta.inDays < 7) {
+      return '${delta.inDays} day ago';
+    }
+
+    final int weeks = (delta.inDays / 7).floor();
+    if (weeks < 5) {
+      return '$weeks wk ago';
+    }
+
+    final int months = (delta.inDays / 30).floor();
+    if (months < 12) {
+      return '$months mo ago';
+    }
+
+    final int years = (delta.inDays / 365).floor();
+    return '$years yr ago';
   }
 
   static String _formatUgx(int amount) {

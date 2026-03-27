@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_application_success_page.dart';
 
@@ -10,8 +11,12 @@ class ApplyLoanPage extends StatefulWidget {
 }
 
 class _ApplyLoanPageState extends State<ApplyLoanPage> {
+  String _selectedLoanType = 'Salary loan';
+  String _selectedPurpose = 'Farming';
   String _selectedPeriod = '6 months';
   bool _acceptedTerms = false;
+  bool _isSubmitting = false;
+  final TextEditingController _amountController = TextEditingController();
 
   final List<String> _periods = [
     '6 months',
@@ -23,6 +28,17 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
     '42 months',
     '48 months',
   ];
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  int _parseAmount(String raw) {
+    final digitsOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    return int.tryParse(digitsOnly) ?? 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +72,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              initialValue: 'Salary loan',
+              initialValue: _selectedLoanType,
               decoration: const InputDecoration(
                 filled: true,
                 fillColor: AppColors.cardBackground,
@@ -66,7 +82,12 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                 'Business loan',
                 'Emergency loan',
               ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (val) {},
+              onChanged: (val) {
+                if (val == null) {
+                  return;
+                }
+                setState(() => _selectedLoanType = val);
+              },
             ),
             const SizedBox(height: 24),
             const Text(
@@ -75,6 +96,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
             ),
             const SizedBox(height: 8),
             TextFormField(
+              controller: _amountController,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
                 hintText: 'Enter loan amount e.g 500,000',
@@ -121,7 +143,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              initialValue: 'Farming',
+              initialValue: _selectedPurpose,
               decoration: const InputDecoration(
                 filled: true,
                 fillColor: AppColors.cardBackground,
@@ -132,7 +154,12 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                 'Business',
                 'Medical',
               ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (val) {},
+              onChanged: (val) {
+                if (val == null) {
+                  return;
+                }
+                setState(() => _selectedPurpose = val);
+              },
             ),
             const SizedBox(height: 24),
             Row(
@@ -175,18 +202,70 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
             ),
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: _acceptedTerms
-                  ? () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              const LoanApplicationSuccessPage(),
-                        ),
+              onPressed: _acceptedTerms && !_isSubmitting
+                  ? () async {
+                      final int amountValue = _parseAmount(
+                        _amountController.text,
                       );
+                      if (amountValue <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Enter a valid loan amount.'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      setState(() => _isSubmitting = true);
+                      try {
+                        final result =
+                            await AppDataRepository.submitLoanApplicationForCurrentUser(
+                              loanType: _selectedLoanType,
+                              amountValue: amountValue,
+                              period: _selectedPeriod,
+                              purpose: _selectedPurpose,
+                            );
+
+                        if (!context.mounted) {
+                          return;
+                        }
+
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => LoanApplicationSuccessPage(
+                              applicationId: result.applicationId,
+                              loanType: result.loanType,
+                              amount: result.amount,
+                              period: result.period,
+                              status: result.status,
+                            ),
+                          ),
+                        );
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Unable to submit application. Please try again.',
+                              ),
+                            ),
+                          );
+                        }
+                      } finally {
+                        if (mounted) {
+                          setState(() => _isSubmitting = false);
+                        }
+                      }
                     }
                   : null,
-              child: const Text('Submit'),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Submit'),
             ),
             const SizedBox(height: 32),
           ],

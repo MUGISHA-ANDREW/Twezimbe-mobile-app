@@ -221,12 +221,26 @@ class _DepositPageState extends State<DepositPage> {
                   amountValue,
                 );
 
-                await AppDataRepository.addTransactionForCurrentUser(
-                  title: 'Deposit via $_selectedMethod',
-                  subtitle: 'Deposit - Just now',
-                  amountValue: amountValue,
-                  isCredit: true,
-                );
+                try {
+                  await AppDataRepository.addTransactionForCurrentUser(
+                    title: 'Deposit via $_selectedMethod',
+                    subtitle: 'Deposit - Just now',
+                    amountValue: amountValue,
+                    isCredit: true,
+                  );
+                } catch (_) {
+                  if (!context.mounted) {
+                    return;
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Unable to save transaction. Please try again.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
 
                 if (!context.mounted) {
                   return;

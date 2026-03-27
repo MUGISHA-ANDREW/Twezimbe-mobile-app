@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
@@ -26,7 +28,7 @@ class _SignInPageState extends State<SignInPage> {
   }
 
   Future<void> _signIn() async {
-    final email = _emailController.text.trim();
+    final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
@@ -37,11 +39,10 @@ class _SignInPageState extends State<SignInPage> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      await AppDataRepository.ensureProfileForCurrentUser();
+      await _signInWithRetry(email: email, password: password);
+
+      // Keep sign-in fast: sync profile in the background after auth succeeds.
+      _syncProfileInBackground();
 
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -56,6 +57,34 @@ class _SignInPageState extends State<SignInPage> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _signInWithRetry({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      // Quick retry for pasted passwords with accidental leading/trailing spaces.
+      final String trimmedPassword = password.trim();
+      final bool canRetry =
+          (e.code == 'wrong-password' || e.code == 'invalid-credential') &&
+          trimmedPassword != password;
+
+      if (canRetry) {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: trimmedPassword,
+        );
+        return;
+      }
+
+      rethrow;
     }
   }
 
@@ -77,9 +106,21 @@ class _SignInPageState extends State<SignInPage> {
         return 'Incorrect email or password.';
       case 'too-many-requests':
         return 'Too many attempts. Try again later.';
+      case 'operation-not-allowed':
+        return 'Email/Password sign-in is not enabled in Firebase Console.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network and try again.';
       default:
         return e.message ?? 'Authentication failed.';
     }
+  }
+
+  void _syncProfileInBackground() {
+    unawaited(
+      AppDataRepository.ensureProfileForCurrentUser().catchError((_) {
+        // Ignore profile sync errors here to avoid blocking sign-in UX.
+      }),
+    );
   }
 
   @override

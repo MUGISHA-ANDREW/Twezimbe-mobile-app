@@ -1,8 +1,165 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
-class PersonalInfoPage extends StatelessWidget {
+class PersonalInfoPage extends StatefulWidget {
   const PersonalInfoPage({super.key});
+
+  @override
+  State<PersonalInfoPage> createState() => _PersonalInfoPageState();
+}
+
+class _PersonalInfoPageState extends State<PersonalInfoPage> {
+  bool _isSaving = false;
+  bool _isUploadingPhoto = false;
+
+  Future<void> _uploadProfilePhoto() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showMessage('You must be signed in to upload a photo.');
+      return;
+    }
+
+    try {
+      final selected = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 75,
+        maxWidth: 1080,
+      );
+      if (selected == null) return;
+
+      setState(() => _isUploadingPhoto = true);
+      final bytes = await selected.readAsBytes();
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child(user.uid)
+          .child('avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      await storageRef.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      final photoUrl = await storageRef.getDownloadURL();
+      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
+      _showMessage('Profile photo updated.');
+    } catch (_) {
+      _showMessage('Failed to upload profile photo.');
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
+  }
+
+  Future<void> _openEditDialog(AppProfileData profile) async {
+    final fullNameController = TextEditingController(text: profile.fullName);
+    final phoneController = TextEditingController(text: profile.phoneNumber);
+    final dobController = TextEditingController(text: profile.dateOfBirth);
+    final nationalIdController = TextEditingController(
+      text: profile.nationalId,
+    );
+    final addressController = TextEditingController(text: profile.address);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Information'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _inputField('Full Name', fullNameController),
+                const SizedBox(height: 10),
+                _inputField('Phone Number', phoneController),
+                const SizedBox(height: 10),
+                _inputField('Date of Birth', dobController),
+                const SizedBox(height: 10),
+                _inputField('National ID', nationalIdController),
+                const SizedBox(height: 10),
+                _inputField('Address', addressController, maxLines: 2),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: _isSaving ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: _isSaving
+                  ? null
+                  : () async {
+                      if (fullNameController.text.trim().isEmpty) {
+                        _showMessage('Full name is required.');
+                        return;
+                      }
+
+                      setState(() => _isSaving = true);
+                      try {
+                        await AppDataRepository.updatePersonalInfoForCurrentUser(
+                          fullName: fullNameController.text,
+                          phoneNumber: phoneController.text,
+                          dateOfBirth: dobController.text,
+                          nationalId: nationalIdController.text,
+                          address: addressController.text,
+                        );
+                        if (!mounted) return;
+                        Navigator.of(this.context).pop();
+                        _showMessage('Personal information updated.');
+                      } catch (_) {
+                        _showMessage('Failed to update personal information.');
+                      } finally {
+                        if (mounted) {
+                          setState(() => _isSaving = false);
+                        }
+                      }
+                    },
+              child: _isSaving
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    fullNameController.dispose();
+    phoneController.dispose();
+    dobController.dispose();
+    nationalIdController.dispose();
+    addressController.dispose();
+  }
+
+  Widget _inputField(
+    String label,
+    TextEditingController controller, {
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,50 +170,84 @@ class PersonalInfoPage extends StatelessWidget {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            // Avatar with edit
-            Stack(
-              alignment: Alignment.bottomRight,
+        child: StreamBuilder<AppProfileData>(
+          stream: AppDataRepository.watchProfileForCurrentUser(),
+          builder: (context, snapshot) {
+            final profile =
+                snapshot.data ??
+                AppDataRepository.fallbackProfileForCurrentUser();
+
+            return Column(
               children: [
-                const CircleAvatar(
-                  radius: 50,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=47',
-                  ),
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: AppColors.primaryBlue.withValues(
+                        alpha: 0.12,
+                      ),
+                      backgroundImage: profile.photoUrl != null
+                          ? NetworkImage(profile.photoUrl!)
+                          : null,
+                      child: profile.photoUrl == null
+                          ? Text(
+                              profile.fullName.isNotEmpty
+                                  ? profile.fullName[0].toUpperCase()
+                                  : 'U',
+                              style: const TextStyle(
+                                color: AppColors.primaryBlue,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 28,
+                              ),
+                            )
+                          : null,
+                    ),
+                    Material(
+                      color: AppColors.primaryBlue,
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        onPressed: _isUploadingPhoto
+                            ? null
+                            : _uploadProfilePhoto,
+                        icon: _isUploadingPhoto
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.camera_alt,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                      ),
+                    ),
+                  ],
                 ),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryBlue,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt,
-                    color: Colors.white,
-                    size: 16,
+                const SizedBox(height: 32),
+
+                _buildInfoField('Full Name', profile.fullName),
+                _buildInfoField('Customer ID', profile.customerId),
+                _buildInfoField('Phone Number', profile.phoneNumber),
+                _buildInfoField('Email', profile.email),
+                _buildInfoField('Date of Birth', profile.dateOfBirth),
+                _buildInfoField('National ID', profile.nationalId),
+                _buildInfoField('Address', profile.address),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _openEditDialog(profile),
+                    child: const Text('Edit Information'),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 32),
-
-            _buildInfoField('Full Name', 'Namugumya Agnes'),
-            _buildInfoField('Account Number', 'AC00000001'),
-            _buildInfoField('Phone Number', '+256 770 000 000'),
-            _buildInfoField('Email', 'agnes.namugumya@email.com'),
-            _buildInfoField('Date of Birth', '15 Jan 1990'),
-            _buildInfoField('National ID', 'CM9500XXXXXXX'),
-            _buildInfoField('Address', 'Kampala, Uganda'),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {},
-                child: const Text('Edit Information'),
-              ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

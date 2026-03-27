@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
@@ -7,8 +9,122 @@ import 'package:twezimbeapp/features/profile/presentation/pages/personal_info_pa
 import 'package:twezimbeapp/features/profile/presentation/pages/security_settings_page.dart';
 import 'package:twezimbeapp/features/profile/presentation/pages/help_support_page.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  bool _isUploadingPhoto = false;
+
+  Future<void> _uploadProfilePhoto() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      _showMessage('You must be signed in to upload a photo.');
+      return;
+    }
+
+    try {
+      final picker = ImagePicker();
+      final selected = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 75,
+        maxWidth: 1080,
+      );
+
+      if (selected == null) {
+        return;
+      }
+
+      setState(() => _isUploadingPhoto = true);
+      final bytes = await selected.readAsBytes();
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_photos')
+          .child(user.uid)
+          .child('avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      await storageRef.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      final photoUrl = await storageRef.getDownloadURL();
+      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
+      _showMessage('Profile photo updated.');
+    } catch (_) {
+      _showMessage('Failed to upload photo. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const SignInPage()),
+      (route) => false,
+    );
+  }
+
+  void _showLinkedAccounts(AppProfileData profile) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Linked Account Details',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                _infoRow('Customer ID', profile.customerId),
+                _infoRow('Account Type', profile.accountType),
+                _infoRow('Email', profile.email),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey.shade600)),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,12 +146,55 @@ class ProfilePage extends StatelessWidget {
             child: Column(
               children: [
                 // Avatar & Name
-                const Center(
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundImage: NetworkImage(
-                      'https://i.pravatar.cc/150?img=47',
-                    ),
+                Center(
+                  child: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      CircleAvatar(
+                        radius: 52,
+                        backgroundColor: AppColors.primaryBlue.withValues(
+                          alpha: 0.12,
+                        ),
+                        backgroundImage: profile.photoUrl != null
+                            ? NetworkImage(profile.photoUrl!)
+                            : null,
+                        child: profile.photoUrl == null
+                            ? Text(
+                                profile.fullName.isNotEmpty
+                                    ? profile.fullName[0].toUpperCase()
+                                    : 'U',
+                                style: const TextStyle(
+                                  color: AppColors.primaryBlue,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 28,
+                                ),
+                              )
+                            : null,
+                      ),
+                      Material(
+                        color: Colors.white,
+                        shape: const CircleBorder(),
+                        elevation: 2,
+                        child: IconButton(
+                          iconSize: 18,
+                          onPressed: _isUploadingPhoto
+                              ? null
+                              : _uploadProfilePhoto,
+                          icon: _isUploadingPhoto
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt,
+                                  color: AppColors.primaryBlue,
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -111,7 +270,7 @@ class ProfilePage extends StatelessWidget {
                 _buildProfileOption(
                   Icons.account_balance,
                   'Linked Accounts',
-                  () {},
+                  () => _showLinkedAccounts(profile),
                 ),
                 _buildProfileOption(Icons.help_outline, 'Help & Support', () {
                   Navigator.push(
@@ -125,15 +284,7 @@ class ProfilePage extends StatelessWidget {
 
                 // Logout
                 ListTile(
-                  onTap: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SignInPage(),
-                      ),
-                      (route) => false,
-                    );
-                  },
+                  onTap: _logout,
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(

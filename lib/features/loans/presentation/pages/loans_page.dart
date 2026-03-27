@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_details_page.dart';
@@ -8,74 +9,84 @@ class LoansPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('My Loans'),
-          centerTitle: true,
-          automaticallyImplyLeading: false,
-          bottom: const TabBar(
-            labelColor: AppColors.primaryBlue,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: AppColors.primaryBlue,
-            tabs: [
-              Tab(text: 'Active'),
-              Tab(text: 'History'),
-            ],
+    return StreamBuilder<AppLoanData>(
+      stream: AppDataRepository.watchActiveLoanForCurrentUser(),
+      builder: (context, loanSnapshot) {
+        final loan =
+            loanSnapshot.data ?? AppDataRepository.activeLoanForCurrentUser();
+
+        return StreamBuilder<List<AppLoanApplicationData>>(
+          stream: AppDataRepository.watchLoanApplicationsForCurrentUser(
+            limit: 200,
           ),
-        ),
-        body: TabBarView(
-          children: [
-            // Active Loans Tab
-            ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _buildActiveLoanCard(context),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ApplyLoanPage(),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text('Apply for a New Loan'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryOrange,
+          builder: (context, txSnapshot) {
+            final loanHistory =
+                txSnapshot.data ?? const <AppLoanApplicationData>[];
+
+            return DefaultTabController(
+              length: 2,
+              child: Scaffold(
+                appBar: AppBar(
+                  title: const Text('My Loans'),
+                  centerTitle: true,
+                  automaticallyImplyLeading: false,
+                  bottom: const TabBar(
+                    labelColor: AppColors.primaryBlue,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: AppColors.primaryBlue,
+                    tabs: [
+                      Tab(text: 'Active'),
+                      Tab(text: 'History'),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            // History Tab
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.history, size: 64, color: Colors.grey.shade300),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No past loans found.',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-                ],
+                body: TabBarView(
+                  children: [
+                    ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        _buildActiveLoanCard(context, loan),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ApplyLoanPage(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.add),
+                          label: const Text('Apply for a New Loan'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryOrange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    _buildHistoryTab(loanHistory),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildActiveLoanCard(BuildContext context) {
+  Widget _buildActiveLoanCard(BuildContext context, AppLoanData loan) {
+    final progressPercent =
+        int.tryParse(
+          loan.repaymentProgress.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const LoanDetailsPage()),
+          MaterialPageRoute(builder: (context) => LoanDetailsPage(loan: loan)),
         );
       },
       child: Container(
@@ -98,8 +109,8 @@ class LoansPage extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Salary Loan',
+                Text(
+                  loan.type,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -115,8 +126,8 @@ class LoansPage extends StatelessWidget {
                     color: AppColors.successGreen.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    'Active',
+                  child: Text(
+                    loan.status,
                     style: TextStyle(
                       color: AppColors.successGreen,
                       fontWeight: FontWeight.bold,
@@ -128,7 +139,7 @@ class LoansPage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'ID: 24VBY764F',
+              'ID: ${loan.loanId}',
               style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
             ),
             const Padding(
@@ -149,8 +160,8 @@ class LoansPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'UGX 1,300,000',
+                    Text(
+                      loan.remainingBalance,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -169,8 +180,8 @@ class LoansPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      '15 Apr',
+                    Text(
+                      loan.nextPaymentDate,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -183,7 +194,7 @@ class LoansPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             LinearProgressIndicator(
-              value: 0.6,
+              value: progressPercent / 100,
               backgroundColor: Colors.grey.shade200,
               valueColor: const AlwaysStoppedAnimation<Color>(
                 AppColors.primaryBlue,
@@ -193,7 +204,7 @@ class LoansPage extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '60% Paid',
+              loan.repaymentProgress,
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey.shade600,
@@ -203,6 +214,58 @@ class LoansPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHistoryTab(List<AppLoanApplicationData> history) {
+    if (history.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              'No loan history found.',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(20),
+      itemCount: history.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final app = history[index];
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade100),
+          ),
+          child: ListTile(
+            leading: const Icon(
+              Icons.description_outlined,
+              color: AppColors.primaryBlue,
+            ),
+            title: Text(
+              app.loanType,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text('${app.period} - ${app.status}'),
+            trailing: Text(
+              app.amount,
+              style: TextStyle(
+                color: AppColors.textMain,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

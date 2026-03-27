@@ -12,19 +12,34 @@ class ChatbotPage extends StatefulWidget {
 class _ChatbotPageState extends State<ChatbotPage> {
   final ChatbotService _chatbotService = ChatbotService();
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   bool _isAwaitingReply = false;
   final List<_ChatMessage> _messages = <_ChatMessage>[
     const _ChatMessage(
       isUser: false,
       text:
-          'Welcome to Twezimbe assistant. Ask about balance, loans, transactions, support, or profile details.',
+          'Welcome to Twezimbe assistant. You can ask me questions about the app, how to use it, or any other inquiries you may have. I\'m here to help you get the most out of your experience with Twezimbe. Just type your question below and I\'ll do my best to assist you!',
     ),
   ];
 
   @override
   void dispose() {
     _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) {
+        return;
+      }
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -45,6 +60,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
       _messages.add(placeholder);
       _controller.clear();
     });
+    _scrollToBottom();
 
     await Future<void>.delayed(const Duration(milliseconds: 1500));
     if (!mounted) {
@@ -61,6 +77,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
       }
       _isAwaitingReply = false;
     });
+    _scrollToBottom();
   }
 
   @override
@@ -94,6 +111,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
             const Divider(height: 1),
             Expanded(
               child: ListView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
                 itemCount: _messages.length,
                 itemBuilder: (context, index) {
