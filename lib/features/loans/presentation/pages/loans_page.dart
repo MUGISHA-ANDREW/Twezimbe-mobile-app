@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
+import 'package:twezimbeapp/features/loans/presentation/pages/loan_calculator_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_details_page.dart';
 
 class LoansPage extends StatelessWidget {
@@ -12,8 +13,12 @@ class LoansPage extends StatelessWidget {
     return StreamBuilder<AppLoanData>(
       stream: AppDataRepository.watchActiveLoanForCurrentUser(),
       builder: (context, loanSnapshot) {
-        final loan =
-            loanSnapshot.data ?? AppDataRepository.activeLoanForCurrentUser();
+        if (!loanSnapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final loan = loanSnapshot.data!;
 
         return StreamBuilder<List<AppLoanApplicationData>>(
           stream: AppDataRepository.watchLoanApplicationsForCurrentUser(
@@ -30,6 +35,20 @@ class LoansPage extends StatelessWidget {
                   title: const Text('My Loans'),
                   centerTitle: true,
                   automaticallyImplyLeading: false,
+                  actions: [
+                    IconButton(
+                      tooltip: 'Loan calculator',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const LoanCalculatorPage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.calculate_outlined),
+                    ),
+                  ],
                   bottom: const TabBar(
                     labelColor: AppColors.primaryBlue,
                     unselectedLabelColor: Colors.grey,

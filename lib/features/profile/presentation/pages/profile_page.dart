@@ -132,8 +132,12 @@ class _ProfilePageState extends State<ProfilePage> {
     return StreamBuilder<AppProfileData>(
       stream: AppDataRepository.watchProfileForCurrentUser(),
       builder: (context, snapshot) {
-        final profile =
-            snapshot.data ?? AppDataRepository.fallbackProfileForCurrentUser();
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final profile = snapshot.data!;
 
         return Scaffold(
           appBar: AppBar(

@@ -121,6 +121,16 @@ class _SignInPageState extends State<SignInPage> {
         // Ignore profile sync errors here to avoid blocking sign-in UX.
       }),
     );
+
+    unawaited(
+      AppDataRepository.addNotificationForCurrentUser(
+        title: 'Sign In Successful',
+        message: 'You signed in to your account successfully.',
+        type: 'security',
+      ).catchError((_) {
+        // Ignore notification write errors to keep sign-in snappy.
+      }),
+    );
   }
 
   @override
@@ -283,30 +293,30 @@ class _SignInPageState extends State<SignInPage> {
 
               const SizedBox(height: 30),
 
-              /// BIOMETRIC LOGIN (Fingerprint)
-              Center(
-                child: Column(
-                  children: [
-                    IconButton(
-                      iconSize: 48,
-                      icon: const Icon(
-                        Icons.fingerprint,
-                        color: Color(0xFFF99D2A),
-                      ),
-                      onPressed: () {
-                        // biometric login logic
-                      },
-                    ),
-                    Text(
-                      'Use Fingerprint',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // /// BIOMETRIC LOGIN (Fingerprint)
+              // Center(
+              //   child: Column(
+              //     children: [
+              //       IconButton(
+              //         iconSize: 48,
+              //         icon: const Icon(
+              //           Icons.fingerprint,
+              //           color: Color(0xFFF99D2A),
+              //         ),
+              //         onPressed: () {
+              //           // biometric login logic
+              //         },
+              //       ),
+              //       Text(
+              //         'Use Fingerprint',
+              //         style: TextStyle(
+              //           color: Colors.grey.shade600,
+              //           fontSize: 13,
+              //         ),
+              //       ),
+              //     ],
+              //   ),
+              // ),
 
               const SizedBox(height: 40),
 

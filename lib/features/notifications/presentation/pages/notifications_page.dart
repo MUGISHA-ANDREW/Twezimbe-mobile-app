@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
 class NotificationsPage extends StatelessWidget {
@@ -6,96 +7,69 @@ class NotificationsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications'),
-        centerTitle: true,
-        actions: [
-          TextButton(
-            onPressed: () {},
-            child: const Text(
-              'Mark all read',
-              style: TextStyle(color: AppColors.primaryBlue, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        children: [
-          _buildSectionHeader('Today'),
-          _buildNotificationTile(
-            icon: Icons.check_circle,
-            iconColor: AppColors.successGreen,
-            title: 'Loan Approved',
-            message:
-                'Your Salary Loan application of UGX 1,300,000 has been approved and disbursed to your account.',
-            time: '10:24 AM',
-            isUnread: true,
-          ),
-          _buildNotificationTile(
-            icon: Icons.payment,
-            iconColor: AppColors.primaryOrange,
-            title: 'Payment Reminder',
-            message:
-                'Your loan installment of UGX 70,000 is due on April 15, 2026. Please ensure sufficient balance.',
-            time: '08:00 AM',
-            isUnread: true,
-          ),
-          _buildSectionHeader('Yesterday'),
-          _buildNotificationTile(
-            icon: Icons.download,
-            iconColor: AppColors.primaryBlue,
-            title: 'Deposit Received',
-            message:
-                'You received UGX 80,000 from Lubega Stephen via mobile money.',
-            time: '02:30 PM',
-            isUnread: false,
-          ),
-          _buildNotificationTile(
-            icon: Icons.security,
-            iconColor: AppColors.errorRed,
-            title: 'Security Alert',
-            message:
-                'A new device login was detected on your account. If this was not you, please contact support immediately.',
-            time: '11:15 AM',
-            isUnread: false,
-          ),
-          _buildSectionHeader('Earlier'),
-          _buildNotificationTile(
-            icon: Icons.campaign,
-            iconColor: AppColors.primaryBlue,
-            title: 'New Feature Available',
-            message:
-                'You can now set up automatic loan repayments via mobile money. Go to Settings to enable.',
-            time: 'Nov 10',
-            isUnread: false,
-          ),
-          _buildNotificationTile(
-            icon: Icons.send,
-            iconColor: Colors.red,
-            title: 'Transfer Successful',
-            message:
-                'Your transfer of UGX 100,000 to Maliro Stephen was completed successfully.',
-            time: 'Nov 8',
-            isUnread: false,
-          ),
-        ],
-      ),
-    );
-  }
+    return StreamBuilder<List<AppNotificationData>>(
+      stream: AppDataRepository.watchNotificationsForCurrentUser(limit: 200),
+      builder: (context, snapshot) {
+        final notifications = snapshot.data ?? const <AppNotificationData>[];
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8.0, bottom: 12.0),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          color: AppColors.textLight,
-          fontSize: 13,
-        ),
-      ),
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Notifications'),
+            centerTitle: true,
+            actions: [
+              TextButton(
+                onPressed: () {
+                  AppDataRepository.markAllNotificationsAsReadForCurrentUser();
+                },
+                child: const Text(
+                  'Mark all read',
+                  style: TextStyle(color: AppColors.primaryBlue, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          body: notifications.isEmpty
+              ? Center(
+                  child: Text(
+                    'No notifications yet.',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                  itemCount: notifications.length,
+                  itemBuilder: (context, index) {
+                    final n = notifications[index];
+                    final _NotificationVisual visual = _visualForType(n.type);
+                    final String timeLabel = n.createdAt == null
+                        ? 'Just now'
+                        : _relativeLabel(n.createdAt!);
+
+                    return InkWell(
+                      onTap: () {
+                        if (!n.isRead) {
+                          AppDataRepository.markNotificationAsReadForCurrentUser(
+                            n.id,
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: _buildNotificationTile(
+                        icon: visual.icon,
+                        iconColor: visual.color,
+                        title: n.title,
+                        message: n.message,
+                        time: timeLabel,
+                        isUnread: !n.isRead,
+                      ),
+                    );
+                  },
+                ),
+        );
+      },
     );
   }
 
@@ -183,4 +157,78 @@ class NotificationsPage extends StatelessWidget {
       ),
     );
   }
+
+  _NotificationVisual _visualForType(String type) {
+    switch (type) {
+      case 'security':
+        return const _NotificationVisual(
+          Icons.verified_user,
+          AppColors.errorRed,
+        );
+      case 'warning':
+        return const _NotificationVisual(
+          Icons.warning_amber_rounded,
+          AppColors.errorRed,
+        );
+      case 'reminder':
+        return const _NotificationVisual(
+          Icons.schedule,
+          AppColors.primaryOrange,
+        );
+      case 'loan':
+        return const _NotificationVisual(
+          Icons.account_balance,
+          AppColors.primaryBlue,
+        );
+      case 'deposit':
+        return const _NotificationVisual(
+          Icons.download,
+          AppColors.successGreen,
+        );
+      case 'withdrawal':
+        return const _NotificationVisual(Icons.upload, AppColors.errorRed);
+      default:
+        return const _NotificationVisual(
+          Icons.notifications,
+          AppColors.primaryBlue,
+        );
+    }
+  }
+
+  String _relativeLabel(DateTime createdAt) {
+    final Duration delta = DateTime.now().difference(createdAt);
+
+    if (delta.inSeconds < 60) {
+      return 'Just now';
+    }
+    if (delta.inMinutes < 60) {
+      return '${delta.inMinutes} min ago';
+    }
+    if (delta.inHours < 24) {
+      return '${delta.inHours} hr ago';
+    }
+    if (delta.inDays < 7) {
+      return '${delta.inDays} day ago';
+    }
+
+    final int weeks = (delta.inDays / 7).floor();
+    if (weeks < 5) {
+      return '$weeks wk ago';
+    }
+
+    final int months = (delta.inDays / 30).floor();
+    if (months < 12) {
+      return '$months mo ago';
+    }
+
+    final int years = (delta.inDays / 365).floor();
+    return '$years yr ago';
+  }
+}
+
+class _NotificationVisual {
+  const _NotificationVisual(this.icon, this.color);
+
+  final IconData icon;
+  final Color color;
 }

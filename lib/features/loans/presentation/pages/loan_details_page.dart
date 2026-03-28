@@ -14,10 +14,12 @@ class LoanDetailsPage extends StatelessWidget {
     return StreamBuilder<AppLoanData>(
       stream: AppDataRepository.watchActiveLoanForCurrentUser(),
       builder: (context, snapshot) {
-        final loanData =
-            snapshot.data ??
-            loan ??
-            AppDataRepository.activeLoanForCurrentUser();
+        final AppLoanData? loanData = snapshot.data ?? loan;
+        if (loanData == null) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
         final progressPercent =
             int.tryParse(
               loanData.repaymentProgress.replaceAll(RegExp(r'[^0-9]'), ''),

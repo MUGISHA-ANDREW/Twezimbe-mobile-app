@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
-import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
+import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 
 class WithdrawPage extends StatefulWidget {
   const WithdrawPage({super.key});
@@ -32,8 +32,12 @@ class _WithdrawPageState extends State<WithdrawPage> {
     return StreamBuilder<AppProfileData>(
       stream: AppDataRepository.watchProfileForCurrentUser(),
       builder: (context, snapshot) {
-        final profile =
-            snapshot.data ?? AppDataRepository.fallbackProfileForCurrentUser();
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final profile = snapshot.data!;
 
         return Scaffold(
           appBar: AppBar(
@@ -233,14 +237,6 @@ class _WithdrawPageState extends State<WithdrawPage> {
                       return;
                     }
 
-                    final String phone = _phoneController.text.trim();
-                    final String recipient = phone.isEmpty
-                        ? _selectedMethod
-                        : '$_selectedMethod $phone';
-                    final String displayAmount = AppDataRepository.formatUgx(
-                      amountValue,
-                    );
-
                     try {
                       await AppDataRepository.addTransactionForCurrentUser(
                         title: 'Withdrawal to $_selectedMethod',
@@ -248,14 +244,14 @@ class _WithdrawPageState extends State<WithdrawPage> {
                         amountValue: amountValue,
                         isCredit: false,
                       );
-                    } catch (_) {
+                    } catch (e) {
                       if (!context.mounted) {
                         return;
                       }
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
+                        SnackBar(
                           content: Text(
-                            'Unable to save transaction. Please try again.',
+                            'Unable to save transaction. ${e.toString()}',
                           ),
                         ),
                       );
@@ -266,16 +262,16 @@ class _WithdrawPageState extends State<WithdrawPage> {
                       return;
                     }
 
-                    Navigator.push(
+                    Navigator.pushAndRemoveUntil(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => TransactionSuccessPage(
-                          type: 'Withdrawal',
-                          amount: displayAmount,
-                          reference: 'TXN20260308002',
-                          recipient: recipient,
+                        builder: (context) => const MainLayout(
+                          initialIndex: 0,
+                          initialMessage:
+                              'Withdrawal successful. Your balance and transactions have been updated.',
                         ),
                       ),
+                      (route) => false,
                     );
                   },
                   style: ElevatedButton.styleFrom(

@@ -173,9 +173,11 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
         child: StreamBuilder<AppProfileData>(
           stream: AppDataRepository.watchProfileForCurrentUser(),
           builder: (context, snapshot) {
-            final profile =
-                snapshot.data ??
-                AppDataRepository.fallbackProfileForCurrentUser();
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final profile = snapshot.data!;
 
             return Column(
               children: [

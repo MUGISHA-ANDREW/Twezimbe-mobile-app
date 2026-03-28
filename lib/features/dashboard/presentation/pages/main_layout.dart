@@ -7,14 +7,17 @@ import 'package:twezimbeapp/features/profile/presentation/pages/profile_page.dar
 import 'package:twezimbeapp/features/transactions/presentation/pages/transactions_page.dart';
 
 class MainLayout extends StatefulWidget {
-  const MainLayout({super.key});
+  const MainLayout({super.key, this.initialIndex = 0, this.initialMessage});
+
+  final int initialIndex;
+  final String? initialMessage;
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
 }
 
 class _MainLayoutState extends State<MainLayout> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
   final List<Widget> _pages = const [
     DashboardPage(),
@@ -22,6 +25,22 @@ class _MainLayoutState extends State<MainLayout> {
     LoansPage(),
     ProfilePage(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+
+    final msg = widget.initialMessage;
+    if (msg != null && msg.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(msg)));
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

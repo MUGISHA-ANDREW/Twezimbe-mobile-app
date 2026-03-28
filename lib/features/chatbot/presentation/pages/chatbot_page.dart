@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/chatbot/domain/chatbot_service.dart';
 
@@ -14,13 +15,6 @@ class _ChatbotPageState extends State<ChatbotPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isAwaitingReply = false;
-  final List<_ChatMessage> _messages = <_ChatMessage>[
-    const _ChatMessage(
-      isUser: false,
-      text:
-          'Welcome to Twezimbe assistant. You can ask me questions about the app, how to use it, or any other inquiries you may have. I\'m here to help you get the most out of your experience with Twezimbe. Just type your question below and I\'ll do my best to assist you!',
-    ),
-  ];
 
   @override
   void dispose() {
@@ -52,32 +46,115 @@ class _ChatbotPageState extends State<ChatbotPage> {
       return;
     }
 
-    final placeholder = const _ChatMessage(isUser: false, text: '...');
-
     setState(() {
       _isAwaitingReply = true;
-      _messages.add(_ChatMessage(isUser: true, text: input));
-      _messages.add(placeholder);
       _controller.clear();
     });
-    _scrollToBottom();
 
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    if (!mounted) {
+    try {
+      await AppDataRepository.addChatMessageForCurrentUser(
+        isUser: true,
+        text: input,
+      );
+      _scrollToBottom();
+
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted) {
+        return;
+      }
+
+      final reply = _chatbotService.getResponse(input);
+      await AppDataRepository.addChatMessageForCurrentUser(
+        isUser: false,
+        text: reply,
+      );
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chat unavailable right now. ${e.toString()}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAwaitingReply = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _editMessage(AppChatMessageData message) async {
+    final TextEditingController editController = TextEditingController(
+      text: message.text,
+    );
+
+    final String? updatedText = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Edit Message'),
+          content: TextField(
+            controller: editController,
+            autofocus: true,
+            maxLines: 3,
+            decoration: const InputDecoration(hintText: 'Update message'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, editController.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    editController.dispose();
+    if (updatedText == null) {
       return;
     }
 
-    final reply = _chatbotService.getResponse(input);
-    setState(() {
-      final int placeholderIndex = _messages.lastIndexOf(placeholder);
-      if (placeholderIndex >= 0) {
-        _messages[placeholderIndex] = _ChatMessage(isUser: false, text: reply);
-      } else {
-        _messages.add(_ChatMessage(isUser: false, text: reply));
-      }
-      _isAwaitingReply = false;
-    });
-    _scrollToBottom();
+    final String cleaned = updatedText.trim();
+    if (cleaned.isEmpty) {
+      return;
+    }
+
+    await AppDataRepository.updateChatMessageForCurrentUser(
+      messageId: message.id,
+      text: cleaned,
+    );
+  }
+
+  Future<void> _deleteMessage(AppChatMessageData message) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Message'),
+          content: const Text('This message will be removed permanently.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    await AppDataRepository.deleteChatMessageForCurrentUser(message.id);
   }
 
   @override
@@ -110,46 +187,90 @@ class _ChatbotPageState extends State<ChatbotPage> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message = _messages[index];
-                  return Align(
-                    alignment: message.isUser
-                        ? Alignment.centerRight
-                        : Alignment.centerLeft,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      constraints: BoxConstraints(
-                        maxWidth: MediaQuery.of(context).size.width * 0.84,
-                      ),
-                      decoration: BoxDecoration(
-                        color: message.isUser
-                            ? AppColors.primaryBlue
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: message.isUser
-                              ? AppColors.primaryBlue
-                              : Colors.grey.shade300,
+              child: StreamBuilder<List<AppChatMessageData>>(
+                stream: AppDataRepository.watchChatMessagesForCurrentUser(),
+                builder: (context, snapshot) {
+                  final messages =
+                      snapshot.data ?? const <AppChatMessageData>[];
+
+                  return ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      final message = messages[index];
+                      return GestureDetector(
+                        onLongPress: message.isUser
+                            ? () async {
+                                await showModalBottomSheet<void>(
+                                  context: context,
+                                  builder: (context) {
+                                    return SafeArea(
+                                      child: Wrap(
+                                        children: [
+                                          ListTile(
+                                            leading: const Icon(Icons.edit),
+                                            title: const Text('Edit message'),
+                                            onTap: () async {
+                                              Navigator.pop(context);
+                                              await _editMessage(message);
+                                            },
+                                          ),
+                                          ListTile(
+                                            leading: const Icon(
+                                              Icons.delete_outline,
+                                            ),
+                                            title: const Text('Delete message'),
+                                            onTap: () async {
+                                              Navigator.pop(context);
+                                              await _deleteMessage(message);
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                );
+                              }
+                            : null,
+                        child: Align(
+                          alignment: message.isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.84,
+                            ),
+                            decoration: BoxDecoration(
+                              color: message.isUser
+                                  ? AppColors.primaryBlue
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: message.isUser
+                                    ? AppColors.primaryBlue
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Text(
+                              message.text,
+                              style: TextStyle(
+                                color: message.isUser
+                                    ? Colors.white
+                                    : AppColors.textMain,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        message.text,
-                        style: TextStyle(
-                          color: message.isUser
-                              ? Colors.white
-                              : AppColors.textMain,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
+                      );
+                    },
                   );
                 },
               ),
@@ -202,11 +323,4 @@ class _ChatbotPageState extends State<ChatbotPage> {
       ),
     );
   }
-}
-
-class _ChatMessage {
-  const _ChatMessage({required this.isUser, required this.text});
-
-  final bool isUser;
-  final String text;
 }

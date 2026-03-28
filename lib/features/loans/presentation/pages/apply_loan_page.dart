@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
-import 'package:twezimbeapp/features/loans/presentation/pages/loan_application_success_page.dart';
+import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 
 class ApplyLoanPage extends StatefulWidget {
   const ApplyLoanPage({super.key});
@@ -202,8 +202,19 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
             ),
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: _acceptedTerms && !_isSubmitting
+              onPressed: !_isSubmitting
                   ? () async {
+                      if (!_acceptedTerms) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Please accept terms and conditions to continue.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
                       final int amountValue = _parseAmount(
                         _amountController.text,
                       );
@@ -218,36 +229,34 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
 
                       setState(() => _isSubmitting = true);
                       try {
-                        final result =
-                            await AppDataRepository.submitLoanApplicationForCurrentUser(
-                              loanType: _selectedLoanType,
-                              amountValue: amountValue,
-                              period: _selectedPeriod,
-                              purpose: _selectedPurpose,
-                            );
+                        await AppDataRepository.submitLoanApplicationForCurrentUser(
+                          loanType: _selectedLoanType,
+                          amountValue: amountValue,
+                          period: _selectedPeriod,
+                          purpose: _selectedPurpose,
+                        );
 
                         if (!context.mounted) {
                           return;
                         }
 
-                        Navigator.pushReplacement(
+                        Navigator.pushAndRemoveUntil(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => LoanApplicationSuccessPage(
-                              applicationId: result.applicationId,
-                              loanType: result.loanType,
-                              amount: result.amount,
-                              period: result.period,
-                              status: result.status,
+                            builder: (context) => const MainLayout(
+                              initialIndex: 0,
+                              initialMessage:
+                                  'Loan application successful pending approval.',
                             ),
                           ),
+                          (route) => false,
                         );
-                      } catch (_) {
+                      } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                'Unable to submit application. Please try again.',
+                                'Unable to submit application. ${e.toString()}',
                               ),
                             ),
                           );

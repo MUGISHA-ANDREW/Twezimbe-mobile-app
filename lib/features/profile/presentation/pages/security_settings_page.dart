@@ -98,8 +98,10 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
       body: StreamBuilder<AppSecuritySettingsData>(
         stream: AppDataRepository.watchSecuritySettingsForCurrentUser(),
         builder: (context, snapshot) {
-          final settings =
-              snapshot.data ?? AppDataRepository.fallbackSecuritySettings();
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final settings = snapshot.data!;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20.0),

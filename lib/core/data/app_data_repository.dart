@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
 class AppProfileData {
   const AppProfileData({
@@ -95,6 +96,38 @@ class AppTransactionData {
   final bool isCredit;
 }
 
+class AppNotificationData {
+  const AppNotificationData({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.type,
+    required this.createdAt,
+    required this.isRead,
+  });
+
+  final String id;
+  final String title;
+  final String message;
+  final String type;
+  final DateTime? createdAt;
+  final bool isRead;
+}
+
+class AppChatMessageData {
+  const AppChatMessageData({
+    required this.id,
+    required this.isUser,
+    required this.text,
+    required this.createdAt,
+  });
+
+  final String id;
+  final bool isUser;
+  final String text;
+  final DateTime? createdAt;
+}
+
 class AppSupportData {
   const AppSupportData({
     required this.phone,
@@ -159,29 +192,6 @@ class AppDataRepository {
     ),
   ];
 
-  static AppProfileData fallbackProfileForCurrentUser() {
-    final user = FirebaseAuth.instance.currentUser;
-    final int seed = _seedForUser(user);
-    final String accountType = seed.isEven
-        ? 'Savings Account'
-        : 'Current Account';
-    final int balance = 800000 + (seed % 4200000);
-
-    return AppProfileData(
-      fullName: _displayNameFor(user),
-      email: user?.email ?? 'No email provided',
-      phoneNumber: user?.phoneNumber ?? 'Not set',
-      dateOfBirth: 'Not set',
-      nationalId: 'Not set',
-      address: 'Not set',
-      photoUrl: user?.photoURL,
-      customerId: _customerIdFor(user),
-      kycStatus: 'KYC Verified',
-      accountType: accountType,
-      availableBalance: _formatUgx(balance),
-    );
-  }
-
   static Future<void> ensureProfileForCurrentUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -189,19 +199,18 @@ class AppDataRepository {
     }
 
     final docRef = _userDoc(user.uid);
-    final fallback = fallbackProfileForCurrentUser();
     await docRef.set({
-      'fullName': fallback.fullName,
-      'email': fallback.email,
-      'phoneNumber': fallback.phoneNumber,
-      'dateOfBirth': fallback.dateOfBirth,
-      'nationalId': fallback.nationalId,
-      'address': fallback.address,
-      'photoUrl': fallback.photoUrl,
-      'customerId': fallback.customerId,
-      'kycStatus': fallback.kycStatus,
-      'accountType': fallback.accountType,
-      'balanceValue': _parseAmountFromDisplay(fallback.availableBalance),
+      'fullName': _displayNameFor(user),
+      'email': user.email ?? '',
+      'phoneNumber': user.phoneNumber ?? '',
+      'dateOfBirth': '',
+      'nationalId': '',
+      'address': '',
+      'photoUrl': user.photoURL,
+      'customerId': _customerIdFor(user),
+      'kycStatus': 'KYC Verified',
+      'accountType': 'Savings Account',
+      'balanceValue': 0,
       'security': {
         'biometricEnabled': false,
         'twoFactorEnabled': false,
@@ -216,21 +225,13 @@ class AppDataRepository {
   static Stream<AppProfileData> watchProfileForCurrentUser() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return Stream<AppProfileData>.value(fallbackProfileForCurrentUser());
+      return const Stream<AppProfileData>.empty();
     }
 
     ensureProfileForCurrentUser();
     return _userDoc(user.uid).snapshots().map((snapshot) {
-      final data = snapshot.data();
-      if (data == null) {
-        return fallbackProfileForCurrentUser();
-      }
-
-      final int balanceValue =
-          (data['balanceValue'] as num?)?.toInt() ??
-          _parseAmountFromDisplay(
-            fallbackProfileForCurrentUser().availableBalance,
-          );
+      final data = snapshot.data() ?? <String, dynamic>{};
+      final int balanceValue = (data['balanceValue'] as num?)?.toInt() ?? 0;
 
       return AppProfileData(
         fullName: (data['fullName'] as String?)?.trim().isNotEmpty == true
@@ -296,39 +297,22 @@ class AppDataRepository {
     await user.updatePhotoURL(photoUrl);
   }
 
-  static AppSecuritySettingsData fallbackSecuritySettings() {
-    return const AppSecuritySettingsData(
-      biometricEnabled: false,
-      twoFactorEnabled: false,
-      transactionAlerts: true,
-      loginAlerts: true,
-    );
-  }
-
   static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return Stream<AppSecuritySettingsData>.value(fallbackSecuritySettings());
+      return const Stream<AppSecuritySettingsData>.empty();
     }
 
     ensureProfileForCurrentUser();
     return _userDoc(user.uid).snapshots().map((snapshot) {
       final data = snapshot.data() ?? <String, dynamic>{};
       final security = data['security'] as Map<String, dynamic>?;
-      final fallback = fallbackSecuritySettings();
 
       return AppSecuritySettingsData(
-        biometricEnabled:
-            (security?['biometricEnabled'] as bool?) ??
-            fallback.biometricEnabled,
-        twoFactorEnabled:
-            (security?['twoFactorEnabled'] as bool?) ??
-            fallback.twoFactorEnabled,
-        transactionAlerts:
-            (security?['transactionAlerts'] as bool?) ??
-            fallback.transactionAlerts,
-        loginAlerts:
-            (security?['loginAlerts'] as bool?) ?? fallback.loginAlerts,
+        biometricEnabled: (security?['biometricEnabled'] as bool?) ?? false,
+        twoFactorEnabled: (security?['twoFactorEnabled'] as bool?) ?? false,
+        transactionAlerts: (security?['transactionAlerts'] as bool?) ?? true,
+        loginAlerts: (security?['loginAlerts'] as bool?) ?? true,
       );
     });
   }
@@ -351,47 +335,27 @@ class AppDataRepository {
       (data['security'] as Map<String, dynamic>?) ?? <String, dynamic>{},
     );
 
-    final fallback = fallbackSecuritySettings();
     final nextSecurity = <String, dynamic>{
       'biometricEnabled':
           biometricEnabled ??
           (currentSecurity['biometricEnabled'] as bool?) ??
-          fallback.biometricEnabled,
+          false,
       'twoFactorEnabled':
           twoFactorEnabled ??
           (currentSecurity['twoFactorEnabled'] as bool?) ??
-          fallback.twoFactorEnabled,
+          false,
       'transactionAlerts':
           transactionAlerts ??
           (currentSecurity['transactionAlerts'] as bool?) ??
-          fallback.transactionAlerts,
+          true,
       'loginAlerts':
-          loginAlerts ??
-          (currentSecurity['loginAlerts'] as bool?) ??
-          fallback.loginAlerts,
+          loginAlerts ?? (currentSecurity['loginAlerts'] as bool?) ?? true,
     };
 
     await docRef.set({
       'security': nextSecurity,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
-  }
-
-  static AppLoanData activeLoanForCurrentUser() {
-    final user = FirebaseAuth.instance.currentUser;
-    final int seed = _seedForUser(user);
-    final int remaining = 250000 + (seed % 2250000);
-    final int progress = 15 + (seed % 75);
-    final int day = 5 + (seed % 20);
-
-    return AppLoanData(
-      type: seed.isEven ? 'Salary Loan' : 'Business Loan',
-      loanId: _loanIdFor(user),
-      status: 'Active',
-      remainingBalance: _formatUgx(remaining),
-      nextPaymentDate: '$day Apr',
-      repaymentProgress: '$progress% Paid',
-    );
   }
 
   static Future<void> ensureLoanForCurrentUser() async {
@@ -406,19 +370,13 @@ class AppDataRepository {
       return;
     }
 
-    final fallback = activeLoanForCurrentUser();
-    final int remainingValue = _parseAmountFromDisplay(
-      fallback.remainingBalance,
-    );
-    final int progress = _parseProgressPercent(fallback.repaymentProgress);
-
     await docRef.set({
-      'type': fallback.type,
-      'loanId': fallback.loanId,
-      'status': fallback.status,
-      'remainingBalanceValue': remainingValue,
-      'nextPaymentDate': fallback.nextPaymentDate,
-      'repaymentProgress': progress,
+      'type': 'Salary Loan',
+      'loanId': _loanIdFor(user),
+      'status': 'Active',
+      'remainingBalanceValue': 0,
+      'nextPaymentDate': 'TBD',
+      'repaymentProgress': 0,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -427,37 +385,28 @@ class AppDataRepository {
   static Stream<AppLoanData> watchActiveLoanForCurrentUser() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return Stream<AppLoanData>.value(activeLoanForCurrentUser());
+      return const Stream<AppLoanData>.empty();
     }
 
     ensureLoanForCurrentUser();
-    return _userDoc(
-      user.uid,
-    ).collection('loans').doc('active').snapshots().map((snapshot) {
-      final data = snapshot.data();
-      if (data == null) {
-        return activeLoanForCurrentUser();
-      }
+    return _userDoc(user.uid).collection('loans').doc('active').snapshots().map(
+      (snapshot) {
+        final data = snapshot.data() ?? <String, dynamic>{};
 
-      final int remainingValue =
-          (data['remainingBalanceValue'] as num?)?.toInt() ??
-          _parseAmountFromDisplay(activeLoanForCurrentUser().remainingBalance);
-      final int progress =
-          (data['repaymentProgress'] as num?)?.toInt() ??
-          _parseProgressPercent(activeLoanForCurrentUser().repaymentProgress);
+        final int remainingValue =
+            (data['remainingBalanceValue'] as num?)?.toInt() ?? 0;
+        final int progress = (data['repaymentProgress'] as num?)?.toInt() ?? 0;
 
-      return AppLoanData(
-        type: (data['type'] as String?) ?? activeLoanForCurrentUser().type,
-        loanId:
-            (data['loanId'] as String?) ?? activeLoanForCurrentUser().loanId,
-        status: (data['status'] as String?) ?? 'Active',
-        remainingBalance: _formatUgx(remainingValue),
-        nextPaymentDate:
-            (data['nextPaymentDate'] as String?) ??
-            activeLoanForCurrentUser().nextPaymentDate,
-        repaymentProgress: '$progress% Paid',
-      );
-    });
+        return AppLoanData(
+          type: (data['type'] as String?) ?? 'Salary Loan',
+          loanId: (data['loanId'] as String?) ?? _loanIdFor(user),
+          status: (data['status'] as String?) ?? 'Active',
+          remainingBalance: _formatUgx(remainingValue),
+          nextPaymentDate: (data['nextPaymentDate'] as String?) ?? 'TBD',
+          repaymentProgress: '$progress% Paid',
+        );
+      },
+    );
   }
 
   static Stream<List<AppLoanApplicationData>>
@@ -540,6 +489,12 @@ class AppDataRepository {
       }, SetOptions(merge: true));
     });
 
+    await addNotificationForCurrentUser(
+      title: 'Loan Application Successful',
+      message: 'Loan application successful pending approval.',
+      type: 'loan',
+    );
+
     return AppLoanApplicationData(
       applicationId: applicationId,
       loanType: loanType,
@@ -597,7 +552,7 @@ class AppDataRepository {
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return;
+      throw StateError('No authenticated user found.');
     }
 
     await ensureProfileForCurrentUser();
@@ -609,11 +564,7 @@ class AppDataRepository {
     await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(userDoc);
       final data = snapshot.data() ?? <String, dynamic>{};
-      final int seedBalance = _parseAmountFromDisplay(
-        fallbackProfileForCurrentUser().availableBalance,
-      );
-      final int currentBalance =
-          (data['balanceValue'] as num?)?.toInt() ?? seedBalance;
+      final int currentBalance = (data['balanceValue'] as num?)?.toInt() ?? 0;
       final int nextBalance = isCredit
           ? currentBalance + amountValue
           : (currentBalance - amountValue).clamp(0, 999999999);
@@ -633,18 +584,182 @@ class AppDataRepository {
         'createdAtServer': FieldValue.serverTimestamp(),
       });
     });
+
+    final String flow = isCredit ? 'deposit' : 'withdrawal';
+    await addNotificationForCurrentUser(
+      title: isCredit ? 'Deposit Successful' : 'Withdrawal Successful',
+      message:
+          'Your $flow of ${_formatUgx(amountValue)} was completed successfully.',
+      type: isCredit ? 'deposit' : 'withdrawal',
+    );
+  }
+
+  static Stream<List<AppNotificationData>> watchNotificationsForCurrentUser({
+    int limit = 100,
+  }) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<List<AppNotificationData>>.value(
+        const <AppNotificationData>[],
+      );
+    }
+
+    unawaited(_seedNotificationsForCurrentUser().catchError((_) {}));
+
+    return _userDoc(user.uid)
+        .collection('notifications')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                final data = doc.data();
+                return AppNotificationData(
+                  id: doc.id,
+                  title: (data['title'] as String?) ?? 'Notification',
+                  message: (data['message'] as String?) ?? '',
+                  type: (data['type'] as String?) ?? 'info',
+                  createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+                  isRead: (data['isRead'] as bool?) ?? false,
+                );
+              })
+              .toList(growable: false);
+        });
+  }
+
+  static Future<void> addNotificationForCurrentUser({
+    required String title,
+    required String message,
+    String type = 'info',
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await _userDoc(user.uid).collection('notifications').add({
+      'title': title,
+      'message': message,
+      'type': type,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Future<void> markNotificationAsReadForCurrentUser(
+    String notificationId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    await _userDoc(
+      user.uid,
+    ).collection('notifications').doc(notificationId).set({
+      'isRead': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> markAllNotificationsAsReadForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final query = await _userDoc(
+      user.uid,
+    ).collection('notifications').where('isRead', isEqualTo: false).get();
+
+    final batch = _firestore.batch();
+    for (final doc in query.docs) {
+      batch.set(doc.reference, {
+        'isRead': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
+    if (query.docs.isNotEmpty) {
+      await batch.commit();
+    }
+  }
+
+  static Stream<List<AppChatMessageData>> watchChatMessagesForCurrentUser({
+    int limit = 300,
+  }) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<List<AppChatMessageData>>.value(
+        const <AppChatMessageData>[],
+      );
+    }
+
+    unawaited(_seedChatForCurrentUser().catchError((_) {}));
+
+    return _userDoc(user.uid)
+        .collection('chatMessages')
+        .orderBy('createdAt', descending: false)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                final data = doc.data();
+                return AppChatMessageData(
+                  id: doc.id,
+                  isUser: (data['isUser'] as bool?) ?? false,
+                  text: (data['text'] as String?) ?? '',
+                  createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+                );
+              })
+              .toList(growable: false);
+        });
+  }
+
+  static Future<void> addChatMessageForCurrentUser({
+    required bool isUser,
+    required String text,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await _userDoc(user.uid).collection('chatMessages').add({
+      'isUser': isUser,
+      'text': text.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Future<void> updateChatMessageForCurrentUser({
+    required String messageId,
+    required String text,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await _userDoc(user.uid).collection('chatMessages').doc(messageId).set({
+      'text': text.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> deleteChatMessageForCurrentUser(String messageId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    await _userDoc(user.uid).collection('chatMessages').doc(messageId).delete();
   }
 
   static String formatUgx(int amount) {
     return _formatUgx(amount);
-  }
-
-  static int _seedForUser(User? user) {
-    final String source = user?.uid ?? user?.email ?? 'guest';
-    return source.codeUnits.fold<int>(
-      0,
-      (accumulator, code) => accumulator + (code * 31),
-    );
   }
 
   static String _displayNameFor(User? user) {
@@ -680,16 +795,6 @@ class AppDataRepository {
     return _firestore.collection('users').doc(uid);
   }
 
-  static int _parseAmountFromDisplay(String amountText) {
-    final digitsOnly = amountText.replaceAll(RegExp(r'[^0-9]'), '');
-    return int.tryParse(digitsOnly) ?? 0;
-  }
-
-  static int _parseProgressPercent(String progressText) {
-    final digitsOnly = progressText.replaceAll(RegExp(r'[^0-9]'), '');
-    return int.tryParse(digitsOnly) ?? 0;
-  }
-
   static String _relativeTimeLabel(DateTime dateTime) {
     final Duration delta = DateTime.now().difference(dateTime);
 
@@ -718,6 +823,114 @@ class AppDataRepository {
 
     final int years = (delta.inDays / 365).floor();
     return '$years yr ago';
+  }
+
+  static Future<void> _seedNotificationsForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final userDoc = _userDoc(user.uid);
+    final snapshot = await userDoc.get();
+    final data = snapshot.data() ?? <String, dynamic>{};
+    if ((data['notificationsSeeded'] as bool?) == true) {
+      return;
+    }
+
+    final batch = _firestore.batch();
+    final now = Timestamp.now();
+    const List<AppNotificationData> defaults = <AppNotificationData>[
+      AppNotificationData(
+        id: 'seed-1',
+        title: 'Repayment Due Tomorrow',
+        message: 'Reminder: Your loan repayment of 200000UGX is due tomorrow.',
+        type: 'reminder',
+        createdAt: null,
+        isRead: false,
+      ),
+      AppNotificationData(
+        id: 'seed-2',
+        title: 'Installment Overdue',
+        message:
+            'Your next installment is overdue. Avoid penalties by paying now.',
+        type: 'warning',
+        createdAt: null,
+        isRead: false,
+      ),
+      AppNotificationData(
+        id: 'seed-3',
+        title: 'New Login Detected',
+        message: 'New login detected on your account. Was this you?',
+        type: 'security',
+        createdAt: null,
+        isRead: false,
+      ),
+      AppNotificationData(
+        id: 'seed-4',
+        title: 'Loan Account Updated',
+        message: 'Your loan account details have been updated successfully.',
+        type: 'loan',
+        createdAt: null,
+        isRead: false,
+      ),
+      AppNotificationData(
+        id: 'seed-5',
+        title: 'Unusual Activity',
+        message:
+            'Unusual activity detected. Please verify your recent transactions.',
+        type: 'security',
+        createdAt: null,
+        isRead: false,
+      ),
+    ];
+
+    for (final notification in defaults) {
+      final ref = userDoc.collection('notifications').doc();
+      batch.set(ref, {
+        'title': notification.title,
+        'message': notification.message,
+        'type': notification.type,
+        'isRead': notification.isRead,
+        'createdAt': now,
+      });
+    }
+
+    batch.set(userDoc, {
+      'notificationsSeeded': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await batch.commit();
+  }
+
+  static Future<void> _seedChatForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return;
+    }
+
+    final userDoc = _userDoc(user.uid);
+    final snapshot = await userDoc.get();
+    final data = snapshot.data() ?? <String, dynamic>{};
+    if ((data['chatSeeded'] as bool?) == true) {
+      return;
+    }
+
+    final chatRef = userDoc.collection('chatMessages').doc();
+    final batch = _firestore.batch();
+    batch.set(chatRef, {
+      'isUser': false,
+      'text':
+          'Welcome to Twezimbe assistant. You can ask me questions about the app, how to use it, or any other inquiries you may have. I\'m here to help you get the most out of your experience with Twezimbe. Just type your question below and I\'ll do my best to assist you!',
+      'createdAt': Timestamp.now(),
+    });
+    batch.set(userDoc, {
+      'chatSeeded': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await batch.commit();
   }
 
   static String _formatUgx(int amount) {
