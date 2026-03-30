@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
+import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
 import 'package:twezimbeapp/features/profile/presentation/pages/personal_info_page.dart';
@@ -131,6 +132,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
+    await LocalUserSessionStore.clear();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,

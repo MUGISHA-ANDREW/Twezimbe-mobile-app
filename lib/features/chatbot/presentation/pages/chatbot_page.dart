@@ -171,14 +171,54 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const Expanded(
-                    child: Text(
-                      'Chat Assistant',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppColors.primaryBlue.withValues(
+                            alpha: 0.12,
+                          ),
+                          child: const Icon(
+                            Icons.smart_toy_outlined,
+                            color: AppColors.primaryBlue,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Chat Assistant',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Row(
+                              children: const [
+                                Icon(
+                                  Icons.circle,
+                                  size: 9,
+                                  color: Color(0xFF22C55E),
+                                ),
+                                SizedBox(width: 5),
+                                Text(
+                                  'Online',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF22C55E),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 40),
@@ -233,40 +273,73 @@ class _ChatbotPageState extends State<ChatbotPage> {
                                 );
                               }
                             : null,
-                        child: Align(
-                          alignment: message.isUser
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
-                            ),
-                            constraints: BoxConstraints(
-                              maxWidth:
-                                  MediaQuery.of(context).size.width * 0.84,
-                            ),
-                            decoration: BoxDecoration(
-                              color: message.isUser
-                                  ? AppColors.primaryBlue
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: message.isUser
-                                    ? AppColors.primaryBlue
-                                    : Colors.grey.shade300,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: Row(
+                            mainAxisAlignment: message.isUser
+                                ? MainAxisAlignment.end
+                                : MainAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (!message.isUser) ...[
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppColors.primaryBlue
+                                      .withValues(alpha: 0.12),
+                                  child: const Icon(
+                                    Icons.smart_toy_outlined,
+                                    color: AppColors.primaryBlue,
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  constraints: BoxConstraints(
+                                    maxWidth:
+                                        MediaQuery.of(context).size.width *
+                                        0.74,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: message.isUser
+                                        ? AppColors.primaryBlue
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: message.isUser
+                                          ? AppColors.primaryBlue
+                                          : Colors.grey.shade300,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    message.text,
+                                    style: TextStyle(
+                                      color: message.isUser
+                                          ? Colors.white
+                                          : AppColors.textMain,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              message.text,
-                              style: TextStyle(
-                                color: message.isUser
-                                    ? Colors.white
-                                    : AppColors.textMain,
-                                height: 1.4,
-                              ),
-                            ),
+                              if (message.isUser) ...[
+                                const SizedBox(width: 8),
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppColors.primaryBlue,
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       );

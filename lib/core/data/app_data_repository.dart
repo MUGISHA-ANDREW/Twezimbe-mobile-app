@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
 
 class AppProfileData {
   const AppProfileData({
@@ -666,6 +667,14 @@ class AppDataRepository {
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    unawaited(
+      LocalNotificationService.showNotification(
+        title: title,
+        body: message,
+        payload: type,
+      ).catchError((_) {}),
+    );
   }
 
   static Future<void> markNotificationAsReadForCurrentUser(

@@ -2,13 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
+import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_up_page.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/forgot_password_page.dart';
 
 class SignInPage extends StatefulWidget {
-  const SignInPage({super.key});
+  const SignInPage({
+    super.key,
+    this.initialEmail,
+    this.initialPassword,
+    this.initialMessage,
+  });
+
+  final String? initialEmail;
+  final String? initialPassword;
+  final String? initialMessage;
 
   @override
   State<SignInPage> createState() => _SignInPageState();
@@ -19,6 +30,21 @@ class _SignInPageState extends State<SignInPage> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.text = widget.initialEmail ?? '';
+    _passwordController.text = widget.initialPassword ?? '';
+
+    final message = widget.initialMessage;
+    if (message != null && message.trim().isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _showMessage(message);
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -41,6 +67,8 @@ class _SignInPageState extends State<SignInPage> {
     try {
       await _signInWithRetry(email: email, password: password);
 
+      await LocalUserSessionStore.saveFromCurrentUser();
+
       // Keep sign-in fast: sync profile in the background after auth succeeds.
       _syncProfileInBackground();
 
@@ -50,8 +78,12 @@ class _SignInPageState extends State<SignInPage> {
         MaterialPageRoute(builder: (context) => const MainLayout()),
       );
     } on FirebaseAuthException catch (e) {
+      debugPrint(
+        'SignIn FirebaseAuthException code=${e.code} message=${e.message}',
+      );
       _showMessage(_authErrorMessage(e));
-    } catch (_) {
+    } catch (e) {
+      debugPrint('SignIn unknown exception: $e');
       _showMessage('Sign in failed. Please try again.');
     } finally {
       if (mounted) {
@@ -108,10 +140,23 @@ class _SignInPageState extends State<SignInPage> {
         return 'Too many attempts. Try again later.';
       case 'operation-not-allowed':
         return 'Email/Password sign-in is not enabled in Firebase Console.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
       case 'network-request-failed':
         return 'No internet connection. Check your network and try again.';
+      case 'invalid-api-key':
+      case 'app-not-authorized':
+        return 'Firebase API key/app config is invalid. Re-run FlutterFire configure.';
+      case 'unauthorized-domain':
+        return kIsWeb
+            ? 'This web domain is not authorized in Firebase Auth settings.'
+            : 'This app domain is not authorized.';
       default:
-        return e.message ?? 'Authentication failed.';
+        final message = e.message?.trim();
+        if (message != null && message.isNotEmpty) {
+          return '$message (${e.code})';
+        }
+        return 'Authentication failed (${e.code}).';
     }
   }
 
@@ -317,7 +362,6 @@ class _SignInPageState extends State<SignInPage> {
               //     ],
               //   ),
               // ),
-
               const SizedBox(height: 40),
 
               Row(

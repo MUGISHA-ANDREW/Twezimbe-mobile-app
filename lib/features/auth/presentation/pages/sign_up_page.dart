@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:twezimbeapp/core/data/app_data_repository.dart';
-import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
+import 'package:twezimbeapp/core/data/local_user_session_store.dart';
+import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -65,12 +65,19 @@ class _SignUpPageState extends State<SignUpPage> {
 
       await credential.user?.updateDisplayName(username);
       await credential.user?.reload();
-      await AppDataRepository.ensureProfileForCurrentUser();
+      await FirebaseAuth.instance.signOut();
+      await LocalUserSessionStore.clear();
 
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const MainLayout()),
+        MaterialPageRoute(
+          builder: (context) => SignInPage(
+            initialEmail: email,
+            initialPassword: password,
+            initialMessage: 'Account created. Please sign in.',
+          ),
+        ),
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
