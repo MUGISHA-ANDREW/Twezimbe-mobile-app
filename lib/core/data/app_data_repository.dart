@@ -198,8 +198,7 @@ class AppDataRepository {
       return;
     }
 
-    final docRef = _userDoc(user.uid);
-    await docRef.set({
+    await _userDoc(user.uid).set({
       'fullName': _displayNameFor(user),
       'email': user.email ?? '',
       'phoneNumber': user.phoneNumber ?? '',
@@ -295,6 +294,28 @@ class AppDataRepository {
     }, SetOptions(merge: true));
 
     await user.updatePhotoURL(photoUrl);
+  }
+
+  static Future<String?> getCurrentProfilePhotoUrlForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    final snapshot = await _userDoc(user.uid).get();
+    final data = snapshot.data();
+    final String? profilePhotoUrl = (data?['photoUrl'] as String?)?.trim();
+
+    if (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty) {
+      return profilePhotoUrl;
+    }
+
+    final String? authPhotoUrl = user.photoURL?.trim();
+    if (authPhotoUrl != null && authPhotoUrl.isNotEmpty) {
+      return authPhotoUrl;
+    }
+
+    return null;
   }
 
   static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {

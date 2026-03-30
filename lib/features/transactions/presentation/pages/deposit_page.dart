@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
-import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
+import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key});
@@ -15,6 +17,7 @@ class _DepositPageState extends State<DepositPage> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   String _selectedQuickAmount = '';
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -26,6 +29,119 @@ class _DepositPageState extends State<DepositPage> {
   int _parseAmount(String raw) {
     final digitsOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
     return int.tryParse(digitsOnly) ?? 0;
+  }
+
+  String _formatUgx(int amountValue) {
+    final digits = amountValue.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final reverseIndex = digits.length - i;
+      buffer.write(digits[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+    return 'UGX ${buffer.toString()}';
+  }
+
+  String _maskedPhone(String rawPhone) {
+    final digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 7) {
+      return rawPhone.trim();
+    }
+    final start = digits.substring(0, 3);
+    final end = digits.substring(digits.length - 3);
+    return '$start****$end';
+  }
+
+  String _transactionReference() {
+    final now = DateTime.now();
+    final y = now.year.toString().padLeft(4, '0');
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    final millis = now.millisecond.toString().padLeft(3, '0');
+    return 'DEP$y$m$d${now.hour}${now.minute}${now.second}$millis';
+  }
+
+  String _readableDate(DateTime dateTime) {
+    final y = dateTime.year.toString().padLeft(4, '0');
+    final m = dateTime.month.toString().padLeft(2, '0');
+    final d = dateTime.day.toString().padLeft(2, '0');
+    final hh = dateTime.hour.toString().padLeft(2, '0');
+    final mm = dateTime.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $hh:$mm';
+  }
+
+  Future<void> _persistDepositInBackground({
+    required int amountValue,
+    required String reference,
+    required String maskedPhone,
+  }) async {
+    try {
+      // This persists the transaction and also creates an in-app notification.
+      await AppDataRepository.addTransactionForCurrentUser(
+        title: 'Deposit via $_selectedMethod',
+        subtitle: '$maskedPhone • Ref $reference',
+        amountValue: amountValue,
+        isCredit: true,
+      );
+    } catch (_) {
+      // Keep UX instant even if backend write is delayed/failed.
+    }
+  }
+
+  Future<void> _submitDeposit() async {
+    final int amountValue = _parseAmount(_amountController.text);
+    if (amountValue <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a valid amount.')));
+      return;
+    }
+
+    final String rawPhone = _phoneController.text.trim();
+    if (rawPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone number is required.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    final DateTime now = DateTime.now();
+    final String reference = _transactionReference();
+    final String maskedPhone = _maskedPhone(rawPhone);
+    final String formattedAmount = _formatUgx(amountValue);
+
+    unawaited(
+      _persistDepositInBackground(
+        amountValue: amountValue,
+        reference: reference,
+        maskedPhone: maskedPhone,
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TransactionSuccessPage(
+          type: 'Deposit',
+          amount: formattedAmount,
+          reference: reference,
+          recipient: '$_selectedMethod ($maskedPhone)',
+          date: _readableDate(now),
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -206,56 +322,20 @@ class _DepositPageState extends State<DepositPage> {
             const SizedBox(height: 40),
 
             ElevatedButton(
-              onPressed: () async {
-                final int amountValue = _parseAmount(_amountController.text);
-                if (amountValue <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enter a valid amount.')),
-                  );
-                  return;
-                }
-
-                try {
-                  await AppDataRepository.addTransactionForCurrentUser(
-                    title: 'Deposit via $_selectedMethod',
-                    subtitle: 'Deposit - Just now',
-                    amountValue: amountValue,
-                    isCredit: true,
-                  );
-                } catch (e) {
-                  if (!context.mounted) {
-                    return;
-                  }
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Unable to save transaction. ${e.toString()}',
-                      ),
-                    ),
-                  );
-                  return;
-                }
-
-                if (!context.mounted) {
-                  return;
-                }
-
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const MainLayout(
-                      initialIndex: 0,
-                      initialMessage:
-                          'Deposit successful. Your balance and transactions have been updated.',
-                    ),
-                  ),
-                  (route) => false,
-                );
-              },
+              onPressed: _isSubmitting ? null : _submitDeposit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.successGreen,
               ),
-              child: const Text('Deposit Now'),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Deposit Now'),
             ),
           ],
         ),

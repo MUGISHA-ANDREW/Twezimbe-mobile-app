@@ -6,6 +6,7 @@ class TransactionSuccessPage extends StatelessWidget {
   final String amount;
   final String reference;
   final String recipient;
+  final String date;
 
   const TransactionSuccessPage({
     super.key,
@@ -13,6 +14,7 @@ class TransactionSuccessPage extends StatelessWidget {
     required this.amount,
     required this.reference,
     required this.recipient,
+    this.date = 'N/A',
   });
 
   @override
@@ -92,7 +94,7 @@ class TransactionSuccessPage extends StatelessWidget {
                             const Divider(height: 24),
                             _buildReceiptRow('Reference', reference),
                             const Divider(height: 24),
-                            _buildReceiptRow('Date', 'March 8, 2026'),
+                            _buildReceiptRow('Date', date),
                             const Divider(height: 24),
                             _buildReceiptRow('Status', 'Completed'),
                           ],

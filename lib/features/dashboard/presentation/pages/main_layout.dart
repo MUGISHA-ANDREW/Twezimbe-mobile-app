@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/chatbot/presentation/pages/chatbot_page.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/dashboard_page.dart';
@@ -7,10 +8,16 @@ import 'package:twezimbeapp/features/profile/presentation/pages/profile_page.dar
 import 'package:twezimbeapp/features/transactions/presentation/pages/transactions_page.dart';
 
 class MainLayout extends StatefulWidget {
-  const MainLayout({super.key, this.initialIndex = 0, this.initialMessage});
+  const MainLayout({
+    super.key,
+    this.initialIndex = 0,
+    this.initialMessage,
+    this.optimisticRecentTransaction,
+  });
 
   final int initialIndex;
   final String? initialMessage;
+  final AppTransactionData? optimisticRecentTransaction;
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
@@ -19,17 +26,20 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   late int _currentIndex;
 
-  final List<Widget> _pages = const [
-    DashboardPage(),
-    TransactionsPage(),
-    LoansPage(),
-    ProfilePage(),
-  ];
+  late final List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    _pages = [
+      DashboardPage(
+        optimisticRecentTransaction: widget.optimisticRecentTransaction,
+      ),
+      const TransactionsPage(),
+      const LoansPage(),
+      const ProfilePage(),
+    ];
 
     final msg = widget.initialMessage;
     if (msg != null && msg.trim().isNotEmpty) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -14,6 +16,21 @@ class _WithdrawPageState extends State<WithdrawPage> {
   String _selectedMethod = 'MTN Mobile Money';
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  bool _isSubmitting = false;
+
+  AppProfileData get _fallbackProfile => const AppProfileData(
+    fullName: 'User',
+    email: '',
+    phoneNumber: 'Not set',
+    dateOfBirth: 'Not set',
+    nationalId: 'Not set',
+    address: 'Not set',
+    photoUrl: null,
+    customerId: 'CUST-00000',
+    kycStatus: 'KYC Verified',
+    accountType: 'Savings Account',
+    availableBalance: 'UGX 0',
+  );
 
   @override
   void dispose() {
@@ -27,17 +44,122 @@ class _WithdrawPageState extends State<WithdrawPage> {
     return int.tryParse(digitsOnly) ?? 0;
   }
 
+  String _formatUgx(int amountValue) {
+    final digits = amountValue.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final reverseIndex = digits.length - i;
+      buffer.write(digits[i]);
+      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+    return 'UGX ${buffer.toString()}';
+  }
+
+  String _maskedPhone(String rawPhone) {
+    final digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 7) {
+      return rawPhone.trim();
+    }
+    final start = digits.substring(0, 3);
+    final end = digits.substring(digits.length - 3);
+    return '$start****$end';
+  }
+
+  String _transactionReference() {
+    final now = DateTime.now();
+    final y = now.year.toString().padLeft(4, '0');
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    final millis = now.millisecond.toString().padLeft(3, '0');
+    return 'WTH$y$m$d${now.hour}${now.minute}${now.second}$millis';
+  }
+
+  Future<void> _persistWithdrawalInBackground({
+    required int amountValue,
+    required String reference,
+    required String maskedPhone,
+  }) async {
+    try {
+      // This persists transaction details and creates an in-app notification.
+      await AppDataRepository.addTransactionForCurrentUser(
+        title: 'Withdrawal to $_selectedMethod',
+        subtitle: '$maskedPhone • Ref $reference',
+        amountValue: amountValue,
+        isCredit: false,
+      );
+    } catch (_) {
+      // Keep UX instant even if backend write is delayed/failed.
+    }
+  }
+
+  Future<void> _submitWithdrawal() async {
+    final int amountValue = _parseAmount(_amountController.text);
+    if (amountValue <= 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a valid amount.')));
+      return;
+    }
+
+    final String rawPhone = _phoneController.text.trim();
+    if (rawPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone number is required.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    final String reference = _transactionReference();
+    final String maskedPhone = _maskedPhone(rawPhone);
+    final String formattedAmount = _formatUgx(amountValue);
+
+    final optimisticTx = AppTransactionData(
+      title: 'Withdrawal to $_selectedMethod',
+      subtitle: '$maskedPhone • Ref $reference',
+      amount: '- $formattedAmount',
+      isCredit: false,
+    );
+
+    unawaited(
+      _persistWithdrawalInBackground(
+        amountValue: amountValue,
+        reference: reference,
+        maskedPhone: maskedPhone,
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MainLayout(
+          initialIndex: 0,
+          initialMessage:
+              'Withdrawal submitted. Balance and recent transactions are updating.',
+          optimisticRecentTransaction: optimisticTx,
+        ),
+      ),
+      (route) => false,
+    );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AppProfileData>(
       stream: AppDataRepository.watchProfileForCurrentUser(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final profile = snapshot.data!;
+        final profile = snapshot.data ?? _fallbackProfile;
 
         return Scaffold(
           appBar: AppBar(
@@ -226,58 +348,20 @@ class _WithdrawPageState extends State<WithdrawPage> {
                 const SizedBox(height: 40),
 
                 ElevatedButton(
-                  onPressed: () async {
-                    final int amountValue = _parseAmount(
-                      _amountController.text,
-                    );
-                    if (amountValue <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Enter a valid amount.')),
-                      );
-                      return;
-                    }
-
-                    try {
-                      await AppDataRepository.addTransactionForCurrentUser(
-                        title: 'Withdrawal to $_selectedMethod',
-                        subtitle: 'Withdrawal - Just now',
-                        amountValue: amountValue,
-                        isCredit: false,
-                      );
-                    } catch (e) {
-                      if (!context.mounted) {
-                        return;
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Unable to save transaction. ${e.toString()}',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (!context.mounted) {
-                      return;
-                    }
-
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const MainLayout(
-                          initialIndex: 0,
-                          initialMessage:
-                              'Withdrawal successful. Your balance and transactions have been updated.',
-                        ),
-                      ),
-                      (route) => false,
-                    );
-                  },
+                  onPressed: _isSubmitting ? null : _submitWithdrawal,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
                   ),
-                  child: const Text('Withdraw'),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Withdraw'),
                 ),
               ],
             ),

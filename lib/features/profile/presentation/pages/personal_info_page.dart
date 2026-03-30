@@ -16,11 +16,44 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
 
+  AppProfileData _fallbackProfileFor(User? user) {
+    final email = user?.email ?? '';
+    final displayName = user?.displayName?.trim();
+    final fallbackName = (displayName != null && displayName.isNotEmpty)
+        ? displayName
+        : (email.isNotEmpty ? email.split('@').first : 'User');
+
+    return AppProfileData(
+      fullName: fallbackName,
+      email: email,
+      phoneNumber: user?.phoneNumber ?? 'Not set',
+      dateOfBirth: 'Not set',
+      nationalId: 'Not set',
+      address: 'Not set',
+      photoUrl: user?.photoURL,
+      customerId: email.isNotEmpty
+          ? 'CUST-${email.split('@').first.toUpperCase()}'
+          : 'CUST-00000',
+      kycStatus: 'KYC Verified',
+      accountType: 'Savings Account',
+      availableBalance: 'UGX 0',
+    );
+  }
+
   Future<void> _uploadProfilePhoto() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _showMessage('You must be signed in to upload a photo.');
       return;
+    }
+
+    final String? oldAuthPhotoUrl = user.photoURL;
+    String? oldStoredPhotoUrl;
+    try {
+      oldStoredPhotoUrl =
+          await AppDataRepository.getCurrentProfilePhotoUrlForCurrentUser();
+    } catch (_) {
+      oldStoredPhotoUrl = null;
     }
 
     try {
@@ -45,6 +78,23 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       );
       final photoUrl = await storageRef.getDownloadURL();
       await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
+
+      final oldPhotoUrls = <String>{
+        if (oldAuthPhotoUrl != null) oldAuthPhotoUrl,
+        if (oldStoredPhotoUrl != null) oldStoredPhotoUrl,
+      };
+
+      for (final oldPhotoUrl in oldPhotoUrls) {
+        if (_isManagedProfilePhotoUrl(oldPhotoUrl, user.uid) &&
+            oldPhotoUrl != photoUrl) {
+          try {
+            await FirebaseStorage.instance.refFromURL(oldPhotoUrl).delete();
+          } catch (_) {
+            // Ignore cleanup failures (e.g., missing old object).
+          }
+        }
+      }
+
       _showMessage('Profile photo updated.');
     } catch (_) {
       _showMessage('Failed to upload profile photo.');
@@ -53,6 +103,23 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
         setState(() => _isUploadingPhoto = false);
       }
     }
+  }
+
+  bool _isManagedProfilePhotoUrl(String url, String userId) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return false;
+    }
+
+    final hasStorageHost =
+        uri.host.contains('firebasestorage.googleapis.com') ||
+        uri.host.contains('firebasestorage.app');
+    if (!hasStorageHost) {
+      return false;
+    }
+
+    final decodedPath = Uri.decodeComponent(uri.path);
+    return decodedPath.contains('/profile_photos/$userId/');
   }
 
   Future<void> _openEditDialog(AppProfileData profile) async {
@@ -163,6 +230,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Personal Information'),
@@ -173,11 +241,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
         child: StreamBuilder<AppProfileData>(
           stream: AppDataRepository.watchProfileForCurrentUser(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final profile = snapshot.data!;
+            final profile = snapshot.data ?? _fallbackProfileFor(user);
 
             return Column(
               children: [

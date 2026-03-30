@@ -8,17 +8,21 @@ import 'package:twezimbeapp/features/loans/presentation/pages/loan_details_page.
 class LoansPage extends StatelessWidget {
   const LoansPage({super.key});
 
+  AppLoanData get _fallbackLoan => const AppLoanData(
+    type: 'No Active Loan',
+    loanId: 'N/A',
+    status: 'None',
+    remainingBalance: 'UGX 0',
+    nextPaymentDate: 'Not scheduled',
+    repaymentProgress: '0%',
+  );
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AppLoanData>(
       stream: AppDataRepository.watchActiveLoanForCurrentUser(),
       builder: (context, loanSnapshot) {
-        if (!loanSnapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final loan = loanSnapshot.data!;
+        final loan = loanSnapshot.data ?? _fallbackLoan;
 
         return StreamBuilder<List<AppLoanApplicationData>>(
           stream: AppDataRepository.watchLoanApplicationsForCurrentUser(

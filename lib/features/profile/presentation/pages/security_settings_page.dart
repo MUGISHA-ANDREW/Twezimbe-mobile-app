@@ -13,6 +13,14 @@ class SecuritySettingsPage extends StatefulWidget {
 class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
   bool _isUpdating = false;
 
+  AppSecuritySettingsData get _fallbackSettings =>
+      const AppSecuritySettingsData(
+        biometricEnabled: false,
+        twoFactorEnabled: false,
+        transactionAlerts: true,
+        loginAlerts: true,
+      );
+
   Future<void> _updateSecuritySetting({
     bool? biometricEnabled,
     bool? twoFactorEnabled,
@@ -98,10 +106,7 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
       body: StreamBuilder<AppSecuritySettingsData>(
         stream: AppDataRepository.watchSecuritySettingsForCurrentUser(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final settings = snapshot.data!;
+          final settings = snapshot.data ?? _fallbackSettings;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20.0),

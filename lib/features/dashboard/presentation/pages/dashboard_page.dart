@@ -9,7 +9,9 @@ import 'package:twezimbeapp/features/transactions/presentation/pages/deposit_pag
 import 'package:twezimbeapp/features/transactions/presentation/pages/withdraw_page.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({super.key, this.optimisticRecentTransaction});
+
+  final AppTransactionData? optimisticRecentTransaction;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -35,24 +37,64 @@ class _DashboardPageState extends State<DashboardPage> {
     return 'there';
   }
 
+  AppProfileData get _fallbackProfile {
+    final user = _currentUser;
+    final email = user?.email ?? '';
+
+    return AppProfileData(
+      fullName: _greetingName,
+      email: email,
+      phoneNumber: user?.phoneNumber ?? 'Not set',
+      dateOfBirth: 'Not set',
+      nationalId: 'Not set',
+      address: 'Not set',
+      photoUrl: user?.photoURL,
+      customerId: email.isNotEmpty
+          ? 'CUST-${email.split('@').first.toUpperCase()}'
+          : 'CUST-00000',
+      kycStatus: 'KYC Verified',
+      accountType: 'Savings Account',
+      availableBalance: 'UGX 0',
+    );
+  }
+
+  List<AppTransactionData> _mergedRecentTransactions(
+    List<AppTransactionData> streamedTransactions,
+  ) {
+    final optimistic = widget.optimisticRecentTransaction;
+    if (optimistic == null) {
+      return streamedTransactions;
+    }
+
+    final exists = streamedTransactions.any(
+      (tx) =>
+          tx.title == optimistic.title &&
+          tx.subtitle == optimistic.subtitle &&
+          tx.amount == optimistic.amount &&
+          tx.isCredit == optimistic.isCredit,
+    );
+    if (exists) {
+      return streamedTransactions;
+    }
+
+    return [optimistic, ...streamedTransactions];
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AppProfileData>(
       stream: AppDataRepository.watchProfileForCurrentUser(),
       builder: (context, profileSnapshot) {
-        if (!profileSnapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final profile = profileSnapshot.data!;
+        final profile = profileSnapshot.data ?? _fallbackProfile;
 
         return StreamBuilder<List<AppTransactionData>>(
           stream: AppDataRepository.watchRecentTransactionsForCurrentUser(
             limit: 50,
           ),
           builder: (context, txSnapshot) {
-            final recentTransactions =
-                txSnapshot.data ?? const <AppTransactionData>[];
+            final recentTransactions = _mergedRecentTransactions(
+              txSnapshot.data ?? const <AppTransactionData>[],
+            );
 
             return StreamBuilder<List<AppNotificationData>>(
               stream: AppDataRepository.watchNotificationsForCurrentUser(
