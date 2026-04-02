@@ -22,15 +22,17 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
       );
 
   Future<void> _updateSecuritySetting({
-    bool? biometricEnabled,
     bool? twoFactorEnabled,
     bool? transactionAlerts,
     bool? loginAlerts,
   }) async {
+    if (_isUpdating) {
+      return;
+    }
+
     try {
       setState(() => _isUpdating = true);
       await AppDataRepository.updateSecuritySettingsForCurrentUser(
-        biometricEnabled: biometricEnabled,
         twoFactorEnabled: twoFactorEnabled,
         transactionAlerts: transactionAlerts,
         loginAlerts: loginAlerts,
@@ -106,6 +108,32 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
       body: StreamBuilder<AppSecuritySettingsData>(
         stream: AppDataRepository.watchSecuritySettingsForCurrentUser(),
         builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.redAccent),
+                    const SizedBox(height: 8),
+                    const Text('Failed to load security settings.'),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: () => setState(() {}),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           final settings = snapshot.data ?? _fallbackSettings;
 
           return SingleChildScrollView(
@@ -123,32 +151,31 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
                 ),
                 const SizedBox(height: 16),
                 _buildToggleTile(
-                  Icons.fingerprint,
-                  'Biometric Login',
-                  'Use fingerprint or face to sign in',
-                  settings.biometricEnabled,
-                  (val) => _updateSecuritySetting(biometricEnabled: val),
-                ),
-                _buildToggleTile(
                   Icons.security,
                   'Two-Factor Authentication',
                   'Require OTP for sensitive actions',
                   settings.twoFactorEnabled,
-                  (val) => _updateSecuritySetting(twoFactorEnabled: val),
+                  _isUpdating
+                      ? null
+                      : (val) => _updateSecuritySetting(twoFactorEnabled: val),
                 ),
                 _buildToggleTile(
                   Icons.notifications_active,
                   'Transaction Alerts',
                   'Get notified for every transaction',
                   settings.transactionAlerts,
-                  (val) => _updateSecuritySetting(transactionAlerts: val),
+                  _isUpdating
+                      ? null
+                      : (val) => _updateSecuritySetting(transactionAlerts: val),
                 ),
                 _buildToggleTile(
                   Icons.login,
                   'Login Alerts',
                   'Receive an alert when your account is accessed',
                   settings.loginAlerts,
-                  (val) => _updateSecuritySetting(loginAlerts: val),
+                  _isUpdating
+                      ? null
+                      : (val) => _updateSecuritySetting(loginAlerts: val),
                 ),
                 const SizedBox(height: 32),
                 const Text(
@@ -193,7 +220,7 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
     String title,
     String subtitle,
     bool value,
-    ValueChanged<bool> onChanged,
+    ValueChanged<bool>? onChanged,
   ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

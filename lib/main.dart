@@ -37,12 +37,24 @@ class AuthGatePage extends StatefulWidget {
 }
 
 class _AuthGatePageState extends State<AuthGatePage> {
-  late final Future<bool> _authCheck;
+  bool? _isAuthenticated;
 
   @override
   void initState() {
     super.initState();
-    _authCheck = _resolveInitialAuthState();
+    _initializeStartup();
+  }
+
+  Future<void> _initializeStartup() async {
+    final result = await Future.wait<dynamic>([
+      _resolveInitialAuthState(),
+      Future<void>.delayed(const Duration(seconds: 2)),
+    ]);
+
+    if (!mounted) return;
+    setState(() {
+      _isAuthenticated = result.first as bool;
+    });
   }
 
   Future<bool> _resolveInitialAuthState() async {
@@ -63,21 +75,95 @@ class _AuthGatePageState extends State<AuthGatePage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _authCheck,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    if (_isAuthenticated == null) {
+      return const _SplashScreen();
+    }
 
-        final isAuthenticated = snapshot.data ?? false;
-        if (isAuthenticated) {
-          return const MainLayout();
-        }
-        return const SignInPage();
-      },
+    if (_isAuthenticated!) {
+      return const MainLayout();
+    }
+
+    return const SignInPage();
+  }
+}
+
+class _SplashScreen extends StatelessWidget {
+  const _SplashScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0A3A8A), Color(0xFF0A6FD6)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                SizedBox(
+                  width: 92,
+                  height: 92,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Image(
+                        image: AssetImage('assets/branding/launcher_icon.png'),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 16),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.all(Radius.circular(999)),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    child: Text(
+                      'Twezimbe',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F326D),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Smart savings for your group',
+                  style: TextStyle(
+                    color: Color(0xFFD7E6FF),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 28),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.8,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

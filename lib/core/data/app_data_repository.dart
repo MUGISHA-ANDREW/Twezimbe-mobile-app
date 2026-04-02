@@ -189,7 +189,7 @@ class AppDataRepository {
     AppFaqData(
       question: 'Is my data secure?',
       answer:
-          'Twezimbe uses AES-256 encryption and regular system audits to help keep your personal and financial data secure.',
+          'Yes, Twezimbe uses AES-256 encryption and regular system audits to help keep your personal and financial data more than secure.',
     ),
   ];
 
@@ -199,25 +199,50 @@ class AppDataRepository {
       return;
     }
 
-    await _userDoc(user.uid).set({
-      'fullName': _displayNameFor(user),
-      'email': user.email ?? '',
-      'phoneNumber': user.phoneNumber ?? '',
-      'dateOfBirth': '',
-      'nationalId': '',
-      'address': '',
-      'photoUrl': user.photoURL,
-      'customerId': _customerIdFor(user),
-      'kycStatus': 'KYC Verified',
-      'accountType': 'Savings Account',
-      'balanceValue': 0,
+    final docRef = _userDoc(user.uid);
+    final snapshot = await docRef.get();
+    final existing = snapshot.data() ?? <String, dynamic>{};
+    final existingSecurity = Map<String, dynamic>.from(
+      (existing['security'] as Map<String, dynamic>?) ?? <String, dynamic>{},
+    );
+
+    final String? existingPhotoUrl =
+        (existing['photoUrl'] as String?)?.trim().isNotEmpty == true
+        ? (existing['photoUrl'] as String).trim()
+        : null;
+
+    await docRef.set({
+      'fullName': (existing['fullName'] as String?)?.trim().isNotEmpty == true
+          ? existing['fullName'] as String
+          : _displayNameFor(user),
+      'email': (existing['email'] as String?)?.trim().isNotEmpty == true
+          ? existing['email'] as String
+          : (user.email ?? ''),
+      'phoneNumber':
+          (existing['phoneNumber'] as String?)?.trim().isNotEmpty == true
+          ? existing['phoneNumber'] as String
+          : (user.phoneNumber ?? ''),
+      'dateOfBirth': (existing['dateOfBirth'] as String?) ?? '',
+      'nationalId': (existing['nationalId'] as String?) ?? '',
+      'address': (existing['address'] as String?) ?? '',
+      'photoUrl': existingPhotoUrl ?? user.photoURL,
+      'customerId':
+          (existing['customerId'] as String?)?.trim().isNotEmpty == true
+          ? existing['customerId'] as String
+          : _customerIdFor(user),
+      'kycStatus': (existing['kycStatus'] as String?) ?? 'KYC Verified',
+      'accountType': (existing['accountType'] as String?) ?? 'Savings Account',
+      'balanceValue': (existing['balanceValue'] as num?)?.toInt() ?? 0,
       'security': {
-        'biometricEnabled': false,
-        'twoFactorEnabled': false,
-        'transactionAlerts': true,
-        'loginAlerts': true,
+        'biometricEnabled':
+            (existingSecurity['biometricEnabled'] as bool?) ?? false,
+        'twoFactorEnabled':
+            (existingSecurity['twoFactorEnabled'] as bool?) ?? false,
+        'transactionAlerts':
+            (existingSecurity['transactionAlerts'] as bool?) ?? true,
+        'loginAlerts': (existingSecurity['loginAlerts'] as bool?) ?? true,
       },
-      'createdAt': FieldValue.serverTimestamp(),
+      'createdAt': existing['createdAt'] ?? FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -228,7 +253,7 @@ class AppDataRepository {
       return const Stream<AppProfileData>.empty();
     }
 
-    ensureProfileForCurrentUser();
+    unawaited(ensureProfileForCurrentUser().catchError((_) {}));
     return _userDoc(user.uid).snapshots().map((snapshot) {
       final data = snapshot.data() ?? <String, dynamic>{};
       final int balanceValue = (data['balanceValue'] as num?)?.toInt() ?? 0;
@@ -294,7 +319,12 @@ class AppDataRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    await user.updatePhotoURL(photoUrl);
+    try {
+      await user.updatePhotoURL(photoUrl);
+    } catch (_) {
+      // Firestore remains the source of truth for avatar display in this app.
+      // Ignore auth profile update failures to avoid blocking a successful upload.
+    }
   }
 
   static Future<String?> getCurrentProfilePhotoUrlForCurrentUser() async {
@@ -325,7 +355,7 @@ class AppDataRepository {
       return const Stream<AppSecuritySettingsData>.empty();
     }
 
-    ensureProfileForCurrentUser();
+    unawaited(ensureProfileForCurrentUser().catchError((_) {}));
     return _userDoc(user.uid).snapshots().map((snapshot) {
       final data = snapshot.data() ?? <String, dynamic>{};
       final security = data['security'] as Map<String, dynamic>?;

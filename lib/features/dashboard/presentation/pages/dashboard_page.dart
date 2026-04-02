@@ -131,11 +131,26 @@ class _DashboardPageState extends State<DashboardPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const CircleAvatar(
+                                      CircleAvatar(
                                         radius: 24,
-                                        backgroundImage: NetworkImage(
-                                          'https://i.pravatar.cc/150?img=47',
-                                        ),
+                                        backgroundColor: AppColors.primaryBlue
+                                            .withValues(alpha: 0.12),
+                                        backgroundImage:
+                                            profile.photoUrl != null
+                                            ? NetworkImage(profile.photoUrl!)
+                                            : null,
+                                        child: profile.photoUrl == null
+                                            ? Text(
+                                                profile.fullName.isNotEmpty
+                                                    ? profile.fullName[0]
+                                                          .toUpperCase()
+                                                    : 'U',
+                                                style: const TextStyle(
+                                                  color: AppColors.primaryBlue,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              )
+                                            : null,
                                       ),
                                       const SizedBox(width: 16),
                                       Column(

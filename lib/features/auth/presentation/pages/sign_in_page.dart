@@ -192,10 +192,21 @@ class _SignInPageState extends State<SignInPage> {
               Center(
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.spa,
-                      size: 64,
-                      color: Theme.of(context).primaryColor,
+                    Container(
+                      width: 92,
+                      height: 92,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF0A6FD6).withValues(alpha: 0.25),
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(14),
+                      child: const Image(
+                        image: AssetImage('assets/branding/launcher_icon.png'),
+                        fit: BoxFit.contain,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -337,31 +348,6 @@ class _SignInPageState extends State<SignInPage> {
               ),
 
               const SizedBox(height: 30),
-
-              // /// BIOMETRIC LOGIN (Fingerprint)
-              // Center(
-              //   child: Column(
-              //     children: [
-              //       IconButton(
-              //         iconSize: 48,
-              //         icon: const Icon(
-              //           Icons.fingerprint,
-              //           color: Color(0xFFF99D2A),
-              //         ),
-              //         onPressed: () {
-              //           // biometric login logic
-              //         },
-              //       ),
-              //       Text(
-              //         'Use Fingerprint',
-              //         style: TextStyle(
-              //           color: Colors.grey.shade600,
-              //           fontSize: 13,
-              //         ),
-              //       ),
-              //     ],
-              //   ),
-              // ),
               const SizedBox(height: 40),
 
               Row(

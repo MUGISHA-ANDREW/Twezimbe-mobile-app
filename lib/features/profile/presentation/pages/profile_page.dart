@@ -74,15 +74,16 @@ class _ProfilePageState extends State<ProfilePage> {
 
       setState(() => _isUploadingPhoto = true);
       final bytes = await selected.readAsBytes();
+      final extension = _normalizedExtension(selected.name);
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('profile_photos')
           .child(user.uid)
-          .child('avatar_${DateTime.now().millisecondsSinceEpoch}.jpg');
+          .child('avatar_${DateTime.now().millisecondsSinceEpoch}.$extension');
 
       await storageRef.putData(
         bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
+        SettableMetadata(contentType: _contentTypeFor(extension)),
       );
       final photoUrl = await storageRef.getDownloadURL();
       await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
@@ -104,12 +105,73 @@ class _ProfilePageState extends State<ProfilePage> {
       }
 
       _showMessage('Profile photo updated.');
-    } catch (_) {
+    } on FirebaseException catch (error) {
+      debugPrint(
+        'Profile photo upload failed [${error.code}]: ${error.message}',
+      );
+      _showMessage(_firebaseUploadErrorMessage(error));
+    } catch (error, stackTrace) {
+      debugPrint('Profile photo upload failed: $error\n$stackTrace');
       _showMessage('Failed to upload photo. Please try again.');
     } finally {
       if (mounted) {
         setState(() => _isUploadingPhoto = false);
       }
+    }
+  }
+
+  String _normalizedExtension(String fileName) {
+    final dotIndex = fileName.lastIndexOf('.');
+    if (dotIndex < 0 || dotIndex == fileName.length - 1) {
+      return 'jpg';
+    }
+
+    final ext = fileName.substring(dotIndex + 1).toLowerCase();
+    if (ext == 'jpeg') return 'jpg';
+    if (ext == 'png' ||
+        ext == 'jpg' ||
+        ext == 'webp' ||
+        ext == 'heic' ||
+        ext == 'heif') {
+      return ext;
+    }
+    return 'jpg';
+  }
+
+  String _contentTypeFor(String extension) {
+    switch (extension) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'heic':
+        return 'image/heic';
+      case 'heif':
+        return 'image/heif';
+      case 'jpg':
+      default:
+        return 'image/jpeg';
+    }
+  }
+
+  String _firebaseUploadErrorMessage(FirebaseException error) {
+    switch (error.code) {
+      case 'unauthorized':
+      case 'permission-denied':
+        return 'Upload blocked by Firebase Storage/Firestore rules. Please update project rules and try again.';
+      case 'canceled':
+        return 'Upload was canceled.';
+      case 'object-not-found':
+        return 'Storage path not found. Please try again.';
+      case 'network-request-failed':
+      case 'unavailable':
+        return 'Network issue while uploading. Check your connection and try again.';
+      default:
+        final details = error.message?.trim();
+        if (details != null && details.isNotEmpty) {
+          return 'Upload failed: $details';
+        }
+        return 'Failed to upload photo. Please try again.';
     }
   }
 

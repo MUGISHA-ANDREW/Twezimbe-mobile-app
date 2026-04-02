@@ -221,29 +221,6 @@ class _SignUpPageState extends State<SignUpPage> {
               ),
               const SizedBox(height: 24),
 
-              Center(
-                child: Column(
-                  children: [
-                    IconButton(
-                      iconSize: 48,
-                      icon: const Icon(
-                        Icons.fingerprint,
-                        color: Color(0xFFF99D2A),
-                      ),
-                      onPressed: () {},
-                    ),
-                    Text(
-                      'Enable Biometric Login',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
