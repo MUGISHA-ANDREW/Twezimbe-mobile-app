@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_up_page.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/forgot_password_page.dart';
@@ -99,6 +100,12 @@ class _SignInPageState extends State<SignInPage> {
 
       await LocalUserSessionStore.saveFromCurrentUser();
       _syncProfileInBackground();
+      
+      // Save FCM token for push notifications
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await PushNotificationService.saveTokenToFirestore(user.uid);
+      }
 
       if (!mounted) return;
       

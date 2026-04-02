@@ -6,6 +6,7 @@ import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.da
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_calculator_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/deposit_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/withdraw_page.dart';
+import 'package:twezimbeapp/features/profile/presentation/pages/profile_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, this.optimisticRecentTransaction});
@@ -50,6 +51,7 @@ class _DashboardPageState extends State<DashboardPage> {
       kycStatus: 'KYC Verified',
       accountType: 'Savings Account',
       availableBalance: 'UGX 0',
+      isAdmin: false,
     );
   }
 
@@ -108,25 +110,71 @@ class _DashboardPageState extends State<DashboardPage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
+                                Row(
                                   children: [
-                                    Text(
-                                      'Welcome back,',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey.shade600,
+                                    // Profile Picture
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const ProfilePage(),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primaryBlue.withValues(alpha: 0.12),
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: 0.1),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: ClipOval(
+                                          child: profile.photoUrl != null
+                                              ? Image.network(
+                                                  profile.photoUrl!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (context, error, stackTrace) {
+                                                    return _buildInitials(profile.fullName);
+                                                  },
+                                                )
+                                              : _buildInitials(profile.fullName),
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _greetingName,
-                                      style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textMain,
-                                      ),
+                                    const SizedBox(width: 14),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Welcome back,',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          _greetingName,
+                                          style: const TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textMain,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -169,6 +217,26 @@ class _DashboardPageState extends State<DashboardPage> {
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildInitials(String name) {
+    final String initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.primaryBlue.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            color: AppColors.primaryBlue,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
       ),
     );
   }

@@ -4,6 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
+import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
+import 'package:twezimbeapp/features/admin/presentation/pages/admin_dashboard_page.dart';
 import 'package:twezimbeapp/firebase_options.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
@@ -28,6 +31,7 @@ Future<void> main() async {
   
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await LocalNotificationService.initialize();
+  await PushNotificationService.initialize();
   runApp(const TwezimbeApp());
 }
 
@@ -99,7 +103,17 @@ class _AuthGatePageState extends State<AuthGatePage> {
     }
 
     if (_isAuthenticated!) {
-      return const MainLayout();
+      return StreamBuilder<AppProfileData>(
+        stream: AppDataRepository.watchProfileForCurrentUser(),
+        builder: (context, snapshot) {
+          final profile = snapshot.data;
+          // Show admin dashboard if user is admin
+          if (profile?.isAdmin == true) {
+            return const AdminDashboardPage();
+          }
+          return const MainLayout();
+        },
+      );
     }
 
     return const SignInPage();

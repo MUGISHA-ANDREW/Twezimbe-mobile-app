@@ -41,6 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
       kycStatus: 'KYC Verified',
       accountType: 'Savings Account',
       availableBalance: 'UGX 0',
+      isAdmin: false,
     );
   }
 

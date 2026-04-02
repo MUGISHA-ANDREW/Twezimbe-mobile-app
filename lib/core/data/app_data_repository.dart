@@ -16,6 +16,7 @@ class AppProfileData {
     required this.kycStatus,
     required this.accountType,
     required this.availableBalance,
+    required this.isAdmin,
   });
 
   final String fullName;
@@ -29,6 +30,7 @@ class AppProfileData {
   final String kycStatus;
   final String accountType;
   final String availableBalance;
+  final bool isAdmin;
 }
 
 class AppSecuritySettingsData {
@@ -211,6 +213,10 @@ class AppDataRepository {
         ? (existing['photoUrl'] as String).trim()
         : null;
 
+    // Check if this is the first user (make them admin)
+    final allUsersSnapshot = await _firestore.collection('users').limit(1).get();
+    final isFirstUser = allUsersSnapshot.docs.isEmpty || allUsersSnapshot.docs.length == 1;
+
     await docRef.set({
       'fullName': (existing['fullName'] as String?)?.trim().isNotEmpty == true
           ? existing['fullName'] as String
@@ -233,6 +239,7 @@ class AppDataRepository {
       'kycStatus': (existing['kycStatus'] as String?) ?? 'KYC Verified',
       'accountType': (existing['accountType'] as String?) ?? 'Savings Account',
       'balanceValue': (existing['balanceValue'] as num?)?.toInt() ?? 0,
+      'isAdmin': isFirstUser ? true : ((existing['isAdmin'] as bool?) ?? false),
       'security': {
         'biometricEnabled':
             (existingSecurity['biometricEnabled'] as bool?) ?? false,
@@ -280,6 +287,7 @@ class AppDataRepository {
         kycStatus: (data['kycStatus'] as String?) ?? 'KYC Verified',
         accountType: (data['accountType'] as String?) ?? 'Savings Account',
         availableBalance: _formatUgx(balanceValue),
+        isAdmin: (data['isAdmin'] as bool?) ?? false,
       );
     });
   }
@@ -816,6 +824,107 @@ class AppDataRepository {
     }
 
     await _userDoc(user.uid).collection('chatMessages').doc(messageId).delete();
+  }
+
+  // Admin methods
+  static Future<void> setUserAdminRole(String userId, bool isAdmin) async {
+    await _userDoc(userId).set({
+      'isAdmin': isAdmin,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Stream<List<AppProfileData>> watchAllUsers() {
+    return _firestore.collection('users').snapshots().map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        final balanceValue = (data['balanceValue'] as num?)?.toInt() ?? 0;
+        return AppProfileData(
+          fullName: (data['fullName'] as String?) ?? 'Unknown',
+          email: (data['email'] as String?) ?? '',
+          phoneNumber: (data['phoneNumber'] as String?) ?? 'Not set',
+          dateOfBirth: (data['dateOfBirth'] as String?) ?? 'Not set',
+          nationalId: (data['nationalId'] as String?) ?? 'Not set',
+          address: (data['address'] as String?) ?? 'Not set',
+          photoUrl: (data['photoUrl'] as String?)?.trim().isNotEmpty == true
+              ? data['photoUrl']
+              : null,
+          customerId: (data['customerId'] as String?) ?? '',
+          kycStatus: (data['kycStatus'] as String?) ?? 'Pending',
+          accountType: (data['accountType'] as String?) ?? 'Savings Account',
+          availableBalance: _formatUgx(balanceValue),
+          isAdmin: (data['isAdmin'] as bool?) ?? false,
+        );
+      }).toList();
+    });
+  }
+
+  static Future<int> getTotalUsersCount() async {
+    final snapshot = await _firestore.collection('users').count().get();
+    return snapshot.count ?? 0;
+  }
+
+  static Future<int> getPendingLoansCount() async {
+    int count = 0;
+    final users = await _firestore.collection('users').get();
+    for (final user in users.docs) {
+      final loans = await user.reference
+          .collection('loanApplications')
+          .where('status', isEqualTo: 'Pending Review')
+          .count()
+          .get();
+      count += loans.count ?? 0;
+    }
+    return count;
+  }
+
+  static Future<void> approveLoanApplication(String userId, String applicationId) async {
+    final userDoc = _userDoc(userId);
+    final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
+    
+    await loanDoc.update({'status': 'Approved'});
+    await userDoc.collection('loans').doc('active').update({
+      'status': 'Active',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Notify user
+    await addNotificationForUser(
+      userId: userId,
+      title: 'Loan Approved',
+      message: 'Your loan application has been approved!',
+      type: 'loan',
+    );
+  }
+
+  static Future<void> rejectLoanApplication(String userId, String applicationId, String reason) async {
+    final userDoc = _userDoc(userId);
+    final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
+    
+    await loanDoc.update({'status': 'Rejected', 'rejectionReason': reason});
+
+    // Notify user
+    await addNotificationForUser(
+      userId: userId,
+      title: 'Loan Rejected',
+      message: 'Your loan application has been rejected. Reason: $reason',
+      type: 'loan',
+    );
+  }
+
+  static Future<void> addNotificationForUser({
+    required String userId,
+    required String title,
+    required String message,
+    String type = 'info',
+  }) async {
+    await _userDoc(userId).collection('notifications').add({
+      'title': title,
+      'message': message,
+      'type': type,
+      'isRead': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   static String formatUgx(int amount) {
