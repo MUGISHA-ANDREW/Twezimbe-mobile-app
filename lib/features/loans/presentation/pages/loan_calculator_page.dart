@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
 class LoanCalculatorPage extends StatefulWidget {
@@ -190,17 +191,20 @@ class _LoanCalculatorPageState extends State<LoanCalculatorPage> {
     final double monthlyRate = annualRatePercent / 12 / 100;
 
     if (monthlyRate == 0) {
-      final double monthlyPayment = principal / months;
-      final double totalPayable = principal;
+      final double monthlyPayment = _roundToUnit(principal / months);
+      final double totalPayable = monthlyPayment * months;
+      final double totalInterest = totalPayable - principal;
       return _LoanEstimate(
         monthlyPayment: monthlyPayment,
-        totalInterest: 0,
+        totalInterest: totalInterest,
         totalPayable: totalPayable,
       );
     }
 
-    final double power = _pow(1 + monthlyRate, months);
-    final double monthlyPayment = principal * monthlyRate * power / (power - 1);
+    final double power = math.pow(1 + monthlyRate, months).toDouble();
+    final double exactMonthlyPayment =
+        principal * monthlyRate * power / (power - 1);
+    final double monthlyPayment = _roundToUnit(exactMonthlyPayment);
     final double totalPayable = monthlyPayment * months;
     final double totalInterest = totalPayable - principal;
 
@@ -211,12 +215,8 @@ class _LoanCalculatorPageState extends State<LoanCalculatorPage> {
     );
   }
 
-  double _pow(double base, int exponent) {
-    double result = 1;
-    for (int i = 0; i < exponent; i++) {
-      result *= base;
-    }
-    return result;
+  double _roundToUnit(double value) {
+    return value.roundToDouble();
   }
 
   String _formatUgx(double value) {

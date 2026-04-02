@@ -158,7 +158,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Hi, $_greetingName!',
+                                            'Welcome, $_greetingName',
                                             style: TextStyle(
                                               fontSize: 18,
                                               fontWeight: FontWeight.bold,
