@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
@@ -10,6 +11,21 @@ import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.da
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      systemNavigationBarColor: Colors.white,
+      systemNavigationBarIconBrightness: Brightness.dark,
+    ),
+  );
+  
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await LocalNotificationService.initialize();
   runApp(const TwezimbeApp());
@@ -21,9 +37,9 @@ class TwezimbeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Twezimbe Mobile App',
-      theme: appTheme,
+      title: 'Twezimbe',
       debugShowCheckedModeBanner: false,
+      theme: appTheme,
       home: const AuthGatePage(),
     );
   }
@@ -38,6 +54,7 @@ class AuthGatePage extends StatefulWidget {
 
 class _AuthGatePageState extends State<AuthGatePage> {
   bool? _isAuthenticated;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -46,14 +63,15 @@ class _AuthGatePageState extends State<AuthGatePage> {
   }
 
   Future<void> _initializeStartup() async {
-    final result = await Future.wait<dynamic>([
+    await Future.wait<dynamic>([
       _resolveInitialAuthState(),
-      Future<void>.delayed(const Duration(seconds: 2)),
+      Future<void>.delayed(const Duration(milliseconds: 1500)),
     ]);
 
     if (!mounted) return;
     setState(() {
-      _isAuthenticated = result.first as bool;
+      _isAuthenticated = _isAuthenticated;
+      _isLoading = false;
     });
   }
 
@@ -61,21 +79,22 @@ class _AuthGatePageState extends State<AuthGatePage> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
       await LocalUserSessionStore.saveUser(currentUser);
+      if (mounted) setState(() => _isAuthenticated = true);
       return true;
     }
 
     final localSession = await LocalUserSessionStore.readSession();
     if (localSession != null && localSession.uid.isNotEmpty) {
-      // A local record exists but no Firebase auth user is active.
       await LocalUserSessionStore.clear();
     }
-
+    
+    if (mounted) setState(() => _isAuthenticated = false);
     return false;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isAuthenticated == null) {
+    if (_isLoading || _isAuthenticated == null) {
       return const _SplashScreen();
     }
 
@@ -98,65 +117,79 @@ class _SplashScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF0A3A8A), Color(0xFF0A6FD6)],
+            colors: [
+              Color(0xFF0A3A8A),
+              Color(0xFF0A6FD6),
+              Color(0xFF1E60E2),
+            ],
+            stops: [0.0, 0.5, 1.0],
           ),
         ),
         child: SafeArea(
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                SizedBox(
-                  width: 92,
-                  height: 92,
-                  child: DecoratedBox(
+              children: [
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 800),
+                  curve: Curves.elasticOut,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: value,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    width: 100,
+                    height: 100,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
-                    child: Padding(
-                      padding: EdgeInsets.all(14),
-                      child: Image(
-                        image: AssetImage('assets/branding/launcher_icon.png'),
-                        fit: BoxFit.contain,
-                      ),
+                    padding: const EdgeInsets.all(16),
+                    child: const Image(
+                      image: AssetImage('assets/branding/launcher_icon.png'),
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
-                SizedBox(height: 16),
-                DecoratedBox(
-                  decoration: BoxDecoration(
+                const SizedBox(height: 24),
+                const Text(
+                  'Twezimbe',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    borderRadius: BorderRadius.all(Radius.circular(999)),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    child: Text(
-                      'Twezimbe',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F326D),
-                      ),
-                    ),
+                    letterSpacing: 1.2,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Smart savings for your group',
                   style: TextStyle(
-                    color: Color(0xFFD7E6FF),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                SizedBox(height: 28),
+                const SizedBox(height: 48),
                 SizedBox(
-                  width: 28,
-                  height: 28,
+                  width: 40,
+                  height: 40,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2.8,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Colors.white.withValues(alpha: 0.9),
+                    ),
                   ),
                 ),
               ],
