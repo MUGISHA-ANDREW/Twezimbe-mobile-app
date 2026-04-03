@@ -193,6 +193,41 @@ class AppDataRepository {
       answer:
           'Yes, Twezimbe uses AES-256 encryption and regular system audits to help keep your personal and financial data more than secure.',
     ),
+    AppFaqData(
+      question: 'How do I check my account balance?',
+      answer:
+          'Check your balance on the home screen dashboard, or go to Profile > Personal Information to see detailed balance information.',
+    ),
+    AppFaqData(
+      question: 'How do I update my profile picture?',
+      answer:
+          'Go to Profile, tap the camera icon on your profile photo, choose an image from your gallery, and it will be uploaded.',
+    ),
+    AppFaqData(
+      question: 'What loan types are available?',
+      answer:
+          'Twezimbe offers Salary Loans, Group Loans, and Emergency Loans. Each has different terms and amounts. Visit Loans section for details.',
+    ),
+    AppFaqData(
+      question: 'How do I make a deposit?',
+      answer:
+          'Go to the home screen and tap Deposit, or go to Transactions > Deposit. You can deposit via mobile money or bank transfer.',
+    ),
+    AppFaqData(
+      question: 'How do I contact customer support?',
+      answer:
+          'Email: support@twezimbe.co.ug\nPhone: +256 700 000 000\nAvailable 8AM - 6PM daily.',
+    ),
+    AppFaqData(
+      question: 'What is KYC verification?',
+      answer:
+          'KYC (Know Your Customer) is verification of your identity. Complete it by adding your National ID in Profile > Personal Information.',
+    ),
+    AppFaqData(
+      question: 'How do I enable biometric login?',
+      answer:
+          'Go to Profile > Security Settings > Biometric Authentication and toggle it on. You can then use fingerprint or face to log in.',
+    ),
   ];
 
   static Future<void> ensureProfileForCurrentUser() async {
