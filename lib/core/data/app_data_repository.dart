@@ -610,6 +610,16 @@ class AppDataRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
+    await _notifyAdminsOfLoanApplication(
+      applicationId: applicationId,
+      userName: _displayNameFor(user),
+      userEmail: user.email ?? '',
+      loanType: loanType,
+      amountValue: amountValue,
+      period: period,
+      purpose: purpose,
+    );
+
     await addNotificationForCurrentUser(
       title: 'Loan Application Successful',
       message: 'Loan application successful pending approval.',
@@ -1007,6 +1017,45 @@ class AppDataRepository {
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  static Future<void> _notifyAdminsOfLoanApplication({
+    required String applicationId,
+    required String userName,
+    required String userEmail,
+    required String loanType,
+    required int amountValue,
+    required String period,
+    required String purpose,
+  }) async {
+    final admins = await _firestore
+        .collection('users')
+        .where('isAdmin', isEqualTo: true)
+        .get();
+
+    if (admins.docs.isEmpty) {
+      return;
+    }
+
+    final message =
+        '$userName ($userEmail) submitted a $loanType request for ${_formatUgx(amountValue)} over $period. Purpose: $purpose';
+
+    final batch = _firestore.batch();
+    for (final adminDoc in admins.docs) {
+      final notificationRef = adminDoc.reference
+          .collection('notifications')
+          .doc();
+      batch.set(notificationRef, {
+        'title': 'New Loan Request',
+        'message': message,
+        'type': 'loan',
+        'isRead': false,
+        'loanRequestId': applicationId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
   }
 
   static Future<void> updateAdminRequestStatusForLoan({

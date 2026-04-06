@@ -196,27 +196,80 @@ class LoanDetailsPage extends StatelessWidget {
                         false,
                       ),
                       const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const MakePaymentPage(),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final bool isCompact = constraints.maxWidth < 420;
+
+                          final makePaymentButton = ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const MakePaymentPage(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.payments_outlined),
+                            label: const Text('Make Payment'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryBlue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 16,
+                                horizontal: 18,
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                           );
+
+                          final downloadButton = OutlinedButton.icon(
+                            onPressed: () {},
+                            icon: const Icon(Icons.download_outlined),
+                            label: const Text('Download statement'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primaryOrange,
+                              side: const BorderSide(
+                                color: AppColors.primaryOrange,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 16,
+                                horizontal: 18,
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
+                          );
+
+                          if (isCompact) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: makePaymentButton,
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: downloadButton,
+                                ),
+                              ],
+                            );
+                          }
+
+                          return Row(
+                            children: [
+                              Expanded(child: makePaymentButton),
+                              const SizedBox(width: 12),
+                              Expanded(child: downloadButton),
+                            ],
+                          );
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.successGreen,
-                        ),
-                        child: const Text('Make Payment'),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryOrange,
-                        ),
-                        child: const Text('Download statement'),
                       ),
                     ],
                   ),

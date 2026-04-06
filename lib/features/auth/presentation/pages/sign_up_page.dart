@@ -18,7 +18,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _acceptedTerms = false;
@@ -77,13 +77,16 @@ class _SignUpPageState extends State<SignUpPage> {
 
   Future<void> _signUp() async {
     FocusScope.of(context).unfocus();
-    
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     if (!_acceptedTerms) {
-      _showMessage('Please accept the Terms of Service to continue.', isError: true);
+      _showMessage(
+        'Please accept the Terms of Service to continue.',
+        isError: true,
+      );
       return;
     }
 
@@ -103,7 +106,7 @@ class _SignUpPageState extends State<SignUpPage> {
       await LocalUserSessionStore.clear();
 
       if (!mounted) return;
-      
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -116,7 +119,9 @@ class _SignUpPageState extends State<SignUpPage> {
         (route) => false,
       );
     } on FirebaseAuthException catch (e) {
-      debugPrint('SignUp FirebaseAuthException code=${e.code} message=${e.message}');
+      debugPrint(
+        'SignUp FirebaseAuthException code=${e.code} message=${e.message}',
+      );
       _showMessage(_authErrorMessage(e), isError: true);
     } catch (e) {
       debugPrint('SignUp unknown exception: $e');
@@ -145,9 +150,13 @@ class _SignUpPageState extends State<SignUpPage> {
               Expanded(child: Text(message)),
             ],
           ),
-          backgroundColor: isError ? AppColors.errorRed : AppColors.successGreen,
+          backgroundColor: isError
+              ? AppColors.errorRed
+              : AppColors.successGreen,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -181,7 +190,11 @@ class _SignUpPageState extends State<SignUpPage> {
               color: AppColors.surfaceLight,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.arrow_back, color: AppColors.textMain, size: 20),
+            child: const Icon(
+              Icons.arrow_back,
+              color: AppColors.textMain,
+              size: 20,
+            ),
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -208,10 +221,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 const SizedBox(height: 8),
                 Text(
                   'Join Twezimbe and start your savings journey',
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
                 ),
 
                 const SizedBox(height: 32),
@@ -226,7 +236,10 @@ class _SignUpPageState extends State<SignUpPage> {
                   validator: _validateUsername,
                   decoration: const InputDecoration(
                     hintText: 'Enter your full name',
-                    prefixIcon: Icon(Icons.person_outline, color: AppColors.textLight),
+                    prefixIcon: Icon(
+                      Icons.person_outline,
+                      color: AppColors.textLight,
+                    ),
                   ),
                 ),
 
@@ -241,7 +254,10 @@ class _SignUpPageState extends State<SignUpPage> {
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
                     hintText: 'e.g. 0770000000',
-                    prefixIcon: Icon(Icons.phone_outlined, color: AppColors.textLight),
+                    prefixIcon: Icon(
+                      Icons.phone_outlined,
+                      color: AppColors.textLight,
+                    ),
                   ),
                 ),
 
@@ -257,7 +273,10 @@ class _SignUpPageState extends State<SignUpPage> {
                   validator: _validateEmail,
                   decoration: const InputDecoration(
                     hintText: 'Enter your email',
-                    prefixIcon: Icon(Icons.email_outlined, color: AppColors.textLight),
+                    prefixIcon: Icon(
+                      Icons.email_outlined,
+                      color: AppColors.textLight,
+                    ),
                   ),
                 ),
 
@@ -273,7 +292,10 @@ class _SignUpPageState extends State<SignUpPage> {
                   validator: _validatePassword,
                   decoration: InputDecoration(
                     hintText: 'Create a password',
-                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.textLight),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: AppColors.textLight,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -301,7 +323,10 @@ class _SignUpPageState extends State<SignUpPage> {
                   onFieldSubmitted: (_) => _signUp(),
                   decoration: InputDecoration(
                     hintText: 'Confirm your password',
-                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.textLight),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: AppColors.textLight,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureConfirmPassword
@@ -310,7 +335,10 @@ class _SignUpPageState extends State<SignUpPage> {
                         color: AppColors.textLight,
                       ),
                       onPressed: () {
-                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                        setState(
+                          () => _obscureConfirmPassword =
+                              !_obscureConfirmPassword,
+                        );
                       },
                     ),
                   ),
@@ -333,15 +361,23 @@ class _SignUpPageState extends State<SignUpPage> {
                           width: 22,
                           height: 22,
                           decoration: BoxDecoration(
-                            color: _acceptedTerms ? AppColors.primaryBlue : Colors.transparent,
+                            color: _acceptedTerms
+                                ? AppColors.primaryBlue
+                                : Colors.transparent,
                             border: Border.all(
-                              color: _acceptedTerms ? AppColors.primaryBlue : Colors.grey.shade400,
+                              color: _acceptedTerms
+                                  ? AppColors.primaryBlue
+                                  : Colors.grey.shade400,
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: _acceptedTerms
-                              ? const Icon(Icons.check, size: 16, color: Colors.white)
+                              ? const Icon(
+                                  Icons.check,
+                                  size: 16,
+                                  color: Colors.white,
+                                )
                               : null,
                         ),
                         const SizedBox(width: 12),
@@ -385,11 +421,13 @@ class _SignUpPageState extends State<SignUpPage> {
                 SizedBox(
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _signUp,
+                    onPressed: (_isLoading || !_acceptedTerms) ? null : _signUp,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryBlue,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: AppColors.primaryBlue.withValues(alpha: 0.6),
+                      disabledBackgroundColor: AppColors.primaryBlue.withValues(
+                        alpha: 0.6,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -401,7 +439,9 @@ class _SignUpPageState extends State<SignUpPage> {
                             height: 24,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : const Text(

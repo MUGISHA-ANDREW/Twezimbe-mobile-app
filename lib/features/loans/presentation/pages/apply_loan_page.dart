@@ -207,7 +207,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
             ),
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: !_isSubmitting
+              onPressed: (!_isSubmitting && _acceptedTerms)
                   ? () async {
                       if (!_acceptedTerms) {
                         ScaffoldMessenger.of(context).showSnackBar(
