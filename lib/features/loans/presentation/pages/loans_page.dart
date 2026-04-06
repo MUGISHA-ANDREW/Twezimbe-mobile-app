@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -5,8 +6,53 @@ import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.da
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_calculator_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_details_page.dart';
 
-class LoansPage extends StatelessWidget {
+class LoansPage extends StatefulWidget {
   const LoansPage({super.key});
+
+  @override
+  State<LoansPage> createState() => _LoansPageState();
+}
+
+class _LoansPageState extends State<LoansPage> {
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh UI every 30 seconds to update relative time labels
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  String _getRelativeTime(DateTime? dateTime) {
+    if (dateTime == null) return 'Just now';
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      final minutes = difference.inMinutes;
+      return '$minutes minute${minutes == 1 ? '' : 's'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours hour${hours == 1 ? '' : 's'} ago';
+    } else if (difference.inDays < 7) {
+      final days = difference.inDays;
+      return '$days day${days == 1 ? '' : 's'} ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
 
   AppLoanData get _fallbackLoan => const AppLoanData(
     type: 'No Active Loan',
@@ -278,13 +324,49 @@ class LoansPage extends StatelessWidget {
               app.loanType,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-            subtitle: Text('${app.period} - ${app.status}'),
-            trailing: Text(
-              app.amount,
-              style: TextStyle(
-                color: AppColors.textMain,
-                fontWeight: FontWeight.bold,
-              ),
+            subtitle: Text(
+              '${app.period} - ${_getRelativeTime(app.createdAt)}',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  app.amount,
+                  style: TextStyle(
+                    color: AppColors.textMain,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: app.status == 'Approved'
+                        ? AppColors.successGreen.withValues(alpha: 0.1)
+                        : app.status == 'Rejected'
+                            ? AppColors.errorRed.withValues(alpha: 0.1)
+                            : AppColors.primaryOrange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    app.status,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: app.status == 'Approved'
+                          ? AppColors.successGreen
+                          : app.status == 'Rejected'
+                              ? AppColors.errorRed
+                              : AppColors.primaryOrange,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );

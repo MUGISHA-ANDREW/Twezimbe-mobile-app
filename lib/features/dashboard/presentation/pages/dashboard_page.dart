@@ -1,3 +1,4 @@
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
@@ -19,14 +20,33 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   bool _isBalanceVisible = false;
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh UI every 30 seconds to update relative time labels
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   User? get _currentUser => FirebaseAuth.instance.currentUser;
 
-  String get _greetingName {
-    final displayName = _currentUser?.displayName?.trim();
-    if (displayName != null && displayName.isNotEmpty) {
-      return displayName;
+  String _getGreetingName(AppProfileData profile) {
+    // Use profile's fullName (which is editable) - this is the exact username
+    if (profile.fullName.trim().isNotEmpty) {
+      return profile.fullName.trim();
     }
+    // Fallback to email
     final email = _currentUser?.email?.trim();
     if (email != null && email.isNotEmpty) {
       return email.split('@').first;
@@ -34,11 +54,32 @@ class _DashboardPageState extends State<DashboardPage> {
     return 'there';
   }
 
+  String _getRelativeTime(DateTime? dateTime) {
+    if (dateTime == null) return 'Just now';
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      final minutes = difference.inMinutes;
+      return '$minutes minute${minutes == 1 ? '' : 's'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours hour${hours == 1 ? '' : 's'} ago';
+    } else if (difference.inDays < 7) {
+      final days = difference.inDays;
+      return '$days day${days == 1 ? '' : 's'} ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
+
   AppProfileData get _fallbackProfile {
     final user = _currentUser;
     final email = user?.email ?? '';
     return AppProfileData(
-      fullName: _greetingName,
+      fullName: email.isNotEmpty ? email.split('@').first :'there',
       email: email,
       phoneNumber: user?.phoneNumber ?? 'Not set',
       dateOfBirth: 'Not set',
@@ -83,17 +124,25 @@ class _DashboardPageState extends State<DashboardPage> {
           final profile = profileSnapshot.data ?? _fallbackProfile;
 
           return StreamBuilder<List<AppTransactionData>>(
-            stream: AppDataRepository.watchRecentTransactionsForCurrentUser(limit: 50),
+            stream: AppDataRepository.watchRecentTransactionsForCurrentUser(
+              limit: 50,
+            ),
             builder: (context, txSnapshot) {
               final recentTransactions = _mergedRecentTransactions(
                 txSnapshot.data ?? const <AppTransactionData>[],
               );
 
               return StreamBuilder<List<AppNotificationData>>(
-                stream: AppDataRepository.watchNotificationsForCurrentUser(limit: 20),
+                stream: AppDataRepository.watchNotificationsForCurrentUser(
+                  limit: 20,
+                ),
                 builder: (context, notificationSnapshot) {
-                  final notifications = notificationSnapshot.data ?? const <AppNotificationData>[];
-                  final unreadCount = notifications.where((n) => !n.isRead).length;
+                  final notifications =
+                      notificationSnapshot.data ??
+                      const <AppNotificationData>[];
+                  final unreadCount = notifications
+                      .where((n) => !n.isRead)
+                      .length;
 
                   return CustomScrollView(
                     slivers: [
@@ -118,7 +167,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => const ProfilePage(),
+                                            builder: (context) =>
+                                                const ProfilePage(),
                                           ),
                                         );
                                       },
@@ -127,14 +177,17 @@ class _DashboardPageState extends State<DashboardPage> {
                                         height: 56,
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
-                                          color: AppColors.primaryBlue.withValues(alpha: 0.12),
+                                          color: AppColors.primaryBlue
+                                              .withValues(alpha: 0.12),
                                           border: Border.all(
                                             color: Colors.white,
                                             width: 2,
                                           ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withValues(alpha: 0.1),
+                                              color: Colors.black.withValues(
+                                                alpha: 0.1,
+                                              ),
                                               blurRadius: 8,
                                               offset: const Offset(0, 2),
                                             ),
@@ -145,17 +198,27 @@ class _DashboardPageState extends State<DashboardPage> {
                                               ? Image.network(
                                                   profile.photoUrl!,
                                                   fit: BoxFit.cover,
-                                                  errorBuilder: (context, error, stackTrace) {
-                                                    return _buildInitials(profile.fullName);
-                                                  },
+                                                  errorBuilder:
+                                                      (
+                                                        context,
+                                                        error,
+                                                        stackTrace,
+                                                      ) {
+                                                        return _buildInitials(
+                                                          profile.fullName,
+                                                        );
+                                                      },
                                                 )
-                                              : _buildInitials(profile.fullName),
+                                              : _buildInitials(
+                                                  profile.fullName,
+                                                ),
                                         ),
                                       ),
                                     ),
                                     const SizedBox(width: 14),
                                     Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
@@ -167,7 +230,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          _greetingName,
+                                          _getGreetingName(profile),
                                           style: const TextStyle(
                                             fontSize: 22,
                                             fontWeight: FontWeight.bold,
@@ -311,10 +374,7 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               const Text(
                 'Available Balance',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
               GestureDetector(
                 onTap: () {
@@ -344,7 +404,10 @@ class _DashboardPageState extends State<DashboardPage> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -352,7 +415,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.verified_user, color: Colors.white, size: 14),
+                    const Icon(
+                      Icons.verified_user,
+                      color: Colors.white,
+                      size: 14,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       profile.kycStatus,
@@ -367,7 +434,10 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -411,7 +481,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 onTap: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const DepositPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const DepositPage(),
+                    ),
                   );
                   if (mounted) setState(() {});
                 },
@@ -426,7 +498,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 onTap: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const WithdrawPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const WithdrawPage(),
+                    ),
                   );
                   if (mounted) setState(() {});
                 },
@@ -441,7 +515,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ApplyLoanPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const ApplyLoanPage(),
+                    ),
                   );
                 },
               ),
@@ -455,7 +531,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const LoanCalculatorPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const LoanCalculatorPage(),
+                    ),
                   );
                 },
               ),
@@ -466,7 +544,9 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildTransactionsSection(List<AppTransactionData> recentTransactions) {
+  Widget _buildTransactionsSection(
+    List<AppTransactionData> recentTransactions,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -538,10 +618,7 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 4),
           Text(
             'Your transaction history will appear here',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade500,
-            ),
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
           ),
         ],
       ),
@@ -550,6 +627,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildTransactionTile(AppTransactionData tx) {
     final iconColor = tx.isCredit ? AppColors.successGreen : AppColors.errorRed;
+    // Use dynamic relative time that updates as time passes
+    final relativeTime = _getRelativeTime(tx.createdAt);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -587,11 +666,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  tx.subtitle,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade600,
-                  ),
+                  relativeTime,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                 ),
               ],
             ),

@@ -1,9 +1,55 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
-class TransactionsPage extends StatelessWidget {
+class TransactionsPage extends StatefulWidget {
   const TransactionsPage({super.key});
+
+  @override
+  State<TransactionsPage> createState() => _TransactionsPageState();
+}
+
+class _TransactionsPageState extends State<TransactionsPage> {
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh UI every 30 seconds to update relative time labels
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  String _getRelativeTime(DateTime? dateTime) {
+    if (dateTime == null) return 'Just now';
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      final minutes = difference.inMinutes;
+      return '$minutes minute${minutes == 1 ? '' : 's'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours hour${hours == 1 ? '' : 's'} ago';
+    } else if (difference.inDays < 7) {
+      final days = difference.inDays;
+      return '$days day${days == 1 ? '' : 's'} ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +131,7 @@ class TransactionsPage extends StatelessWidget {
           tx.subtitle,
           tx.amount,
           tx.isCredit,
+          tx.createdAt,
         );
       }).toList(),
     );
@@ -97,7 +144,10 @@ class TransactionsPage extends StatelessWidget {
     String subtitle,
     String amount,
     bool isCredit,
+    DateTime? createdAt,
   ) {
+    // Use dynamic relative time
+    final relativeTime = _getRelativeTime(createdAt);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -122,7 +172,7 @@ class TransactionsPage extends StatelessWidget {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4.0),
           child: Text(
-            subtitle,
+            relativeTime,
             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ),

@@ -91,12 +91,14 @@ class AppTransactionData {
     required this.subtitle,
     required this.amount,
     required this.isCredit,
+    this.createdAt,
   });
 
   final String title;
   final String subtitle;
   final String amount;
   final bool isCredit;
+  final DateTime? createdAt;
 }
 
 class AppNotificationData {
@@ -230,6 +232,9 @@ class AppDataRepository {
     ),
   ];
 
+  // Admin email for automatic admin detection
+  static const String _adminEmail = 'admin@twezimbe.co.ug';
+
   static Future<void> ensureProfileForCurrentUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -248,9 +253,9 @@ class AppDataRepository {
         ? (existing['photoUrl'] as String).trim()
         : null;
 
-    // Check if this is the first user (make them admin)
-    final allUsersSnapshot = await _firestore.collection('users').limit(1).get();
-    final isFirstUser = allUsersSnapshot.docs.isEmpty || allUsersSnapshot.docs.length == 1;
+    // Check if user email matches admin email
+    final userEmail = (user.email ?? '').toLowerCase().trim();
+    final isAdminEmail = userEmail == _adminEmail.toLowerCase().trim();
 
     await docRef.set({
       'fullName': (existing['fullName'] as String?)?.trim().isNotEmpty == true
@@ -274,7 +279,8 @@ class AppDataRepository {
       'kycStatus': (existing['kycStatus'] as String?) ?? 'KYC Verified',
       'accountType': (existing['accountType'] as String?) ?? 'Savings Account',
       'balanceValue': (existing['balanceValue'] as num?)?.toInt() ?? 0,
-      'isAdmin': isFirstUser ? true : ((existing['isAdmin'] as bool?) ?? false),
+      // If user is the admin email, make them admin; otherwise keep existing value
+      'isAdmin': isAdminEmail ? true : ((existing['isAdmin'] as bool?) ?? false),
       'security': {
         'biometricEnabled':
             (existingSecurity['biometricEnabled'] as bool?) ?? false,
@@ -620,19 +626,19 @@ class AppDataRepository {
               .map((doc) {
                 final data = doc.data();
                 final Timestamp? createdAtTs = data['createdAt'] as Timestamp?;
+                final DateTime? createdAt = createdAtTs?.toDate();
                 final int amountValue =
                     (data['amountValue'] as num?)?.toInt() ?? 0;
                 final bool isCredit = (data['isCredit'] as bool?) ?? false;
                 final String sign = isCredit ? '+' : '-';
-                final String fallbackSubtitle =
-                    (data['subtitle'] as String?) ?? 'Just now';
                 return AppTransactionData(
                   title: (data['title'] as String?) ?? 'Transaction',
-                  subtitle: createdAtTs != null
-                      ? _relativeTimeLabel(createdAtTs.toDate())
-                      : fallbackSubtitle,
+                  subtitle: createdAt != null
+                      ? _relativeTimeLabel(createdAt)
+                      : 'Just now',
                   amount: '$sign ${_formatUgx(amountValue)}',
                   isCredit: isCredit,
+                  createdAt: createdAt,
                 );
               })
               .toList(growable: false);
@@ -917,17 +923,30 @@ class AppDataRepository {
     final userDoc = _userDoc(userId);
     final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
     
+    // Get the loan details first to know the amount
+    final loanSnapshot = await loanDoc.get();
+    final loanData = loanSnapshot.data();
+    final int loanAmount = (loanData?['amountValue'] as num?)?.toInt() ?? 0;
+    
     await loanDoc.update({'status': 'Approved'});
     await userDoc.collection('loans').doc('active').update({
       'status': 'Active',
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
+    // Credit the loan amount to user's balance
+    if (loanAmount > 0) {
+      await userDoc.set({
+        'balanceValue': FieldValue.increment(loanAmount),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    }
+
     // Notify user
     await addNotificationForUser(
       userId: userId,
       title: 'Loan Approved',
-      message: 'Your loan application has been approved!',
+      message: 'Your loan of ${_formatUgx(loanAmount)} has been approved and credited to your account!',
       type: 'loan',
     );
   }

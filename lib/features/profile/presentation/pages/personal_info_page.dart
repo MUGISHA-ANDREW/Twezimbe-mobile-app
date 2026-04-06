@@ -79,8 +79,14 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
         SettableMetadata(contentType: _contentTypeFor(extension)),
       );
       final photoUrl = await storageRef.getDownloadURL();
+      
+      // Store in Firestore (persists forever)
       await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
+      
+      // Also update Firebase Auth profile photo (synced across devices)
+      await user.updateProfile(photoURL: photoUrl);
 
+      // Clean up old photos
       final oldPhotoUrls = <String>{
         if (oldAuthPhotoUrl != null) oldAuthPhotoUrl,
         if (oldStoredPhotoUrl != null) oldStoredPhotoUrl,
@@ -97,7 +103,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
         }
       }
 
-      _showMessage('Profile photo updated.');
+      _showMessage('Profile photo updated and saved!');
     } on FirebaseException catch (error) {
       debugPrint(
         'Personal info profile photo upload failed [${error.code}]: ${error.message}',

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -12,6 +13,42 @@ class AdminLoansPage extends StatefulWidget {
 
 class _AdminLoansPageState extends State<AdminLoansPage> {
   String _filterStatus = 'All';
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  String _getRelativeTime(DateTime? dateTime) {
+    if (dateTime == null) return 'Just now';
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      final minutes = difference.inMinutes;
+      return '$minutes minute${minutes == 1 ? '' : 's'} ago';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      return '$hours hour${hours == 1 ? '' : 's'} ago';
+    } else if (difference.inDays < 7) {
+      final days = difference.inDays;
+      return '$days day${days == 1 ? '' : 's'} ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,10 +68,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
           const SizedBox(height: 8),
           Text(
             'Review and manage loan applications',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
 
@@ -52,10 +86,12 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                   value: _filterStatus,
                   underline: const SizedBox(),
                   items: ['All', 'Pending Review', 'Approved', 'Rejected']
-                      .map((status) => DropdownMenuItem(
-                            value: status,
-                            child: Text(status),
-                          ))
+                      .map(
+                        (status) => DropdownMenuItem(
+                          value: status,
+                          child: Text(status),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     setState(() {
@@ -131,15 +167,21 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                     ],
                     rows: applications.map((doc) {
                       final data = doc.data() as Map<String, dynamic>;
-                      final amountValue = (data['amountValue'] as num?)?.toInt() ?? 0;
-                      final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-                      
+                      final amountValue =
+                          (data['amountValue'] as num?)?.toInt() ?? 0;
+                      final createdAt = (data['createdAt'] as Timestamp?)
+                          ?.toDate();
+
                       return DataRow(
                         cells: [
                           DataCell(Text(data['applicationId'] ?? doc.id)),
-                          DataCell(Text(_getUserEmail(doc.reference.parent.parent))),
+                          DataCell(
+                            Text(_getUserEmail(doc.reference.parent.parent)),
+                          ),
                           DataCell(Text(data['loanType'] ?? '-')),
-                          DataCell(Text(AppDataRepository.formatUgx(amountValue))),
+                          DataCell(
+                            Text(AppDataRepository.formatUgx(amountValue)),
+                          ),
                           DataCell(Text(data['period'] ?? '-')),
                           DataCell(
                             SizedBox(
@@ -150,39 +192,61 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                               ),
                             ),
                           ),
-                          DataCell(_buildStatusChip(data['status'] ?? 'Pending Review')),
-                          DataCell(Text(createdAt != null 
-                            ? '${createdAt.day}/${createdAt.month}/${createdAt.year}'
-                            : '-')),
+                          DataCell(
+                            _buildStatusChip(
+                              data['status'] ?? 'Pending Review',
+                            ),
+                          ),
+                          DataCell(Text(_getRelativeTime(createdAt))),
                           DataCell(
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (data['status'] == 'Pending Review') ...[
                                   IconButton(
-                                    icon: const Icon(Icons.check_circle, color: AppColors.successGreen),
-                                    onPressed: () {
-                                      final parent = doc.reference.parent.parent;
+                                    icon: const Icon(
+                                      Icons.check_circle,
+                                      color: AppColors.successGreen,
+                                    ),
+                                    onPressed: () async {
+                                      final parent =
+                                          doc.reference.parent.parent;
                                       if (parent != null) {
-                                        _updateLoanStatus(doc.id, parent.path, 'Approved');
+                                        await _approveLoan(
+                                          doc.id,
+                                          parent.path,
+                                          amountValue,
+                                        );
                                       }
                                     },
                                     tooltip: 'Approve',
                                   ),
                                   IconButton(
-                                    icon: const Icon(Icons.cancel, color: AppColors.errorRed),
+                                    icon: const Icon(
+                                      Icons.cancel,
+                                      color: AppColors.errorRed,
+                                    ),
                                     onPressed: () {
-                                      final parent = doc.reference.parent.parent;
+                                      final parent =
+                                          doc.reference.parent.parent;
                                       if (parent != null) {
-                                        _updateLoanStatus(doc.id, parent.path, 'Rejected');
+                                        _updateLoanStatus(
+                                          doc.id,
+                                          parent.path,
+                                          'Rejected',
+                                        );
                                       }
                                     },
                                     tooltip: 'Reject',
                                   ),
                                 ],
                                 IconButton(
-                                  icon: const Icon(Icons.visibility, color: AppColors.primaryBlue),
-                                  onPressed: () => _showLoanDetails(context, doc.id, data),
+                                  icon: const Icon(
+                                    Icons.visibility,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                  onPressed: () =>
+                                      _showLoanDetails(context, doc.id, data),
                                   tooltip: 'View Details',
                                 ),
                               ],
@@ -213,10 +277,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
         children: [
           Text(
             '$label: ',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           ),
           Text(
             '$count',
@@ -280,9 +341,13 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
-  void _showLoanDetails(BuildContext context, String appId, Map<String, dynamic> data) {
+  void _showLoanDetails(
+    BuildContext context,
+    String appId,
+    Map<String, dynamic> data,
+  ) {
     final amountValue = (data['amountValue'] as num?)?.toInt() ?? 0;
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -296,10 +361,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
             children: [
               const Text(
                 'Loan Application Details',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
               _detailRow('Application ID', appId),
@@ -366,13 +428,17 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
-  Future<void> _updateLoanStatus(String appId, String userPath, String status) async {
+  Future<void> _updateLoanStatus(
+    String appId,
+    String userPath,
+    String status,
+  ) async {
     try {
       final userDoc = FirebaseFirestore.instance.doc(userPath);
       final loanDoc = userDoc.collection('loanApplications').doc(appId);
-      
+
       await loanDoc.update({'status': status});
-      
+
       // Also update the active loan
       await userDoc.collection('loans').doc('active').update({
         'status': status,
@@ -381,21 +447,80 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
       // Add notification for user
       await AppDataRepository.addNotificationForCurrentUser(
         title: status == 'Approved' ? 'Loan Approved' : 'Loan Rejected',
-        message: status == 'Approved' 
+        message: status == 'Approved'
             ? 'Your loan application has been approved!'
             : 'Your loan application has been rejected. Please contact support.',
         type: 'loan',
       );
-      
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Loan $status successfully')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating loan status: $e')));
+    }
+  }
+
+  Future<void> _approveLoan(
+    String appId,
+    String userPath,
+    int amountValue,
+  ) async {
+    try {
+      final userDoc = FirebaseFirestore.instance.doc(userPath);
+      final loanDoc = userDoc.collection('loanApplications').doc(appId);
+
+      await loanDoc.update({'status': 'Approved'});
+
+      // Update active loan status
+      await userDoc.collection('loans').doc('active').update({
+        'status': 'Active',
+      });
+
+      // Credit the loan amount to user's balance
+      if (amountValue > 0) {
+        await userDoc.set({
+          'balanceValue': FieldValue.increment(amountValue),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // Create a transaction record for the loan credit
+        await userDoc.collection('transactions').doc().set({
+          'title': 'Loan Disbursed',
+          'subtitle': 'Loan approved and credited to account',
+          'amountValue': amountValue,
+          'isCredit': true,
+          'createdAt': Timestamp.now(),
+          'createdAtServer': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // Add notification for user
+      await AppDataRepository.addNotificationForUser(
+        userId: userDoc.id,
+        title: 'Loan Approved',
+        message:
+            'Your loan of ${AppDataRepository.formatUgx(amountValue)} has been approved and credited to your account!',
+        type: 'loan',
+      );
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Loan $status successfully')),
+        SnackBar(
+          content: Text(
+            'Loan approved! ${AppDataRepository.formatUgx(amountValue)} credited to user balance.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating loan status: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error approving loan: $e')));
     }
   }
 }
