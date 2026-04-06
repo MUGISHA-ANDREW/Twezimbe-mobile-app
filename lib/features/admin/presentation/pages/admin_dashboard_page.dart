@@ -22,95 +22,145 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     const AdminLoansPage(),
   ];
 
+  static const double _compactBreakpoint = 1000;
+
   @override
   Widget build(BuildContext context) {
+    final bool isCompact =
+        MediaQuery.sizeOf(context).width < _compactBreakpoint;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Row(
+      appBar: isCompact
+          ? AppBar(title: Text(_titleForIndex(_selectedIndex)))
+          : null,
+      drawer: isCompact
+          ? Drawer(
+              width: 300,
+              child: SafeArea(child: _buildNavigationPane(isDrawer: true)),
+            )
+          : null,
+      body: isCompact
+          ? _pages[_selectedIndex]
+          : Row(
+              children: [
+                SizedBox(width: 260, child: _buildNavigationPane()),
+                Expanded(child: _pages[_selectedIndex]),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildNavigationPane({bool isDrawer = false}) {
+    return Container(
+      color: AppColors.darkBlue,
+      child: Column(
         children: [
-          // Side Navigation
+          const SizedBox(height: 40),
           Container(
-            width: 260,
-            color: AppColors.darkBlue,
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                const SizedBox(height: 40),
-                // Admin Header
                 Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.admin_panel_settings,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Admin Panel',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Twezimbe Management',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.admin_panel_settings,
+                    color: Colors.white,
+                    size: 32,
                   ),
                 ),
-                const Divider(color: Colors.white24),
-                const SizedBox(height: 20),
-                // Menu Items
-                _buildMenuItem(0, Icons.dashboard, 'Dashboard'),
-                _buildMenuItem(1, Icons.people, 'Manage Users'),
-                _buildMenuItem(2, Icons.account_balance, 'Loan Applications'),
-                const Spacer(),
-                // Logout
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.white70),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(color: Colors.white70),
+                const SizedBox(height: 12),
+                const Text(
+                  'Admin Panel',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
-                  onTap: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    await FirebaseAuth.instance.signOut();
-                    messenger.hideCurrentSnackBar();
-                    // Navigate after async gap - capture context before
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => const SignInPage()),
-                      (route) => false,
-                    );
-                  },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 4),
+                Text(
+                  'Twezimbe Management',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 13,
+                  ),
+                ),
               ],
             ),
           ),
-          // Main Content
-          Expanded(
-            child: _pages[_selectedIndex],
+          const Divider(color: Colors.white24),
+          const SizedBox(height: 20),
+          _buildMenuItem(
+            0,
+            Icons.dashboard,
+            'Dashboard',
+            closeDrawerOnTap: isDrawer,
           ),
+          _buildMenuItem(
+            1,
+            Icons.people,
+            'Manage Users',
+            closeDrawerOnTap: isDrawer,
+          ),
+          _buildMenuItem(
+            2,
+            Icons.account_balance,
+            'Loan Applications',
+            closeDrawerOnTap: isDrawer,
+          ),
+          const Spacer(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.white70),
+            title: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.white70),
+            ),
+            onTap: () => _logout(closeDrawerOnTap: isDrawer),
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildMenuItem(int index, IconData icon, String title) {
+  Future<void> _logout({required bool closeDrawerOnTap}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await FirebaseAuth.instance.signOut();
+    if (!mounted) return;
+
+    if (closeDrawerOnTap && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
+    messenger.hideCurrentSnackBar();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const SignInPage()),
+      (route) => false,
+    );
+  }
+
+  String _titleForIndex(int index) {
+    switch (index) {
+      case 1:
+        return 'Manage Users';
+      case 2:
+        return 'Loan Applications';
+      default:
+        return 'Admin Dashboard';
+    }
+  }
+
+  Widget _buildMenuItem(
+    int index,
+    IconData icon,
+    String title, {
+    required bool closeDrawerOnTap,
+  }) {
     final isSelected = _selectedIndex == index;
     return ListTile(
       leading: Icon(
@@ -127,9 +177,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       selected: isSelected,
       selectedTileColor: Colors.white.withValues(alpha: 0.1),
       onTap: () {
-        setState(() {
-          _selectedIndex = index;
-        });
+        setState(() => _selectedIndex = index);
+        if (closeDrawerOnTap && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       },
     );
   }
@@ -156,24 +207,74 @@ class AdminHomeTab extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Welcome back, Admin',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 32),
 
           // Stats Cards
-          Row(
-            children: [
-              Expanded(child: _buildStatCard('Total Users', '1,234', Icons.people, AppColors.primaryBlue)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildStatCard('Active Loans', '456', Icons.account_balance, AppColors.primaryOrange)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildStatCard('Pending Reviews', '23', Icons.pending_actions, AppColors.errorRed)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildStatCard('Total Revenue', 'UGX 12.5M', Icons.attach_money, AppColors.successGreen)),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cards = [
+                _buildStatCard(
+                  'Total Users',
+                  '1,234',
+                  Icons.people,
+                  AppColors.primaryBlue,
+                ),
+                _buildStatCard(
+                  'Active Loans',
+                  '456',
+                  Icons.account_balance,
+                  AppColors.primaryOrange,
+                ),
+                _buildStatCard(
+                  'Pending Reviews',
+                  '23',
+                  Icons.pending_actions,
+                  AppColors.errorRed,
+                ),
+                _buildStatCard(
+                  'Total Revenue',
+                  'UGX 12.5M',
+                  Icons.attach_money,
+                  AppColors.successGreen,
+                ),
+              ];
+
+              if (constraints.maxWidth < 720) {
+                return Column(
+                  children: [
+                    for (int i = 0; i < cards.length; i++) ...[
+                      cards[i],
+                      if (i < cards.length - 1) const SizedBox(height: 12),
+                    ],
+                  ],
+                );
+              }
+
+              if (constraints.maxWidth < 1180) {
+                final cardWidth = (constraints.maxWidth - 16) / 2;
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: cards
+                      .map((card) => SizedBox(width: cardWidth, child: card))
+                      .toList(growable: false),
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[1]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[2]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[3]),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 32),
 
@@ -215,12 +316,18 @@ class AdminHomeTab extends StatelessWidget {
                           color: AppColors.primaryBlue.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.person, color: AppColors.primaryBlue),
+                        child: const Icon(
+                          Icons.person,
+                          color: AppColors.primaryBlue,
+                        ),
                       ),
                       title: Text(data['fullName'] ?? 'Unknown'),
                       subtitle: Text(data['email'] ?? ''),
                       trailing: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.successGreen.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -245,7 +352,12 @@ class AdminHomeTab extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -276,10 +388,7 @@ class AdminHomeTab extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             title,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
         ],
       ),

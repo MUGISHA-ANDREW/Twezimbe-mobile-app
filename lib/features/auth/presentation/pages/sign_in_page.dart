@@ -6,6 +6,7 @@ import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
+import 'package:twezimbeapp/features/admin/presentation/pages/admin_dashboard_page.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_up_page.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/forgot_password_page.dart';
@@ -32,7 +33,7 @@ class _SignInPageState extends State<SignInPage> {
   final _passwordController = TextEditingController();
   final _emailFocusNode = FocusNode();
   final _passwordFocusNode = FocusNode();
-  
+
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _rememberMe = false;
@@ -85,7 +86,7 @@ class _SignInPageState extends State<SignInPage> {
   Future<void> _signIn() async {
     // Hide keyboard
     FocusScope.of(context).unfocus();
-    
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -100,21 +101,29 @@ class _SignInPageState extends State<SignInPage> {
 
       await LocalUserSessionStore.saveFromCurrentUser();
       _syncProfileInBackground();
-      
+
       // Save FCM token for push notifications
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await PushNotificationService.saveTokenToFirestore(user.uid);
+        unawaited(
+          PushNotificationService.saveTokenToFirestore(
+            user.uid,
+          ).catchError((_) {}),
+        );
       }
 
       if (!mounted) return;
-      
+
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final isAdminUser =
+          currentUser?.email?.trim().toLowerCase() == 'admin@twezimbe.co.ug';
+
       // Smooth transition to main app
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
-              const MainLayout(),
+              isAdminUser ? const AdminDashboardPage() : const MainLayout(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -122,7 +131,9 @@ class _SignInPageState extends State<SignInPage> {
         ),
       );
     } on FirebaseAuthException catch (e) {
-      debugPrint('SignIn FirebaseAuthException code=${e.code} message=${e.message}');
+      debugPrint(
+        'SignIn FirebaseAuthException code=${e.code} message=${e.message}',
+      );
       _showMessage(_authErrorMessage(e), isError: true);
     } catch (e) {
       debugPrint('SignIn unknown exception: $e');
@@ -178,9 +189,13 @@ class _SignInPageState extends State<SignInPage> {
               Expanded(child: Text(message)),
             ],
           ),
-          backgroundColor: isError ? AppColors.errorRed : AppColors.successGreen,
+          backgroundColor: isError
+              ? AppColors.errorRed
+              : AppColors.successGreen,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -249,7 +264,9 @@ class _SignInPageState extends State<SignInPage> {
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppColors.primaryBlue.withValues(alpha: 0.3),
+                                    color: AppColors.primaryBlue.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     blurRadius: 20,
                                     offset: const Offset(0, 10),
                                   ),
@@ -257,7 +274,9 @@ class _SignInPageState extends State<SignInPage> {
                               ),
                               padding: const EdgeInsets.all(16),
                               child: const Image(
-                                image: AssetImage('assets/branding/launcher_icon.png'),
+                                image: AssetImage(
+                                  'assets/branding/launcher_icon.png',
+                                ),
                                 fit: BoxFit.contain,
                                 color: Colors.white,
                               ),
@@ -396,7 +415,9 @@ class _SignInPageState extends State<SignInPage> {
                                 child: Checkbox(
                                   value: _rememberMe,
                                   onChanged: (value) {
-                                    setState(() => _rememberMe = value ?? false);
+                                    setState(
+                                      () => _rememberMe = value ?? false,
+                                    );
                                   },
                                   activeColor: AppColors.primaryBlue,
                                   shape: RoundedRectangleBorder(
@@ -419,7 +440,8 @@ class _SignInPageState extends State<SignInPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => const ForgotPasswordPage(),
+                                  builder: (context) =>
+                                      const ForgotPasswordPage(),
                                 ),
                               );
                             },
@@ -444,7 +466,8 @@ class _SignInPageState extends State<SignInPage> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryBlue,
                             foregroundColor: Colors.white,
-                            disabledBackgroundColor: AppColors.primaryBlue.withValues(alpha: 0.6),
+                            disabledBackgroundColor: AppColors.primaryBlue
+                                .withValues(alpha: 0.6),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -456,7 +479,9 @@ class _SignInPageState extends State<SignInPage> {
                                   height: 24,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2.5,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
                                   ),
                                 )
                               : const Text(

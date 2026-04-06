@@ -79,7 +79,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final user = _currentUser;
     final email = user?.email ?? '';
     return AppProfileData(
-      fullName: email.isNotEmpty ? email.split('@').first :'there',
+      fullName: email.isNotEmpty ? email.split('@').first : 'there',
       email: email,
       phoneNumber: user?.phoneNumber ?? 'Not set',
       dateOfBirth: 'Not set',
@@ -159,87 +159,93 @@ class _DashboardPageState extends State<DashboardPage> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  children: [
-                                    // Profile Picture
-                                    GestureDetector(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                const ProfilePage(),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        width: 56,
-                                        height: 56,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: AppColors.primaryBlue
-                                              .withValues(alpha: 0.12),
-                                          border: Border.all(
-                                            color: Colors.white,
-                                            width: 2,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withValues(
-                                                alpha: 0.1,
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      // Profile Picture
+                                      GestureDetector(
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  const ProfilePage(),
+                                            ),
+                                          );
+                                        },
+                                        child: Container(
+                                          width: 56,
+                                          height: 56,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: AppColors.primaryBlue
+                                                .withValues(alpha: 0.12),
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 2,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
                                               ),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 2),
+                                            ],
+                                          ),
+                                          child: ClipOval(
+                                            child: profile.photoUrl != null
+                                                ? Image.network(
+                                                    profile.photoUrl!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder:
+                                                        (
+                                                          context,
+                                                          error,
+                                                          stackTrace,
+                                                        ) {
+                                                          return _buildInitials(
+                                                            profile.fullName,
+                                                          );
+                                                        },
+                                                  )
+                                                : _buildInitials(
+                                                    profile.fullName,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Flexible(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              'Welcome back,',
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _getGreetingName(profile),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.textMain,
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        child: ClipOval(
-                                          child: profile.photoUrl != null
-                                              ? Image.network(
-                                                  profile.photoUrl!,
-                                                  fit: BoxFit.cover,
-                                                  errorBuilder:
-                                                      (
-                                                        context,
-                                                        error,
-                                                        stackTrace,
-                                                      ) {
-                                                        return _buildInitials(
-                                                          profile.fullName,
-                                                        );
-                                                      },
-                                                )
-                                              : _buildInitials(
-                                                  profile.fullName,
-                                                ),
-                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'Welcome back,',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey.shade600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _getGreetingName(profile),
-                                          style: const TextStyle(
-                                            fontSize: 22,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.textMain,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                                 _buildNotificationButton(unreadCount),
                               ],

@@ -73,9 +73,9 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
           const SizedBox(height: 24),
 
           // Filter
-          Row(
-            children: [
-              Container(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final filterDropdown = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -85,6 +85,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                 child: DropdownButton<String>(
                   value: _filterStatus,
                   underline: const SizedBox(),
+                  isExpanded: true,
                   items: ['All', 'Pending Review', 'Approved', 'Rejected']
                       .map(
                         (status) => DropdownMenuItem(
@@ -99,14 +100,42 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                     });
                   },
                 ),
-              ),
-              const Spacer(),
-              _buildStatBadge('Pending', _getPendingCount()),
-              const SizedBox(width: 8),
-              _buildStatBadge('Approved', _getApprovedCount()),
-              const SizedBox(width: 8),
-              _buildStatBadge('Rejected', _getRejectedCount()),
-            ],
+              );
+
+              final badges = Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildStatBadge('Pending', _getPendingCount()),
+                  _buildStatBadge('Approved', _getApprovedCount()),
+                  _buildStatBadge('Rejected', _getRejectedCount()),
+                ],
+              );
+
+              if (constraints.maxWidth < 860) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    filterDropdown,
+                    const SizedBox(height: 12),
+                    badges,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  SizedBox(width: 260, child: filterDropdown),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: badges,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 24),
 

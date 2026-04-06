@@ -280,7 +280,9 @@ class AppDataRepository {
       'accountType': (existing['accountType'] as String?) ?? 'Savings Account',
       'balanceValue': (existing['balanceValue'] as num?)?.toInt() ?? 0,
       // If user is the admin email, make them admin; otherwise keep existing value
-      'isAdmin': isAdminEmail ? true : ((existing['isAdmin'] as bool?) ?? false),
+      'isAdmin': isAdminEmail
+          ? true
+          : ((existing['isAdmin'] as bool?) ?? false),
       'security': {
         'biometricEnabled':
             (existingSecurity['biometricEnabled'] as bool?) ?? false,
@@ -919,15 +921,18 @@ class AppDataRepository {
     return count;
   }
 
-  static Future<void> approveLoanApplication(String userId, String applicationId) async {
+  static Future<void> approveLoanApplication(
+    String userId,
+    String applicationId,
+  ) async {
     final userDoc = _userDoc(userId);
     final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
-    
+
     // Get the loan details first to know the amount
     final loanSnapshot = await loanDoc.get();
     final loanData = loanSnapshot.data();
     final int loanAmount = (loanData?['amountValue'] as num?)?.toInt() ?? 0;
-    
+
     await loanDoc.update({'status': 'Approved'});
     await userDoc.collection('loans').doc('active').update({
       'status': 'Active',
@@ -946,15 +951,20 @@ class AppDataRepository {
     await addNotificationForUser(
       userId: userId,
       title: 'Loan Approved',
-      message: 'Your loan of ${_formatUgx(loanAmount)} has been approved and credited to your account!',
+      message:
+          'Your loan of ${_formatUgx(loanAmount)} has been approved and credited to your account!',
       type: 'loan',
     );
   }
 
-  static Future<void> rejectLoanApplication(String userId, String applicationId, String reason) async {
+  static Future<void> rejectLoanApplication(
+    String userId,
+    String applicationId,
+    String reason,
+  ) async {
     final userDoc = _userDoc(userId);
     final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
-    
+
     await loanDoc.update({'status': 'Rejected', 'rejectionReason': reason});
 
     // Notify user

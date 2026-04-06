@@ -31,36 +31,31 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
           const SizedBox(height: 8),
           Text(
             'View and manage registered users',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
 
           // Search and Filter
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.toLowerCase();
-                    });
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Search by name or email...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final searchField = TextField(
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.toLowerCase();
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search by name or email...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  filled: true,
+                  fillColor: Colors.white,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Container(
+              );
+
+              final filterDropdown = Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -70,11 +65,14 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                 child: DropdownButton<String>(
                   value: _filterStatus,
                   underline: const SizedBox(),
+                  isExpanded: true,
                   items: ['All', 'KYC Verified', 'Pending', 'Rejected']
-                      .map((status) => DropdownMenuItem(
-                            value: status,
-                            child: Text(status),
-                          ))
+                      .map(
+                        (status) => DropdownMenuItem(
+                          value: status,
+                          child: Text(status),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     setState(() {
@@ -82,8 +80,27 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     });
                   },
                 ),
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 760) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    searchField,
+                    const SizedBox(height: 12),
+                    SizedBox(width: double.infinity, child: filterDropdown),
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: searchField),
+                  const SizedBox(width: 16),
+                  SizedBox(width: 240, child: filterDropdown),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 24),
 
@@ -111,18 +128,25 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
                 var users = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  final name = (data['fullName'] ?? '').toString().toLowerCase();
+                  final name = (data['fullName'] ?? '')
+                      .toString()
+                      .toLowerCase();
                   final email = (data['email'] ?? '').toString().toLowerCase();
-                  final matchesSearch = _searchQuery.isEmpty ||
+                  final matchesSearch =
+                      _searchQuery.isEmpty ||
                       name.contains(_searchQuery) ||
                       email.contains(_searchQuery);
-                  
+
                   final kycStatus = data['kycStatus'] ?? 'Pending';
-                  final matchesFilter = _filterStatus == 'All' ||
-                      (_filterStatus == 'KYC Verified' && kycStatus == 'KYC Verified') ||
-                      (_filterStatus == 'Pending' && kycStatus != 'KYC Verified' && kycStatus != 'Rejected') ||
+                  final matchesFilter =
+                      _filterStatus == 'All' ||
+                      (_filterStatus == 'KYC Verified' &&
+                          kycStatus == 'KYC Verified') ||
+                      (_filterStatus == 'Pending' &&
+                          kycStatus != 'KYC Verified' &&
+                          kycStatus != 'Rejected') ||
                       (_filterStatus == 'Rejected' && kycStatus == 'Rejected');
-                  
+
                   return matchesSearch && matchesFilter;
                 }).toList();
 
@@ -158,13 +182,16 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                               children: [
                                 CircleAvatar(
                                   radius: 18,
-                                  backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
+                                  backgroundColor: AppColors.primaryBlue
+                                      .withValues(alpha: 0.1),
                                   backgroundImage: data['photoUrl'] != null
                                       ? NetworkImage(data['photoUrl'])
                                       : null,
                                   child: data['photoUrl'] == null
                                       ? Text(
-                                          (data['fullName'] ?? 'U')[0].toString().toUpperCase(),
+                                          (data['fullName'] ?? 'U')[0]
+                                              .toString()
+                                              .toUpperCase(),
                                           style: const TextStyle(
                                             color: AppColors.primaryBlue,
                                             fontWeight: FontWeight.bold,
@@ -180,7 +207,9 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                           DataCell(Text(data['email'] ?? '-')),
                           DataCell(Text(data['phoneNumber'] ?? '-')),
                           DataCell(Text(data['customerId'] ?? '-')),
-                          DataCell(_buildStatusChip(data['kycStatus'] ?? 'Pending')),
+                          DataCell(
+                            _buildStatusChip(data['kycStatus'] ?? 'Pending'),
+                          ),
                           DataCell(
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -188,23 +217,41 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                                 // Admin toggle button
                                 IconButton(
                                   icon: Icon(
-                                    (data['isAdmin'] as bool?) == true 
-                                        ? Icons.admin_panel_settings 
+                                    (data['isAdmin'] as bool?) == true
+                                        ? Icons.admin_panel_settings
                                         : Icons.supervised_user_circle,
-                                    color: (data['isAdmin'] as bool?) == true 
-                                        ? AppColors.primaryBlue 
+                                    color: (data['isAdmin'] as bool?) == true
+                                        ? AppColors.primaryBlue
                                         : Colors.grey,
                                   ),
-                                  onPressed: () => _toggleAdminRole(context, doc.id, data['fullName'], !((data['isAdmin'] as bool?) ?? false)),
-                                  tooltip: (data['isAdmin'] as bool?) == true ? 'Remove Admin' : 'Make Admin',
+                                  onPressed: () => _toggleAdminRole(
+                                    context,
+                                    doc.id,
+                                    data['fullName'],
+                                    !((data['isAdmin'] as bool?) ?? false),
+                                  ),
+                                  tooltip: (data['isAdmin'] as bool?) == true
+                                      ? 'Remove Admin'
+                                      : 'Make Admin',
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.visibility, color: AppColors.primaryBlue),
-                                  onPressed: () => _showUserDetails(context, data),
+                                  icon: const Icon(
+                                    Icons.visibility,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                  onPressed: () =>
+                                      _showUserDetails(context, data),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.delete, color: AppColors.errorRed),
-                                  onPressed: () => _confirmDeleteUser(context, doc.id, data['fullName']),
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: AppColors.errorRed,
+                                  ),
+                                  onPressed: () => _confirmDeleteUser(
+                                    context,
+                                    doc.id,
+                                    data['fullName'],
+                                  ),
                                 ),
                               ],
                             ),
@@ -266,10 +313,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
             children: [
               const Text(
                 'User Details',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
               _detailRow('Full Name', data['fullName'] ?? '-'),
@@ -339,23 +383,27 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
   Future<void> _updateKycStatus(String? email, String status) async {
     if (email == null) return;
-    
+
     final query = await FirebaseFirestore.instance
         .collection('users')
         .where('email', isEqualTo: email)
         .get();
-    
+
     for (final doc in query.docs) {
       await doc.reference.update({'kycStatus': status});
     }
-    
+
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('KYC status updated to $status')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('KYC status updated to $status')));
   }
 
-  void _confirmDeleteUser(BuildContext context, String userId, String? userName) {
+  void _confirmDeleteUser(
+    BuildContext context,
+    String userId,
+    String? userName,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -387,21 +435,25 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
-  Future<void> _toggleAdminRole(BuildContext context, String userId, String? userName, bool makeAdmin) async {
+  Future<void> _toggleAdminRole(
+    BuildContext context,
+    String userId,
+    String? userName,
+    bool makeAdmin,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .set({'isAdmin': makeAdmin}, SetOptions(merge: true));
-      
+      await FirebaseFirestore.instance.collection('users').doc(userId).set({
+        'isAdmin': makeAdmin,
+      }, SetOptions(merge: true));
+
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            makeAdmin 
-              ? '$userName is now an admin' 
-              : 'Admin privileges removed from $userName',
+            makeAdmin
+                ? '$userName is now an admin'
+                : 'Admin privileges removed from $userName',
           ),
         ),
       );
