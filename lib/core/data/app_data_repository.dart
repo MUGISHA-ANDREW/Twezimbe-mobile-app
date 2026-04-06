@@ -574,6 +574,9 @@ class AppDataRepository {
 
       transaction.set(appDoc, {
         'applicationId': applicationId,
+        'userId': user.uid,
+        'userEmail': user.email ?? '',
+        'userName': _displayNameFor(user),
         'loanType': loanType,
         'amountValue': amountValue,
         'period': period,
@@ -591,6 +594,21 @@ class AppDataRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     });
+
+    await _firestore.collection('adminRequests').doc(applicationId).set({
+      'requestId': applicationId,
+      'type': 'loanApplication',
+      'userId': user.uid,
+      'userEmail': user.email ?? '',
+      'userName': _displayNameFor(user),
+      'loanType': loanType,
+      'amountValue': amountValue,
+      'period': period,
+      'purpose': purpose,
+      'status': 'Pending Review',
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
 
     await addNotificationForCurrentUser(
       title: 'Loan Application Successful',
@@ -989,6 +1007,16 @@ class AppDataRepository {
       'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  static Future<void> updateAdminRequestStatusForLoan({
+    required String applicationId,
+    required String status,
+  }) async {
+    await _firestore.collection('adminRequests').doc(applicationId).set({
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   static String formatUgx(int amount) {

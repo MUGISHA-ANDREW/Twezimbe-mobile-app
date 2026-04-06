@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_users_page.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_loans_page.dart';
@@ -114,13 +115,25 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             closeDrawerOnTap: isDrawer,
           ),
           const Spacer(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.white70),
-            title: const Text(
-              'Logout',
-              style: TextStyle(color: Colors.white70),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.errorRed,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ListTile(
+                leading: const Icon(Icons.logout, color: Colors.white),
+                title: const Text(
+                  'Logout',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                onTap: () => _logout(closeDrawerOnTap: isDrawer),
+              ),
             ),
-            onTap: () => _logout(closeDrawerOnTap: isDrawer),
           ),
           const SizedBox(height: 20),
         ],
@@ -129,6 +142,31 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Future<void> _logout({required bool closeDrawerOnTap}) async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirm Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.errorRed),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout != true) {
+      return;
+    }
+
     final messenger = ScaffoldMessenger.of(context);
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
@@ -212,67 +250,118 @@ class AdminHomeTab extends StatelessWidget {
           const SizedBox(height: 32),
 
           // Stats Cards
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cards = [
-                _buildStatCard(
-                  'Total Users',
-                  '1,234',
-                  Icons.people,
-                  AppColors.primaryBlue,
-                ),
-                _buildStatCard(
-                  'Active Loans',
-                  '456',
-                  Icons.account_balance,
-                  AppColors.primaryOrange,
-                ),
-                _buildStatCard(
-                  'Pending Reviews',
-                  '23',
-                  Icons.pending_actions,
-                  AppColors.errorRed,
-                ),
-                _buildStatCard(
-                  'Total Revenue',
-                  'UGX 12.5M',
-                  Icons.attach_money,
-                  AppColors.successGreen,
-                ),
-              ];
-
-              if (constraints.maxWidth < 720) {
-                return Column(
-                  children: [
-                    for (int i = 0; i < cards.length; i++) ...[
-                      cards[i],
-                      if (i < cards.length - 1) const SizedBox(height: 12),
-                    ],
-                  ],
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance.collection('users').snapshots(),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.hasError) {
+                return _buildLoadError(
+                  'Unable to load dashboard metrics. Check Firestore access.',
                 );
               }
 
-              if (constraints.maxWidth < 1180) {
-                final cardWidth = (constraints.maxWidth - 16) / 2;
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: cards
-                      .map((card) => SizedBox(width: cardWidth, child: card))
-                      .toList(growable: false),
-                );
+              if (!userSnapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
               }
 
-              return Row(
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[1]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[2]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[3]),
-                ],
+              final userDocs = userSnapshot.data!.docs;
+              final totalUsers = userDocs.length;
+              final totalRevenue = userDocs.fold<int>(0, (sum, doc) {
+                final data = doc.data();
+                final value = (data['balanceValue'] as num?)?.toInt() ?? 0;
+                return sum + value;
+              });
+
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collectionGroup('loanApplications')
+                    .snapshots(),
+                builder: (context, loanSnapshot) {
+                  if (loanSnapshot.hasError) {
+                    return _buildLoadError(
+                      'Unable to load loan metrics. Check Firestore indexes/rules.',
+                    );
+                  }
+
+                  final loanDocs = loanSnapshot.data?.docs ?? const [];
+                  final activeLoans = loanDocs.where((doc) {
+                    final status = (doc.data()['status'] as String?) ?? '';
+                    return status == 'Approved' || status == 'Active';
+                  }).length;
+                  final pendingReviews = loanDocs.where((doc) {
+                    final status =
+                        (doc.data()['status'] as String?) ?? 'Pending Review';
+                    return status == 'Pending Review';
+                  }).length;
+
+                  final cards = [
+                    _buildStatCard(
+                      'Total Users',
+                      '$totalUsers',
+                      Icons.people,
+                      AppColors.primaryBlue,
+                    ),
+                    _buildStatCard(
+                      'Active Loans',
+                      '$activeLoans',
+                      Icons.account_balance,
+                      AppColors.primaryOrange,
+                    ),
+                    _buildStatCard(
+                      'Pending Reviews',
+                      '$pendingReviews',
+                      Icons.pending_actions,
+                      AppColors.errorRed,
+                    ),
+                    _buildStatCard(
+                      'Total Revenue',
+                      AppDataRepository.formatUgx(totalRevenue),
+                      Icons.attach_money,
+                      AppColors.successGreen,
+                    ),
+                  ];
+
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth < 720) {
+                        return Column(
+                          children: [
+                            for (int i = 0; i < cards.length; i++) ...[
+                              cards[i],
+                              if (i < cards.length - 1)
+                                const SizedBox(height: 12),
+                            ],
+                          ],
+                        );
+                      }
+
+                      if (constraints.maxWidth < 1180) {
+                        final cardWidth = (constraints.maxWidth - 16) / 2;
+                        return Wrap(
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: cards
+                              .map(
+                                (card) =>
+                                    SizedBox(width: cardWidth, child: card),
+                              )
+                              .toList(growable: false),
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: cards[0]),
+                          const SizedBox(width: 16),
+                          Expanded(child: cards[1]),
+                          const SizedBox(width: 16),
+                          Expanded(child: cards[2]),
+                          const SizedBox(width: 16),
+                          Expanded(child: cards[3]),
+                        ],
+                      );
+                    },
+                  );
+                },
               );
             },
           ),
@@ -301,6 +390,12 @@ class AdminHomeTab extends StatelessWidget {
                   .limit(5)
                   .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return _buildLoadError(
+                    'Unable to load recent activities. Check Firestore access.',
+                  );
+                }
+
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -389,6 +484,29 @@ class AdminHomeTab extends StatelessWidget {
           Text(
             title,
             style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadError(String message) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.errorRed.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.errorRed.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.errorRed),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.errorRed),
+            ),
           ),
         ],
       ),

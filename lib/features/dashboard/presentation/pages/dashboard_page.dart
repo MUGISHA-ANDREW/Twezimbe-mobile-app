@@ -148,7 +148,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     slivers: [
                       // App Bar
                       SliverAppBar(
-                        expandedHeight: 120,
+                        expandedHeight: 136,
                         floating: false,
                         pinned: true,
                         backgroundColor: AppColors.background,
@@ -156,99 +156,118 @@ class _DashboardPageState extends State<DashboardPage> {
                         flexibleSpace: FlexibleSpaceBar(
                           background: Container(
                             padding: const EdgeInsets.fromLTRB(20, 50, 20, 20),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      // Profile Picture
-                                      GestureDetector(
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  const ProfilePage(),
-                                            ),
-                                          );
-                                        },
-                                        child: Container(
-                                          width: 56,
-                                          height: 56,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: AppColors.primaryBlue
-                                                .withValues(alpha: 0.12),
-                                            border: Border.all(
-                                              color: Colors.white,
-                                              width: 2,
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(
-                                                  alpha: 0.1,
-                                                ),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ],
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isCompact = constraints.maxWidth < 420;
+
+                                final greetingRow = Row(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                const ProfilePage(),
                                           ),
-                                          child: ClipOval(
-                                            child: profile.photoUrl != null
-                                                ? Image.network(
-                                                    profile.photoUrl!,
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder:
-                                                        (
-                                                          context,
-                                                          error,
-                                                          stackTrace,
-                                                        ) {
-                                                          return _buildInitials(
-                                                            profile.fullName,
-                                                          );
-                                                        },
-                                                  )
-                                                : _buildInitials(
-                                                    profile.fullName,
-                                                  ),
+                                        );
+                                      },
+                                      child: Container(
+                                        width: 56,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primaryBlue
+                                              .withValues(alpha: 0.12),
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
                                           ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Flexible(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              'Welcome back,',
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.grey.shade600,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.1,
                                               ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              _getGreetingName(profile),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 22,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.textMain,
-                                              ),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
                                             ),
                                           ],
                                         ),
+                                        child: ClipOval(
+                                          child: profile.photoUrl != null
+                                              ? Image.network(
+                                                  profile.photoUrl!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (
+                                                        context,
+                                                        error,
+                                                        stackTrace,
+                                                      ) {
+                                                        return _buildInitials(
+                                                          profile.fullName,
+                                                        );
+                                                      },
+                                                )
+                                              : _buildInitials(
+                                                  profile.fullName,
+                                                ),
+                                        ),
                                       ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Flexible(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'Welcome back,',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _getGreetingName(profile),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 20,
+                                              height: 1.0,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textMain,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+
+                                if (isCompact) {
+                                  return Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(child: greetingRow),
+                                      const SizedBox(width: 10),
+                                      _buildNotificationButton(unreadCount),
                                     ],
-                                  ),
-                                ),
-                                _buildNotificationButton(unreadCount),
-                              ],
+                                  );
+                                }
+
+                                return Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: greetingRow),
+                                    _buildNotificationButton(unreadCount),
+                                  ],
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -290,6 +309,24 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _showNotificationDetails(AppNotificationData notification) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(notification.title),
+          content: SingleChildScrollView(child: Text(notification.message)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildInitials(String name) {
     final String initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
     return Container(
@@ -311,49 +348,178 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildNotificationButton(int unreadCount) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    return GestureDetector(
+      onTap: () => _openNotificationsSheet(),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Icon(
+              Icons.notifications_none,
+              color: AppColors.darkBlue,
+              size: 24,
+            ),
           ),
-          child: Icon(
-            Icons.notifications_none,
-            color: AppColors.darkBlue,
-            size: 24,
-          ),
-        ),
-        if (unreadCount > 0)
-          Positioned(
-            right: -4,
-            top: -4,
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: const BoxDecoration(
-                color: AppColors.errorRed,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                unreadCount > 9 ? '9+' : '$unreadCount',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+          if (unreadCount > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: const BoxDecoration(
+                  color: AppColors.errorRed,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  unreadCount > 9 ? '9+' : '$unreadCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openNotificationsSheet() async {
+    final notifications =
+        await AppDataRepository.watchNotificationsForCurrentUser(
+          limit: 20,
+        ).first;
+
+    await AppDataRepository.markAllNotificationsAsReadForCurrentUser();
+
+    final displayNotifications = notifications
+        .map(
+          (notification) => AppNotificationData(
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            createdAt: notification.createdAt,
+            isRead: true,
           ),
-      ],
+        )
+        .toList(growable: false);
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Notifications',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMain,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        await AppDataRepository.markAllNotificationsAsReadForCurrentUser();
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: const Text('Mark all as read'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (displayNotifications.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: Text('No notifications yet.')),
+                  )
+                else
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.6,
+                    child: ListView.separated(
+                      itemCount: displayNotifications.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final notification = displayNotifications[index];
+                        return Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      notification.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.textMain,
+                                      ),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.fiber_manual_record,
+                                    size: 10,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(notification.message),
+                              const SizedBox(height: 6),
+                              Text(
+                                notification.createdAt != null
+                                    ? _getRelativeTime(notification.createdAt)
+                                    : 'Just now',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -102,14 +102,40 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                 ),
               );
 
-              final badges = Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildStatBadge('Pending', _getPendingCount()),
-                  _buildStatBadge('Approved', _getApprovedCount()),
-                  _buildStatBadge('Rejected', _getRejectedCount()),
-                ],
+              final liveBadges = StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collectionGroup('loanApplications')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return _buildInlineError('Unable to load counts');
+                  }
+
+                  final docs = snapshot.data?.docs ?? const [];
+                  final pendingCount = docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return (data['status'] ?? 'Pending Review') ==
+                        'Pending Review';
+                  }).length;
+                  final approvedCount = docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return (data['status'] ?? '') == 'Approved';
+                  }).length;
+                  final rejectedCount = docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return (data['status'] ?? '') == 'Rejected';
+                  }).length;
+
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatBadge('Pending', pendingCount),
+                      _buildStatBadge('Approved', approvedCount),
+                      _buildStatBadge('Rejected', rejectedCount),
+                    ],
+                  );
+                },
               );
 
               if (constraints.maxWidth < 860) {
@@ -118,7 +144,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                   children: [
                     filterDropdown,
                     const SizedBox(height: 12),
-                    badges,
+                    liveBadges,
                   ],
                 );
               }
@@ -130,7 +156,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                   Expanded(
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: badges,
+                      child: liveBadges,
                     ),
                   ),
                 ],
@@ -152,6 +178,19 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(
+                      child: Text(
+                        'Unable to load loan applications. Check Firestore rules/index.',
+                        style: TextStyle(color: AppColors.errorRed),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
                 if (!snapshot.hasData) {
                   return const Center(
                     child: Padding(
@@ -205,7 +244,12 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                         cells: [
                           DataCell(Text(data['applicationId'] ?? doc.id)),
                           DataCell(
-                            Text(_getUserEmail(doc.reference.parent.parent)),
+                            Text(
+                              _getLoanApplicantEmail(
+                                data,
+                                doc.reference.parent.parent,
+                              ),
+                            ),
                           ),
                           DataCell(Text(data['loanType'] ?? '-')),
                           DataCell(
@@ -274,8 +318,12 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                                     Icons.visibility,
                                     color: AppColors.primaryBlue,
                                   ),
-                                  onPressed: () =>
-                                      _showLoanDetails(context, doc.id, data),
+                                  onPressed: () => _showLoanDetails(
+                                    context,
+                                    doc.id,
+                                    data,
+                                    doc.reference.parent.parent?.path,
+                                  ),
                                   tooltip: 'View Details',
                                 ),
                               ],
@@ -321,23 +369,39 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
-  int _getPendingCount() {
-    // This would be calculated from the actual data
-    return 23;
+  Widget _buildInlineError(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.errorRed.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: AppColors.errorRed,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
   }
 
-  int _getApprovedCount() {
-    return 456;
-  }
+  String _getLoanApplicantEmail(
+    Map<String, dynamic> loanData,
+    DocumentReference? userDoc,
+  ) {
+    final String? fromLoan = (loanData['userEmail'] as String?)?.trim();
+    if (fromLoan != null && fromLoan.isNotEmpty) {
+      return fromLoan;
+    }
 
-  int _getRejectedCount() {
-    return 12;
-  }
+    final String? userId = userDoc?.id.trim();
+    if (userId != null && userId.isNotEmpty) {
+      return 'User ID: $userId';
+    }
 
-  String _getUserEmail(DocumentReference? userDoc) {
-    if (userDoc == null) return '-';
-    // This is a simplified approach - in production you'd query the user doc
-    return 'User';
+    return '-';
   }
 
   Widget _buildStatusChip(String status) {
@@ -374,6 +438,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     BuildContext context,
     String appId,
     Map<String, dynamic> data,
+    String? userPath,
   ) {
     final amountValue = (data['amountValue'] as num?)?.toInt() ?? 0;
 
@@ -407,7 +472,9 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       child: OutlinedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          // Would need to pass the correct user path
+                          if (userPath != null) {
+                            _updateLoanStatus(appId, userPath, 'Rejected');
+                          }
                         },
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.errorRed,
@@ -421,7 +488,9 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          // Would need to pass the correct user path
+                          if (userPath != null) {
+                            _approveLoan(appId, userPath, amountValue);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.successGreen,
@@ -473,13 +542,18 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
         'status': status,
       });
 
-      // Add notification for user
-      await AppDataRepository.addNotificationForCurrentUser(
+      await AppDataRepository.addNotificationForUser(
+        userId: userDoc.id,
         title: status == 'Approved' ? 'Loan Approved' : 'Loan Rejected',
         message: status == 'Approved'
             ? 'Your loan application has been approved!'
             : 'Your loan application has been rejected. Please contact support.',
         type: 'loan',
+      );
+
+      await AppDataRepository.updateAdminRequestStatusForLoan(
+        applicationId: appId,
+        status: status,
       );
 
       if (!mounted) return;
@@ -535,6 +609,11 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
         message:
             'Your loan of ${AppDataRepository.formatUgx(amountValue)} has been approved and credited to your account!',
         type: 'loan',
+      );
+
+      await AppDataRepository.updateAdminRequestStatusForLoan(
+        applicationId: appId,
+        status: 'Approved',
       );
 
       if (!mounted) return;

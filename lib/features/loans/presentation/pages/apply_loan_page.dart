@@ -49,21 +49,26 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Column(
-              children: [
-                const Text(
-                  'NAMUGUMYA AGNES',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'AC00000001',
-                  style: TextStyle(
+            StreamBuilder<AppProfileData>(
+              stream: AppDataRepository.watchProfileForCurrentUser(),
+              builder: (context, snapshot) {
+                final profile = snapshot.data;
+                final displayName =
+                    (profile?.fullName.trim().isNotEmpty ?? false)
+                    ? profile!.fullName.trim()
+                    : (profile?.email.trim().isNotEmpty ?? false)
+                    ? profile!.email.trim().split('@').first
+                    : 'Member';
+
+                return Text(
+                  displayName.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppColors.primaryOrange,
+                    fontSize: 16,
                   ),
-                ),
-              ],
+                );
+              },
             ),
             const SizedBox(height: 32),
             const Text(

@@ -117,6 +117,19 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(
+                      child: Text(
+                        'Unable to load users. Check Firestore permissions/index.',
+                        style: TextStyle(color: AppColors.errorRed),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
                 if (!snapshot.hasData) {
                   return const Center(
                     child: Padding(
