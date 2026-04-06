@@ -309,24 +309,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  void _showNotificationDetails(AppNotificationData notification) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(notification.title),
-          content: SingleChildScrollView(child: Text(notification.message)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _buildInitials(String name) {
     final String initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
     return Container(
