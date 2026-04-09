@@ -3,6 +3,8 @@ import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/chatbot/domain/chatbot_service.dart';
 
+enum _ChatMenuAction { startNewChat, deletePreviousChats }
+
 class ChatbotPage extends StatefulWidget {
   const ChatbotPage({super.key});
 
@@ -15,6 +17,8 @@ class _ChatbotPageState extends State<ChatbotPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isAwaitingReply = false;
+  bool _isManagingChats = false;
+  String? _activeConversationId;
 
   @override
   void dispose() {
@@ -37,7 +41,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
   }
 
   Future<void> _sendMessage() async {
-    if (_isAwaitingReply) {
+    if (_isAwaitingReply || _isManagingChats) {
       return;
     }
 
@@ -52,9 +56,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
     });
 
     try {
+      final conversationId =
+          _activeConversationId ??
+          await AppDataRepository.getOrCreateActiveChatConversationIdForCurrentUser();
+
       await AppDataRepository.addChatMessageForCurrentUser(
         isUser: true,
         text: input,
+        conversationId: conversationId,
       );
       _scrollToBottom();
 
@@ -67,6 +76,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
       await AppDataRepository.addChatMessageForCurrentUser(
         isUser: false,
         text: reply,
+        conversationId: conversationId,
       );
       _scrollToBottom();
     } catch (e) {
@@ -157,6 +167,97 @@ class _ChatbotPageState extends State<ChatbotPage> {
     await AppDataRepository.deleteChatMessageForCurrentUser(message.id);
   }
 
+  Future<void> _startNewChat() async {
+    if (_isAwaitingReply || _isManagingChats) {
+      return;
+    }
+
+    setState(() => _isManagingChats = true);
+    try {
+      final conversationId =
+          await AppDataRepository.startNewChatForCurrentUser();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _activeConversationId = conversationId;
+      });
+      _scrollToBottom();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Started a new chat.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to start a new chat. $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isManagingChats = false);
+      }
+    }
+  }
+
+  Future<void> _deletePreviousChats() async {
+    final activeConversationId = _activeConversationId?.trim() ?? '';
+    if (activeConversationId.isEmpty || _isManagingChats) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Previous Chats'),
+          content: const Text(
+            'Delete all previous chats and keep only the current chat?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _isManagingChats = true);
+    try {
+      final deletedCount =
+          await AppDataRepository.deletePreviousChatConversationsForCurrentUser(
+            keepConversationId: activeConversationId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            deletedCount > 0
+                ? 'Deleted previous chats.'
+                : 'No previous chats found.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete previous chats. $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isManagingChats = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -221,127 +322,169 @@ class _ChatbotPageState extends State<ChatbotPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 40),
+                  PopupMenuButton<_ChatMenuAction>(
+                    enabled: !_isAwaitingReply && !_isManagingChats,
+                    onSelected: (action) async {
+                      switch (action) {
+                        case _ChatMenuAction.startNewChat:
+                          await _startNewChat();
+                          break;
+                        case _ChatMenuAction.deletePreviousChats:
+                          await _deletePreviousChats();
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem<_ChatMenuAction>(
+                        value: _ChatMenuAction.startNewChat,
+                        child: Text('Start new chat'),
+                      ),
+                      PopupMenuItem<_ChatMenuAction>(
+                        value: _ChatMenuAction.deletePreviousChats,
+                        child: Text('Delete previous chats'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
             const Divider(height: 1),
             Expanded(
-              child: StreamBuilder<List<AppChatMessageData>>(
-                stream: AppDataRepository.watchChatMessagesForCurrentUser(),
-                builder: (context, snapshot) {
-                  final messages =
-                      snapshot.data ?? const <AppChatMessageData>[];
+              child: StreamBuilder<String>(
+                stream:
+                    AppDataRepository.watchActiveChatConversationIdForCurrentUser(),
+                builder: (context, activeConversationSnapshot) {
+                  final activeConversationId = activeConversationSnapshot.data;
+                  _activeConversationId = activeConversationId;
 
-                  return ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      final message = messages[index];
-                      return GestureDetector(
-                        onLongPress: message.isUser
-                            ? () async {
-                                await showModalBottomSheet<void>(
-                                  context: context,
-                                  builder: (context) {
-                                    return SafeArea(
-                                      child: Wrap(
-                                        children: [
-                                          ListTile(
-                                            leading: const Icon(Icons.edit),
-                                            title: const Text('Edit message'),
-                                            onTap: () async {
-                                              Navigator.pop(context);
-                                              await _editMessage(message);
-                                            },
+                  if (activeConversationId == null ||
+                      activeConversationId.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  return StreamBuilder<List<AppChatMessageData>>(
+                    stream: AppDataRepository.watchChatMessagesForCurrentUser(
+                      conversationId: activeConversationId,
+                    ),
+                    builder: (context, snapshot) {
+                      final messages =
+                          snapshot.data ?? const <AppChatMessageData>[];
+
+                      return ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final message = messages[index];
+                          return GestureDetector(
+                            onLongPress: message.isUser
+                                ? () async {
+                                    await showModalBottomSheet<void>(
+                                      context: context,
+                                      builder: (context) {
+                                        return SafeArea(
+                                          child: Wrap(
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(Icons.edit),
+                                                title: const Text(
+                                                  'Edit message',
+                                                ),
+                                                onTap: () async {
+                                                  Navigator.pop(context);
+                                                  await _editMessage(message);
+                                                },
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(
+                                                  Icons.delete_outline,
+                                                ),
+                                                title: const Text(
+                                                  'Delete message',
+                                                ),
+                                                onTap: () async {
+                                                  Navigator.pop(context);
+                                                  await _deleteMessage(message);
+                                                },
+                                              ),
+                                            ],
                                           ),
-                                          ListTile(
-                                            leading: const Icon(
-                                              Icons.delete_outline,
-                                            ),
-                                            title: const Text('Delete message'),
-                                            onTap: () async {
-                                              Navigator.pop(context);
-                                              await _deleteMessage(message);
-                                            },
-                                          ),
-                                        ],
-                                      ),
+                                        );
+                                      },
                                     );
-                                  },
-                                );
-                              }
-                            : null,
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            mainAxisAlignment: message.isUser
-                                ? MainAxisAlignment.end
-                                : MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              if (!message.isUser) ...[
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.primaryBlue
-                                      .withValues(alpha: 0.12),
-                                  child: const Icon(
-                                    Icons.smart_toy_outlined,
-                                    color: AppColors.primaryBlue,
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              Flexible(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  constraints: BoxConstraints(
-                                    maxWidth:
-                                        MediaQuery.of(context).size.width *
-                                        0.74,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: message.isUser
-                                        ? AppColors.primaryBlue
-                                        : Colors.white,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: message.isUser
-                                          ? AppColors.primaryBlue
-                                          : Colors.grey.shade300,
+                                  }
+                                : null,
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              child: Row(
+                                mainAxisAlignment: message.isUser
+                                    ? MainAxisAlignment.end
+                                    : MainAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  if (!message.isUser) ...[
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: AppColors.primaryBlue
+                                          .withValues(alpha: 0.12),
+                                      child: const Icon(
+                                        Icons.smart_toy_outlined,
+                                        color: AppColors.primaryBlue,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Flexible(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                      constraints: BoxConstraints(
+                                        maxWidth:
+                                            MediaQuery.of(context).size.width *
+                                            0.74,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: message.isUser
+                                            ? AppColors.primaryBlue
+                                            : Colors.white,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: message.isUser
+                                              ? AppColors.primaryBlue
+                                              : Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        message.text,
+                                        style: TextStyle(
+                                          color: message.isUser
+                                              ? Colors.white
+                                              : AppColors.textMain,
+                                          height: 1.4,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  child: Text(
-                                    message.text,
-                                    style: TextStyle(
-                                      color: message.isUser
-                                          ? Colors.white
-                                          : AppColors.textMain,
-                                      height: 1.4,
+                                  if (message.isUser) ...[
+                                    const SizedBox(width: 8),
+                                    CircleAvatar(
+                                      radius: 16,
+                                      backgroundColor: AppColors.primaryBlue,
+                                      child: const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
                                     ),
-                                  ),
-                                ),
+                                  ],
+                                ],
                               ),
-                              if (message.isUser) ...[
-                                const SizedBox(width: 8),
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.primaryBlue,
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
+                            ),
+                          );
+                        },
                       );
                     },
                   );
@@ -358,7 +501,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                 children: [
                   Expanded(
                     child: TextField(
-                      enabled: !_isAwaitingReply,
+                      enabled: !_isAwaitingReply && !_isManagingChats,
                       controller: _controller,
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) {
@@ -374,7 +517,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     height: 48,
                     width: 48,
                     child: ElevatedButton(
-                      onPressed: _isAwaitingReply
+                      onPressed: _isAwaitingReply || _isManagingChats
                           ? null
                           : () {
                               _sendMessage();

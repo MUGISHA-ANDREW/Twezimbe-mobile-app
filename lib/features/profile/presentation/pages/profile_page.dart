@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -87,25 +89,28 @@ class _ProfilePageState extends State<ProfilePage> {
         SettableMetadata(contentType: _contentTypeFor(extension)),
       );
       final photoUrl = await storageRef.getDownloadURL();
-      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
+      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(
+        photoUrl,
+      ).timeout(const Duration(seconds: 2));
 
       final oldPhotoUrls = <String>{
         if (oldAuthPhotoUrl != null) oldAuthPhotoUrl,
         if (oldStoredPhotoUrl != null) oldStoredPhotoUrl,
       };
 
-      for (final oldPhotoUrl in oldPhotoUrls) {
-        if (_isManagedProfilePhotoUrl(oldPhotoUrl, user.uid) &&
-            oldPhotoUrl != photoUrl) {
-          try {
-            await FirebaseStorage.instance.refFromURL(oldPhotoUrl).delete();
-          } catch (_) {
-            // Ignore cleanup failures (e.g., missing old object).
-          }
-        }
-      }
+      unawaited(
+        _cleanupOldManagedPhotos(
+          photoUrls: oldPhotoUrls,
+          userId: user.uid,
+          currentPhotoUrl: photoUrl,
+        ),
+      );
 
       _showMessage('Profile photo updated.');
+    } on TimeoutException {
+      _showMessage(
+        'Photo uploaded, but profile save exceeded 2 seconds. Please try again.',
+      );
     } on FirebaseException catch (error) {
       debugPrint(
         'Profile photo upload failed [${error.code}]: ${error.message}',
@@ -117,6 +122,23 @@ class _ProfilePageState extends State<ProfilePage> {
     } finally {
       if (mounted) {
         setState(() => _isUploadingPhoto = false);
+      }
+    }
+  }
+
+  Future<void> _cleanupOldManagedPhotos({
+    required Set<String> photoUrls,
+    required String userId,
+    required String currentPhotoUrl,
+  }) async {
+    for (final oldPhotoUrl in photoUrls) {
+      if (_isManagedProfilePhotoUrl(oldPhotoUrl, userId) &&
+          oldPhotoUrl != currentPhotoUrl) {
+        try {
+          await FirebaseStorage.instance.refFromURL(oldPhotoUrl).delete();
+        } catch (_) {
+          // Ignore cleanup failures (e.g., missing old object).
+        }
       }
     }
   }

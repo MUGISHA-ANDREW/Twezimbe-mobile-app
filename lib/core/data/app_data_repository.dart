@@ -122,12 +122,14 @@ class AppNotificationData {
 class AppChatMessageData {
   const AppChatMessageData({
     required this.id,
+    required this.conversationId,
     required this.isUser,
     required this.text,
     required this.createdAt,
   });
 
   final String id;
+  final String conversationId;
   final bool isUser;
   final String text;
   final DateTime? createdAt;
@@ -243,6 +245,8 @@ class AppDataRepository {
 
   // Admin email for automatic admin detection
   static const String _adminEmail = 'admin@twezimbe.co.ug';
+  static const String _chatWelcomeMessage =
+      'Welcome to Twezimbe assistant. You can ask me questions about the app, how to use it, or any other inquiries you may have. I\'m here to help you get the most out of your experience with Twezimbe. Just type your question below and I\'ll do my best to assist you!';
 
   static Future<void> ensureProfileForCurrentUser({
     String? fullName,
@@ -895,6 +899,7 @@ class AppDataRepository {
 
   static Stream<List<AppChatMessageData>> watchChatMessagesForCurrentUser({
     int limit = 300,
+    String? conversationId,
   }) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -903,40 +908,163 @@ class AppDataRepository {
       );
     }
 
-    unawaited(_seedChatForCurrentUser().catchError((_) {}));
+    unawaited(_seedChatForCurrentUser().then((_) {}).catchError((_) {}));
+    final fallbackConversationId = _defaultChatConversationIdForUser(user.uid);
+    final targetConversationId = (conversationId?.trim().isNotEmpty ?? false)
+        ? conversationId!.trim()
+        : fallbackConversationId;
 
     return _userDoc(user.uid)
         .collection('chatMessages')
         .orderBy('createdAt', descending: false)
-        .limit(limit)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs
+          final filteredMessages = snapshot.docs
               .map((doc) {
                 final data = doc.data();
                 return AppChatMessageData(
                   id: doc.id,
+                  conversationId:
+                      (data['conversationId'] as String?)?.trim() ?? '',
                   isUser: (data['isUser'] as bool?) ?? false,
                   text: (data['text'] as String?) ?? '',
                   createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
                 );
               })
+              .where((message) {
+                final normalizedConversationId =
+                    message.conversationId.trim().isEmpty
+                    ? fallbackConversationId
+                    : message.conversationId.trim();
+                return normalizedConversationId == targetConversationId;
+              })
               .toList(growable: false);
+
+          if (filteredMessages.length <= limit) {
+            return filteredMessages;
+          }
+
+          return filteredMessages.sublist(filteredMessages.length - limit);
         });
   }
 
-  static Future<void> addChatMessageForCurrentUser({
-    required bool isUser,
-    required String text,
+  static Stream<String> watchActiveChatConversationIdForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Stream<String>.empty();
+    }
+
+    final fallbackConversationId = _defaultChatConversationIdForUser(user.uid);
+    unawaited(_seedChatForCurrentUser().then((_) {}).catchError((_) {}));
+
+    return _userDoc(user.uid).snapshots().map((snapshot) {
+      final data = snapshot.data() ?? <String, dynamic>{};
+      final currentConversationId =
+          (data['activeChatConversationId'] as String?)?.trim();
+      if (currentConversationId != null && currentConversationId.isNotEmpty) {
+        return currentConversationId;
+      }
+      return fallbackConversationId;
+    }).distinct();
+  }
+
+  static Future<String> getOrCreateActiveChatConversationIdForCurrentUser() {
+    return _seedChatForCurrentUser();
+  }
+
+  static Future<String> startNewChatForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    final userDoc = _userDoc(user.uid);
+    final conversationId = _newChatConversationId();
+    final chatRef = userDoc.collection('chatMessages').doc();
+    final batch = _firestore.batch();
+
+    batch.set(chatRef, {
+      'isUser': false,
+      'text': _chatWelcomeMessage,
+      'conversationId': conversationId,
+      'createdAt': Timestamp.now(),
+    });
+    batch.set(userDoc, {
+      'activeChatConversationId': conversationId,
+      'chatSeeded': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await batch.commit();
+    return conversationId;
+  }
+
+  static Future<int> deletePreviousChatConversationsForCurrentUser({
+    required String keepConversationId,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw StateError('No authenticated user found.');
     }
 
+    final normalizedKeepId = keepConversationId.trim();
+    if (normalizedKeepId.isEmpty) {
+      return 0;
+    }
+
+    final fallbackConversationId = _defaultChatConversationIdForUser(user.uid);
+    final userDoc = _userDoc(user.uid);
+    final query = await userDoc.collection('chatMessages').get();
+    final docsToDelete = query.docs
+        .where((doc) {
+          final data = doc.data();
+          final rawConversationId = (data['conversationId'] as String?)?.trim();
+          final conversation =
+              (rawConversationId != null && rawConversationId.isNotEmpty)
+              ? rawConversationId
+              : fallbackConversationId;
+          return conversation != normalizedKeepId;
+        })
+        .toList(growable: false);
+
+    const int batchSize = 450;
+    for (int i = 0; i < docsToDelete.length; i += batchSize) {
+      final batch = _firestore.batch();
+      final end = (i + batchSize) > docsToDelete.length
+          ? docsToDelete.length
+          : i + batchSize;
+      for (int j = i; j < end; j++) {
+        batch.delete(docsToDelete[j].reference);
+      }
+      await batch.commit();
+    }
+
+    await userDoc.set({
+      'activeChatConversationId': normalizedKeepId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    return docsToDelete.length;
+  }
+
+  static Future<void> addChatMessageForCurrentUser({
+    required bool isUser,
+    required String text,
+    String? conversationId,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    final targetConversationId = (conversationId?.trim().isNotEmpty ?? false)
+        ? conversationId!.trim()
+        : await getOrCreateActiveChatConversationIdForCurrentUser();
+
     await _userDoc(user.uid).collection('chatMessages').add({
       'isUser': isUser,
       'text': text.trim(),
+      'conversationId': targetConversationId,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -1406,33 +1534,92 @@ class AppDataRepository {
     await batch.commit();
   }
 
-  static Future<void> _seedChatForCurrentUser() async {
+  static Future<String> _seedChatForCurrentUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      return;
+      throw StateError('No authenticated user found.');
     }
 
     final userDoc = _userDoc(user.uid);
     final snapshot = await userDoc.get();
     final data = snapshot.data() ?? <String, dynamic>{};
-    if ((data['chatSeeded'] as bool?) == true) {
-      return;
+    final existingConversationId = (data['activeChatConversationId'] as String?)
+        ?.trim();
+    final conversationId =
+        (existingConversationId != null && existingConversationId.isNotEmpty)
+        ? existingConversationId
+        : _defaultChatConversationIdForUser(user.uid);
+
+    final bool needsMigration =
+        (data['chatConversationsMigrated'] as bool?) != true;
+
+    final batch = _firestore.batch();
+    bool shouldCommit = false;
+
+    if (existingConversationId == null || existingConversationId.isEmpty) {
+      batch.set(userDoc, {
+        'activeChatConversationId': conversationId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      shouldCommit = true;
     }
 
-    final chatRef = userDoc.collection('chatMessages').doc();
-    final batch = _firestore.batch();
-    batch.set(chatRef, {
-      'isUser': false,
-      'text':
-          'Welcome to Twezimbe assistant. You can ask me questions about the app, how to use it, or any other inquiries you may have. I\'m here to help you get the most out of your experience with Twezimbe. Just type your question below and I\'ll do my best to assist you!',
-      'createdAt': Timestamp.now(),
-    });
-    batch.set(userDoc, {
-      'chatSeeded': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (needsMigration) {
+      final legacyMessages = await userDoc
+          .collection('chatMessages')
+          .where('conversationId', isNull: true)
+          .get();
+      for (final legacyMessage in legacyMessages.docs) {
+        batch.set(legacyMessage.reference, {
+          'conversationId': conversationId,
+        }, SetOptions(merge: true));
+        shouldCommit = true;
+      }
 
-    await batch.commit();
+      batch.set(userDoc, {
+        'chatConversationsMigrated': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      shouldCommit = true;
+    }
+
+    final hasMessagesInConversation =
+        (await userDoc
+                .collection('chatMessages')
+                .where('conversationId', isEqualTo: conversationId)
+                .limit(1)
+                .get())
+            .docs
+            .isNotEmpty;
+
+    if (!hasMessagesInConversation) {
+      final chatRef = userDoc.collection('chatMessages').doc();
+      batch.set(chatRef, {
+        'isUser': false,
+        'text': _chatWelcomeMessage,
+        'conversationId': conversationId,
+        'createdAt': Timestamp.now(),
+      });
+      batch.set(userDoc, {
+        'chatSeeded': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      shouldCommit = true;
+    }
+
+    if (shouldCommit) {
+      await batch.commit();
+    }
+
+    return conversationId;
+  }
+
+  static String _defaultChatConversationIdForUser(String userId) {
+    return 'chat_${userId}_default';
+  }
+
+  static String _newChatConversationId() {
+    return 'chat_${DateTime.now().millisecondsSinceEpoch}';
   }
 
   static String _formatUgx(int amount) {
