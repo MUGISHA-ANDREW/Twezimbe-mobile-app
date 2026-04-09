@@ -100,6 +100,7 @@ class _SignInPageState extends State<SignInPage> {
       await _signInWithRetry(email: email, password: password);
 
       await LocalUserSessionStore.saveFromCurrentUser();
+      final isAdminUser = await AppDataRepository.isCurrentUserAdmin();
       _syncProfileInBackground();
 
       // Save FCM token for push notifications
@@ -113,10 +114,6 @@ class _SignInPageState extends State<SignInPage> {
       }
 
       if (!mounted) return;
-
-      final currentUser = FirebaseAuth.instance.currentUser;
-      final isAdminUser =
-          currentUser?.email?.trim().toLowerCase() == 'admin@twezimbe.co.ug';
 
       // Smooth transition to main app
       Navigator.pushReplacement(

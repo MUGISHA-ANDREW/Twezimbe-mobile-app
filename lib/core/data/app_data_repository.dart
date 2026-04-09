@@ -156,6 +156,15 @@ class AppFaqData {
   final String answer;
 }
 
+class LoanApplicationException implements Exception {
+  const LoanApplicationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class AppDataRepository {
   const AppDataRepository._();
 
@@ -235,7 +244,11 @@ class AppDataRepository {
   // Admin email for automatic admin detection
   static const String _adminEmail = 'admin@twezimbe.co.ug';
 
-  static Future<void> ensureProfileForCurrentUser() async {
+  static Future<void> ensureProfileForCurrentUser({
+    String? fullName,
+    String? email,
+    String? phoneNumber,
+  }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       return;
@@ -257,17 +270,25 @@ class AppDataRepository {
     final userEmail = (user.email ?? '').toLowerCase().trim();
     final isAdminEmail = userEmail == _adminEmail.toLowerCase().trim();
 
+    final String normalizedFullName = fullName?.trim() ?? '';
+    final String normalizedEmail = email?.trim().toLowerCase() ?? '';
+    final String normalizedPhone = phoneNumber?.trim() ?? '';
+
     await docRef.set({
       'fullName': (existing['fullName'] as String?)?.trim().isNotEmpty == true
           ? existing['fullName'] as String
-          : _displayNameFor(user),
+          : (normalizedFullName.isNotEmpty
+                ? normalizedFullName
+                : _displayNameFor(user)),
       'email': (existing['email'] as String?)?.trim().isNotEmpty == true
           ? existing['email'] as String
-          : (user.email ?? ''),
+          : (normalizedEmail.isNotEmpty ? normalizedEmail : (user.email ?? '')),
       'phoneNumber':
           (existing['phoneNumber'] as String?)?.trim().isNotEmpty == true
           ? existing['phoneNumber'] as String
-          : (user.phoneNumber ?? ''),
+          : (normalizedPhone.isNotEmpty
+                ? normalizedPhone
+                : (user.phoneNumber ?? '')),
       'dateOfBirth': (existing['dateOfBirth'] as String?) ?? '',
       'nationalId': (existing['nationalId'] as String?) ?? '',
       'address': (existing['address'] as String?) ?? '',
@@ -276,7 +297,7 @@ class AppDataRepository {
           (existing['customerId'] as String?)?.trim().isNotEmpty == true
           ? existing['customerId'] as String
           : _customerIdFor(user),
-      'kycStatus': (existing['kycStatus'] as String?) ?? 'KYC Verified',
+      'kycStatus': (existing['kycStatus'] as String?) ?? 'Pending',
       'accountType': (existing['accountType'] as String?) ?? 'Savings Account',
       'balanceValue': (existing['balanceValue'] as num?)?.toInt() ?? 0,
       // If user is the admin email, make them admin; otherwise keep existing value
@@ -327,7 +348,7 @@ class AppDataRepository {
         customerId: (data['customerId'] as String?)?.trim().isNotEmpty == true
             ? data['customerId'] as String
             : _customerIdFor(user),
-        kycStatus: (data['kycStatus'] as String?) ?? 'KYC Verified',
+        kycStatus: (data['kycStatus'] as String?) ?? 'Pending',
         accountType: (data['accountType'] as String?) ?? 'Savings Account',
         availableBalance: _formatUgx(balanceValue),
         isAdmin: (data['isAdmin'] as bool?) ?? false,
@@ -557,13 +578,54 @@ class AppDataRepository {
       throw StateError('No authenticated user found.');
     }
 
+    if (amountValue < 50000) {
+      throw const LoanApplicationException(
+        'Minimum loan amount is UGX 50,000.',
+      );
+    }
+    if (amountValue > 200000000) {
+      throw const LoanApplicationException(
+        'Maximum loan amount is UGX 200,000,000.',
+      );
+    }
+
     await ensureLoanForCurrentUser();
+    await ensureProfileForCurrentUser();
 
     final userDoc = _userDoc(user.uid);
     final applicationsCol = userDoc.collection('loanApplications');
-    final appDoc = applicationsCol.doc();
-    final applicationId = 'APP${DateTime.now().millisecondsSinceEpoch}';
+    final pendingCheck = await applicationsCol
+        .where('status', isEqualTo: 'Pending Review')
+        .limit(1)
+        .get();
+    if (pendingCheck.docs.isNotEmpty) {
+      throw const LoanApplicationException(
+        'You already have a pending loan application. Please wait for review.',
+      );
+    }
+
+    final profileSnapshot = await userDoc.get();
+    final profileData = profileSnapshot.data() ?? <String, dynamic>{};
+    final applicantName =
+        (profileData['fullName'] as String?)?.trim().isNotEmpty == true
+        ? (profileData['fullName'] as String).trim()
+        : _displayNameFor(user);
+    final applicantEmail =
+        (profileData['email'] as String?)?.trim().isNotEmpty == true
+        ? (profileData['email'] as String).trim()
+        : (user.email ?? '');
+    final applicantPhone =
+        (profileData['phoneNumber'] as String?)?.trim().isNotEmpty == true
+        ? (profileData['phoneNumber'] as String).trim()
+        : (user.phoneNumber ?? '');
+    final customerId = (profileData['customerId'] as String?)?.trim() ?? '';
+
+    final applicationId = _applicationIdFor(user.uid);
+    final appDoc = applicationsCol.doc(applicationId);
     final now = DateTime.now();
+    final normalizedLoanType = loanType.trim();
+    final normalizedPeriod = period.trim();
+    final normalizedPurpose = purpose.trim();
 
     await _firestore.runTransaction((transaction) async {
       final activeLoanDoc = userDoc.collection('loans').doc('active');
@@ -575,22 +637,26 @@ class AppDataRepository {
       transaction.set(appDoc, {
         'applicationId': applicationId,
         'userId': user.uid,
-        'userEmail': user.email ?? '',
-        'userName': _displayNameFor(user),
-        'loanType': loanType,
+        'userEmail': applicantEmail,
+        'userName': applicantName,
+        'userPhone': applicantPhone,
+        'customerId': customerId,
+        'loanType': normalizedLoanType,
         'amountValue': amountValue,
-        'period': period,
-        'purpose': purpose,
+        'period': normalizedPeriod,
+        'purpose': normalizedPurpose,
         'status': 'Pending Review',
         'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       transaction.set(activeLoanDoc, {
-        'type': loanType,
+        'type': normalizedLoanType,
         'status': 'Pending Review',
         'remainingBalanceValue': amountValue,
-        'nextPaymentDate': 'TBD',
+        'nextPaymentDate': 'Awaiting approval',
         'repaymentProgress': currentProgress,
+        'currentApplicationId': applicationId,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     });
@@ -599,12 +665,14 @@ class AppDataRepository {
       'requestId': applicationId,
       'type': 'loanApplication',
       'userId': user.uid,
-      'userEmail': user.email ?? '',
-      'userName': _displayNameFor(user),
-      'loanType': loanType,
+      'userEmail': applicantEmail,
+      'userName': applicantName,
+      'userPhone': applicantPhone,
+      'customerId': customerId,
+      'loanType': normalizedLoanType,
       'amountValue': amountValue,
-      'period': period,
-      'purpose': purpose,
+      'period': normalizedPeriod,
+      'purpose': normalizedPurpose,
       'status': 'Pending Review',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -612,12 +680,12 @@ class AppDataRepository {
 
     await _notifyAdminsOfLoanApplication(
       applicationId: applicationId,
-      userName: _displayNameFor(user),
-      userEmail: user.email ?? '',
-      loanType: loanType,
+      userName: applicantName,
+      userEmail: applicantEmail,
+      loanType: normalizedLoanType,
       amountValue: amountValue,
-      period: period,
-      purpose: purpose,
+      period: normalizedPeriod,
+      purpose: normalizedPurpose,
     );
 
     await addNotificationForCurrentUser(
@@ -628,10 +696,10 @@ class AppDataRepository {
 
     return AppLoanApplicationData(
       applicationId: applicationId,
-      loanType: loanType,
+      loanType: normalizedLoanType,
       amount: _formatUgx(amountValue),
-      period: period,
-      purpose: purpose,
+      period: normalizedPeriod,
+      purpose: normalizedPurpose,
       status: 'Pending Review',
       createdAt: now,
     );
@@ -905,6 +973,22 @@ class AppDataRepository {
     }, SetOptions(merge: true));
   }
 
+  static Future<bool> isCurrentUserAdmin() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return false;
+    }
+
+    final userEmail = (user.email ?? '').trim().toLowerCase();
+    if (userEmail == _adminEmail.toLowerCase()) {
+      return true;
+    }
+
+    final profile = await _userDoc(user.uid).get();
+    final data = profile.data() ?? <String, dynamic>{};
+    return (data['isAdmin'] as bool?) ?? false;
+  }
+
   static Stream<List<AppProfileData>> watchAllUsers() {
     return _firestore.collection('users').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -951,31 +1035,72 @@ class AppDataRepository {
 
   static Future<void> approveLoanApplication(
     String userId,
-    String applicationId,
-  ) async {
+    String applicationId, {
+    String? loanDocumentId,
+  }) async {
     final userDoc = _userDoc(userId);
-    final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
+    final String resolvedLoanDocId =
+        (loanDocumentId?.trim().isNotEmpty ?? false)
+        ? loanDocumentId!.trim()
+        : applicationId;
+    final loanDoc = userDoc
+        .collection('loanApplications')
+        .doc(resolvedLoanDocId);
+    final admin = FirebaseAuth.instance.currentUser;
+    final reviewer = (admin?.email ?? '').trim().isNotEmpty
+        ? (admin!.email ?? '').trim()
+        : (admin?.uid ?? 'admin');
 
-    // Get the loan details first to know the amount
-    final loanSnapshot = await loanDoc.get();
-    final loanData = loanSnapshot.data();
-    final int loanAmount = (loanData?['amountValue'] as num?)?.toInt() ?? 0;
+    int loanAmount = 0;
 
-    await loanDoc.update({'status': 'Approved'});
-    await userDoc.collection('loans').doc('active').update({
-      'status': 'Active',
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    await _firestore.runTransaction((transaction) async {
+      final loanSnapshot = await transaction.get(loanDoc);
+      if (!loanSnapshot.exists) {
+        throw StateError('Loan application not found.');
+      }
 
-    // Credit the loan amount to user's balance
-    if (loanAmount > 0) {
-      await userDoc.set({
-        'balanceValue': FieldValue.increment(loanAmount),
+      final loanData = loanSnapshot.data() ?? <String, dynamic>{};
+      loanAmount = (loanData['amountValue'] as num?)?.toInt() ?? 0;
+
+      final transactionDoc = userDoc.collection('transactions').doc();
+
+      transaction.set(loanDoc, {
+        'status': 'Approved',
+        'reviewedBy': reviewer,
+        'reviewedAt': FieldValue.serverTimestamp(),
+        'rejectionReason': FieldValue.delete(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-    }
 
-    // Notify user
+      transaction.set(userDoc.collection('loans').doc('active'), {
+        'status': 'Active',
+        'nextPaymentDate': _nextPaymentDateLabel(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (loanAmount > 0) {
+        transaction.set(userDoc, {
+          'balanceValue': FieldValue.increment(loanAmount),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        transaction.set(transactionDoc, {
+          'title': 'Loan Disbursed',
+          'subtitle': 'Loan approved and credited to account',
+          'amountValue': loanAmount,
+          'isCredit': true,
+          'createdAt': Timestamp.now(),
+          'createdAtServer': FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    await updateAdminRequestStatusForLoan(
+      applicationId: applicationId,
+      status: 'Approved',
+      reviewedBy: reviewer,
+    );
+
     await addNotificationForUser(
       userId: userId,
       title: 'Loan Approved',
@@ -988,18 +1113,50 @@ class AppDataRepository {
   static Future<void> rejectLoanApplication(
     String userId,
     String applicationId,
-    String reason,
-  ) async {
+    String reason, {
+    String? loanDocumentId,
+  }) async {
     final userDoc = _userDoc(userId);
-    final loanDoc = userDoc.collection('loanApplications').doc(applicationId);
+    final String resolvedLoanDocId =
+        (loanDocumentId?.trim().isNotEmpty ?? false)
+        ? loanDocumentId!.trim()
+        : applicationId;
+    final loanDoc = userDoc
+        .collection('loanApplications')
+        .doc(resolvedLoanDocId);
+    final admin = FirebaseAuth.instance.currentUser;
+    final reviewer = (admin?.email ?? '').trim().isNotEmpty
+        ? (admin!.email ?? '').trim()
+        : (admin?.uid ?? 'admin');
+    final rejectionReason = reason.trim().isEmpty
+        ? 'Please contact support for guidance.'
+        : reason.trim();
 
-    await loanDoc.update({'status': 'Rejected', 'rejectionReason': reason});
+    await loanDoc.set({
+      'status': 'Rejected',
+      'rejectionReason': rejectionReason,
+      'reviewedBy': reviewer,
+      'reviewedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
 
-    // Notify user
+    await userDoc.collection('loans').doc('active').set({
+      'status': 'Rejected',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await updateAdminRequestStatusForLoan(
+      applicationId: applicationId,
+      status: 'Rejected',
+      reviewedBy: reviewer,
+      rejectionReason: rejectionReason,
+    );
+
     await addNotificationForUser(
       userId: userId,
       title: 'Loan Rejected',
-      message: 'Your loan application has been rejected. Reason: $reason',
+      message:
+          'Your loan application has been rejected. Reason: $rejectionReason',
       type: 'loan',
     );
   }
@@ -1061,11 +1218,33 @@ class AppDataRepository {
   static Future<void> updateAdminRequestStatusForLoan({
     required String applicationId,
     required String status,
+    String? reviewedBy,
+    String? rejectionReason,
   }) async {
-    await _firestore.collection('adminRequests').doc(applicationId).set({
+    final payload = <String, dynamic>{
       'status': status,
+      'reviewedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    };
+
+    final String reviewerValue = reviewedBy?.trim() ?? '';
+    if (reviewerValue.isNotEmpty) {
+      payload['reviewedBy'] = reviewerValue;
+    }
+
+    if (status == 'Approved') {
+      payload['rejectionReason'] = FieldValue.delete();
+    } else {
+      final String reasonValue = rejectionReason?.trim() ?? '';
+      if (reasonValue.isNotEmpty) {
+        payload['rejectionReason'] = reasonValue;
+      }
+    }
+
+    await _firestore
+        .collection('adminRequests')
+        .doc(applicationId)
+        .set(payload, SetOptions(merge: true));
   }
 
   static String formatUgx(int amount) {
@@ -1099,6 +1278,19 @@ class AppDataRepository {
     final String compact = source.replaceAll(RegExp(r'[^A-Z0-9]'), 'X');
     final String eight = compact.padRight(8, 'X').substring(0, 8);
     return eight;
+  }
+
+  static String _applicationIdFor(String userId) {
+    final int hash = userId.codeUnits.fold<int>(0, (a, b) => (a + b) % 10000);
+    final String suffix = hash.toString().padLeft(4, '0');
+    return 'APP${DateTime.now().millisecondsSinceEpoch}$suffix';
+  }
+
+  static String _nextPaymentDateLabel() {
+    final DateTime dueDate = DateTime.now().add(const Duration(days: 30));
+    final String day = dueDate.day.toString().padLeft(2, '0');
+    final String month = dueDate.month.toString().padLeft(2, '0');
+    return '$day/$month/${dueDate.year}';
   }
 
   static DocumentReference<Map<String, dynamic>> _userDoc(String uid) {

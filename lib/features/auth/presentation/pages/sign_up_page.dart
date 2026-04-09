@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
@@ -55,6 +56,19 @@ class _SignUpPageState extends State<SignUpPage> {
     return null;
   }
 
+  String? _validatePhone(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+
+    final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 10) {
+      return 'Enter a valid phone number';
+    }
+
+    return null;
+  }
+
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
       return 'Password is required';
@@ -91,6 +105,7 @@ class _SignUpPageState extends State<SignUpPage> {
     }
 
     final username = _usernameController.text.trim();
+    final phoneNumber = _phoneController.text.trim();
     final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text;
 
@@ -101,6 +116,11 @@ class _SignUpPageState extends State<SignUpPage> {
           .createUserWithEmailAndPassword(email: email, password: password);
 
       await credential.user?.updateDisplayName(username);
+      await AppDataRepository.ensureProfileForCurrentUser(
+        fullName: username,
+        email: email,
+        phoneNumber: phoneNumber,
+      );
       await credential.user?.reload();
       await FirebaseAuth.instance.signOut();
       await LocalUserSessionStore.clear();
@@ -252,6 +272,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.next,
+                  validator: _validatePhone,
                   decoration: const InputDecoration(
                     hintText: 'e.g. 0770000000',
                     prefixIcon: Icon(

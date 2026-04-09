@@ -167,16 +167,18 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
     await FirebaseAuth.instance.signOut();
     if (!mounted) return;
 
-    if (closeDrawerOnTap && Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (closeDrawerOnTap && navigator.canPop()) {
+      navigator.pop();
     }
 
     messenger.hideCurrentSnackBar();
-    Navigator.of(context).pushAndRemoveUntil(
+    navigator.pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const SignInPage()),
       (route) => false,
     );
@@ -265,10 +267,10 @@ class AdminHomeTab extends StatelessWidget {
 
               final userDocs = userSnapshot.data!.docs;
               final totalUsers = userDocs.length;
-              final totalRevenue = userDocs.fold<int>(0, (sum, doc) {
+              final totalRevenue = userDocs.fold<int>(0, (runningTotal, doc) {
                 final data = doc.data();
                 final value = (data['balanceValue'] as num?)?.toInt() ?? 0;
-                return sum + value;
+                return runningTotal + value;
               });
 
               return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

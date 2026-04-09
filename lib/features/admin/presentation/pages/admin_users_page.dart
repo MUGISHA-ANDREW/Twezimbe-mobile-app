@@ -114,7 +114,6 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -139,7 +138,20 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   );
                 }
 
-                var users = snapshot.data!.docs.where((doc) {
+                final docs = snapshot.data!.docs.toList(growable: false)
+                  ..sort((a, b) {
+                    final aCreatedAt =
+                        (a.data() as Map<String, dynamic>)['createdAt']
+                            as Timestamp?;
+                    final bCreatedAt =
+                        (b.data() as Map<String, dynamic>)['createdAt']
+                            as Timestamp?;
+                    final aMillis = aCreatedAt?.millisecondsSinceEpoch ?? 0;
+                    final bMillis = bCreatedAt?.millisecondsSinceEpoch ?? 0;
+                    return bMillis.compareTo(aMillis);
+                  });
+
+                var users = docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final name = (data['fullName'] ?? '')
                       .toString()
@@ -253,7 +265,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                                     color: AppColors.primaryBlue,
                                   ),
                                   onPressed: () =>
-                                      _showUserDetails(context, data),
+                                      _showUserDetails(context, doc.id, data),
                                 ),
                                 IconButton(
                                   icon: const Icon(
@@ -312,7 +324,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
-  void _showUserDetails(BuildContext context, Map<String, dynamic> data) {
+  void _showUserDetails(
+    BuildContext context,
+    String userId,
+    Map<String, dynamic> data,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -344,7 +360,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     child: OutlinedButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        _updateKycStatus(data['email'], 'Rejected');
+                        _updateKycStatus(userId, 'Rejected');
                       },
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.errorRed,
@@ -358,7 +374,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        _updateKycStatus(data['email'], 'KYC Verified');
+                        _updateKycStatus(userId, 'KYC Verified');
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.successGreen,
@@ -394,17 +410,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
-  Future<void> _updateKycStatus(String? email, String status) async {
-    if (email == null) return;
-
-    final query = await FirebaseFirestore.instance
-        .collection('users')
-        .where('email', isEqualTo: email)
-        .get();
-
-    for (final doc in query.docs) {
-      await doc.reference.update({'kycStatus': status});
-    }
+  Future<void> _updateKycStatus(String userId, String status) async {
+    await FirebaseFirestore.instance.collection('users').doc(userId).set({
+      'kycStatus': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
 
     if (!mounted) return;
     ScaffoldMessenger.of(

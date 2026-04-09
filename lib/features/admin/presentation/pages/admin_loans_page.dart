@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
+import 'package:twezimbeapp/core/theme/app_theme.dart';
 
 class AdminLoansPage extends StatefulWidget {
   const AdminLoansPage({super.key});
@@ -14,12 +15,15 @@ class AdminLoansPage extends StatefulWidget {
 class _AdminLoansPageState extends State<AdminLoansPage> {
   String _filterStatus = 'All';
   Timer? _refreshTimer;
+  final Map<String, bool> _decisionLoading = <String, bool>{};
 
   @override
   void initState() {
     super.initState();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
@@ -36,18 +40,21 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
 
     if (difference.inSeconds < 60) {
       return 'Just now';
-    } else if (difference.inMinutes < 60) {
+    }
+    if (difference.inMinutes < 60) {
       final minutes = difference.inMinutes;
       return '$minutes minute${minutes == 1 ? '' : 's'} ago';
-    } else if (difference.inHours < 24) {
+    }
+    if (difference.inHours < 24) {
       final hours = difference.inHours;
       return '$hours hour${hours == 1 ? '' : 's'} ago';
-    } else if (difference.inDays < 7) {
+    }
+    if (difference.inDays < 7) {
       final days = difference.inDays;
       return '$days day${days == 1 ? '' : 's'} ago';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
   }
 
   @override
@@ -71,8 +78,6 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
             style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
-
-          // Filter
           LayoutBuilder(
             builder: (context, constraints) {
               final filterDropdown = Container(
@@ -95,9 +100,10 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       )
                       .toList(),
                   onChanged: (value) {
-                    setState(() {
-                      _filterStatus = value!;
-                    });
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() => _filterStatus = value);
                   },
                 ),
               );
@@ -164,8 +170,6 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
             },
           ),
           const SizedBox(height: 24),
-
-          // Loans Table
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -200,12 +204,16 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                   );
                 }
 
-                var applications = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final status = data['status'] ?? 'Pending Review';
-                  if (_filterStatus == 'All') return true;
-                  return status == _filterStatus;
-                }).toList();
+                final applications = snapshot.data!.docs
+                    .where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final status = data['status'] ?? 'Pending Review';
+                      if (_filterStatus == 'All') {
+                        return true;
+                      }
+                      return status == _filterStatus;
+                    })
+                    .toList(growable: false);
 
                 if (applications.isEmpty) {
                   return const Padding(
@@ -224,7 +232,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                   child: DataTable(
                     columns: const [
                       DataColumn(label: Text('Application ID')),
-                      DataColumn(label: Text('User Email')),
+                      DataColumn(label: Text('Applicant')),
                       DataColumn(label: Text('Loan Type')),
                       DataColumn(label: Text('Amount')),
                       DataColumn(label: Text('Period')),
@@ -233,105 +241,135 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       DataColumn(label: Text('Date')),
                       DataColumn(label: Text('Actions')),
                     ],
-                    rows: applications.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final amountValue =
-                          (data['amountValue'] as num?)?.toInt() ?? 0;
-                      final createdAt = (data['createdAt'] as Timestamp?)
-                          ?.toDate();
+                    rows: applications
+                        .map((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final amountValue =
+                              (data['amountValue'] as num?)?.toInt() ?? 0;
+                          final createdAt = (data['createdAt'] as Timestamp?)
+                              ?.toDate();
+                          final loanDocumentId = doc.id;
+                          final applicationId =
+                              (data['applicationId'] as String?)
+                                      ?.trim()
+                                      .isNotEmpty ==
+                                  true
+                              ? (data['applicationId'] as String).trim()
+                              : loanDocumentId;
+                          final userId = _resolveUserId(
+                            data,
+                            doc.reference.parent.parent,
+                          );
+                          final isBusy =
+                              _decisionLoading[applicationId] ?? false;
+                          final status =
+                              (data['status'] as String?) ?? 'Pending Review';
 
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(data['applicationId'] ?? doc.id)),
-                          DataCell(
-                            Text(
-                              _getLoanApplicantEmail(
-                                data,
-                                doc.reference.parent.parent,
-                              ),
-                            ),
-                          ),
-                          DataCell(Text(data['loanType'] ?? '-')),
-                          DataCell(
-                            Text(AppDataRepository.formatUgx(amountValue)),
-                          ),
-                          DataCell(Text(data['period'] ?? '-')),
-                          DataCell(
-                            SizedBox(
-                              width: 150,
-                              child: Text(
-                                data['purpose'] ?? '-',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                          DataCell(
-                            _buildStatusChip(
-                              data['status'] ?? 'Pending Review',
-                            ),
-                          ),
-                          DataCell(Text(_getRelativeTime(createdAt))),
-                          DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (data['status'] == 'Pending Review') ...[
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.check_circle,
-                                      color: AppColors.successGreen,
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(applicationId)),
+                              DataCell(
+                                SizedBox(
+                                  width: 190,
+                                  child: Text(
+                                    _getLoanApplicantLabel(
+                                      data,
+                                      doc.reference.parent.parent,
                                     ),
-                                    onPressed: () async {
-                                      final parent =
-                                          doc.reference.parent.parent;
-                                      if (parent != null) {
-                                        await _approveLoan(
-                                          doc.id,
-                                          parent.path,
-                                          amountValue,
-                                        );
-                                      }
-                                    },
-                                    tooltip: 'Approve',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.cancel,
-                                      color: AppColors.errorRed,
-                                    ),
-                                    onPressed: () {
-                                      final parent =
-                                          doc.reference.parent.parent;
-                                      if (parent != null) {
-                                        _updateLoanStatus(
-                                          doc.id,
-                                          parent.path,
-                                          'Rejected',
-                                        );
-                                      }
-                                    },
-                                    tooltip: 'Reject',
-                                  ),
-                                ],
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.visibility,
-                                    color: AppColors.primaryBlue,
-                                  ),
-                                  onPressed: () => _showLoanDetails(
-                                    context,
-                                    doc.id,
-                                    data,
-                                    doc.reference.parent.parent?.path,
-                                  ),
-                                  tooltip: 'View Details',
                                 ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                              ),
+                              DataCell(Text(data['loanType'] ?? '-')),
+                              DataCell(
+                                Text(AppDataRepository.formatUgx(amountValue)),
+                              ),
+                              DataCell(Text(data['period'] ?? '-')),
+                              DataCell(
+                                SizedBox(
+                                  width: 150,
+                                  child: Text(
+                                    data['purpose'] ?? '-',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              DataCell(_buildStatusChip(status)),
+                              DataCell(Text(_getRelativeTime(createdAt))),
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (status == 'Pending Review') ...[
+                                      IconButton(
+                                        icon: isBusy
+                                            ? const SizedBox(
+                                                height: 16,
+                                                width: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.check_circle,
+                                                color: AppColors.successGreen,
+                                              ),
+                                        onPressed: (isBusy || userId == null)
+                                            ? null
+                                            : () async {
+                                                await _approveLoan(
+                                                  applicationId,
+                                                  loanDocumentId,
+                                                  userId,
+                                                  amountValue,
+                                                );
+                                              },
+                                        tooltip: userId == null
+                                            ? 'Cannot resolve applicant'
+                                            : 'Approve',
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.cancel,
+                                          color: AppColors.errorRed,
+                                        ),
+                                        onPressed: (isBusy || userId == null)
+                                            ? null
+                                            : () async {
+                                                await _rejectLoanWithReasonDialog(
+                                                  applicationId,
+                                                  loanDocumentId,
+                                                  userId,
+                                                );
+                                              },
+                                        tooltip: userId == null
+                                            ? 'Cannot resolve applicant'
+                                            : 'Reject',
+                                      ),
+                                    ],
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.visibility,
+                                        color: AppColors.primaryBlue,
+                                      ),
+                                      onPressed: () => _showLoanDetails(
+                                        context,
+                                        applicationId,
+                                        loanDocumentId,
+                                        data,
+                                        userId,
+                                      ),
+                                      tooltip: 'View Details',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        })
+                        .toList(growable: false),
                   ),
                 );
               },
@@ -387,21 +425,46 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
-  String _getLoanApplicantEmail(
+  String _getLoanApplicantLabel(
     Map<String, dynamic> loanData,
     DocumentReference? userDoc,
   ) {
-    final String? fromLoan = (loanData['userEmail'] as String?)?.trim();
-    if (fromLoan != null && fromLoan.isNotEmpty) {
-      return fromLoan;
+    final String name = (loanData['userName'] as String?)?.trim() ?? '';
+    final String email = (loanData['userEmail'] as String?)?.trim() ?? '';
+
+    if (name.isNotEmpty && email.isNotEmpty) {
+      return '$name\n$email';
+    }
+    if (email.isNotEmpty) {
+      return email;
+    }
+    if (name.isNotEmpty) {
+      return name;
     }
 
-    final String? userId = userDoc?.id.trim();
-    if (userId != null && userId.isNotEmpty) {
+    final userId = _resolveUserId(loanData, userDoc);
+    if (userId != null) {
       return 'User ID: $userId';
     }
 
     return '-';
+  }
+
+  String? _resolveUserId(
+    Map<String, dynamic> loanData,
+    DocumentReference? userDoc,
+  ) {
+    final String userIdFromLoan = (loanData['userId'] as String?)?.trim() ?? '';
+    if (userIdFromLoan.isNotEmpty) {
+      return userIdFromLoan;
+    }
+
+    final String userIdFromPath = userDoc?.id.trim() ?? '';
+    if (userIdFromPath.isNotEmpty) {
+      return userIdFromPath;
+    }
+
+    return null;
   }
 
   Widget _buildStatusChip(String status) {
@@ -437,10 +500,12 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
   void _showLoanDetails(
     BuildContext context,
     String appId,
+    String loanDocumentId,
     Map<String, dynamic> data,
-    String? userPath,
+    String? userId,
   ) {
     final amountValue = (data['amountValue'] as num?)?.toInt() ?? 0;
+    final status = (data['status'] as String?) ?? 'Pending Review';
 
     showModalBottomSheet(
       context: context,
@@ -459,21 +524,28 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
               ),
               const SizedBox(height: 20),
               _detailRow('Application ID', appId),
-              _detailRow('Loan Type', data['loanType'] ?? '-'),
+              _detailRow('Applicant', data['userName']?.toString() ?? '-'),
+              _detailRow('Email', data['userEmail']?.toString() ?? '-'),
+              _detailRow('Phone', data['userPhone']?.toString() ?? '-'),
+              _detailRow('Loan Type', data['loanType']?.toString() ?? '-'),
               _detailRow('Amount', AppDataRepository.formatUgx(amountValue)),
-              _detailRow('Period', data['period'] ?? '-'),
-              _detailRow('Purpose', data['purpose'] ?? '-'),
-              _detailRow('Status', data['status'] ?? 'Pending Review'),
+              _detailRow('Period', data['period']?.toString() ?? '-'),
+              _detailRow('Purpose', data['purpose']?.toString() ?? '-'),
+              _detailRow('Status', status),
               const SizedBox(height: 20),
-              if (data['status'] == 'Pending Review')
+              if (status == 'Pending Review')
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          if (userPath != null) {
-                            _updateLoanStatus(appId, userPath, 'Rejected');
+                          if (userId != null) {
+                            _rejectLoanWithReasonDialog(
+                              appId,
+                              loanDocumentId,
+                              userId,
+                            );
                           }
                         },
                         style: OutlinedButton.styleFrom(
@@ -488,8 +560,13 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          if (userPath != null) {
-                            _approveLoan(appId, userPath, amountValue);
+                          if (userId != null) {
+                            _approveLoan(
+                              appId,
+                              loanDocumentId,
+                              userId,
+                              amountValue,
+                            );
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -526,101 +603,79 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
-  Future<void> _updateLoanStatus(
+  Future<void> _rejectLoanWithReasonDialog(
     String appId,
-    String userPath,
-    String status,
+    String loanDocumentId,
+    String userId,
   ) async {
-    try {
-      final userDoc = FirebaseFirestore.instance.doc(userPath);
-      final loanDoc = userDoc.collection('loanApplications').doc(appId);
-
-      await loanDoc.update({'status': status});
-
-      // Also update the active loan
-      await userDoc.collection('loans').doc('active').update({
-        'status': status,
-      });
-
-      await AppDataRepository.addNotificationForUser(
-        userId: userDoc.id,
-        title: status == 'Approved' ? 'Loan Approved' : 'Loan Rejected',
-        message: status == 'Approved'
-            ? 'Your loan application has been approved!'
-            : 'Your loan application has been rejected. Please contact support.',
-        type: 'loan',
-      );
-
-      await AppDataRepository.updateAdminRequestStatusForLoan(
-        applicationId: appId,
-        status: status,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Loan $status successfully')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating loan status: $e')));
+    final reason = await _promptRejectionReason();
+    if (reason == null) {
+      return;
     }
+
+    await _rejectLoan(appId, loanDocumentId, userId, reason);
+  }
+
+  Future<String?> _promptRejectionReason() async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Reject Loan Application'),
+          content: TextField(
+            controller: controller,
+            maxLines: 3,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              hintText: 'Enter rejection reason',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) {
+                  return;
+                }
+                Navigator.of(dialogContext).pop(value);
+              },
+              child: const Text('Reject'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return reason;
   }
 
   Future<void> _approveLoan(
     String appId,
-    String userPath,
+    String loanDocumentId,
+    String userId,
     int amountValue,
   ) async {
+    if (mounted) {
+      setState(() => _decisionLoading[appId] = true);
+    }
+
     try {
-      final userDoc = FirebaseFirestore.instance.doc(userPath);
-      final loanDoc = userDoc.collection('loanApplications').doc(appId);
-
-      await loanDoc.update({'status': 'Approved'});
-
-      // Update active loan status
-      await userDoc.collection('loans').doc('active').update({
-        'status': 'Active',
-      });
-
-      // Credit the loan amount to user's balance
-      if (amountValue > 0) {
-        await userDoc.set({
-          'balanceValue': FieldValue.increment(amountValue),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        // Create a transaction record for the loan credit
-        await userDoc.collection('transactions').doc().set({
-          'title': 'Loan Disbursed',
-          'subtitle': 'Loan approved and credited to account',
-          'amountValue': amountValue,
-          'isCredit': true,
-          'createdAt': Timestamp.now(),
-          'createdAtServer': FieldValue.serverTimestamp(),
-        });
-      }
-
-      // Add notification for user
-      await AppDataRepository.addNotificationForUser(
-        userId: userDoc.id,
-        title: 'Loan Approved',
-        message:
-            'Your loan of ${AppDataRepository.formatUgx(amountValue)} has been approved and credited to your account!',
-        type: 'loan',
-      );
-
-      await AppDataRepository.updateAdminRequestStatusForLoan(
-        applicationId: appId,
-        status: 'Approved',
+      await AppDataRepository.approveLoanApplication(
+        userId,
+        appId,
+        loanDocumentId: loanDocumentId,
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Loan approved! ${AppDataRepository.formatUgx(amountValue)} credited to user balance.',
+            'Loan approved. ${AppDataRepository.formatUgx(amountValue)} credited to user account.',
           ),
         ),
       );
@@ -629,6 +684,44 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error approving loan: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _decisionLoading.remove(appId));
+      }
+    }
+  }
+
+  Future<void> _rejectLoan(
+    String appId,
+    String loanDocumentId,
+    String userId,
+    String reason,
+  ) async {
+    if (mounted) {
+      setState(() => _decisionLoading[appId] = true);
+    }
+
+    try {
+      await AppDataRepository.rejectLoanApplication(
+        userId,
+        appId,
+        reason,
+        loanDocumentId: loanDocumentId,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loan rejected successfully.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error rejecting loan: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _decisionLoading.remove(appId));
+      }
     }
   }
 }
