@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/admin/presentation/pages/admin_user_details_page.dart';
 
 class AdminUsersPage extends StatefulWidget {
   const AdminUsersPage({super.key});
@@ -246,8 +247,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                                     Icons.visibility,
                                     color: AppColors.primaryBlue,
                                   ),
-                                  onPressed: () =>
-                                      _showUserDetails(context, doc.id, data),
+                                  onPressed: () => _openUserDetails(
+                                    context,
+                                    userId: doc.id,
+                                    data: data,
+                                  ),
                                 ),
                                 IconButton(
                                   icon: const Icon(
@@ -306,76 +310,19 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
-  void _showUserDetails(
-    BuildContext context,
-    String userId,
-    Map<String, dynamic> data,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'User Details',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              _detailRow('Full Name', data['fullName'] ?? '-'),
-              _detailRow('Email', data['email'] ?? '-'),
-              _detailRow('Phone', data['phoneNumber'] ?? '-'),
-              _detailRow('Customer ID', data['customerId'] ?? '-'),
-              _detailRow('Address', data['address'] ?? '-'),
-              _detailRow('National ID', data['nationalId'] ?? '-'),
-              _detailRow('KYC Status', data['kycStatus'] ?? '-'),
-              _detailRow('Account Type', data['accountType'] ?? '-'),
-              _detailRow(
-                'Joined On',
-                _formatTimestamp(data['createdAt'] as Timestamp?),
-              ),
-              const SizedBox(height: 6),
-              _buildExtendedUserData(userId),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _updateKycStatus(userId, 'Rejected');
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.errorRed,
-                        side: const BorderSide(color: AppColors.errorRed),
-                      ),
-                      child: const Text('Reject KYC'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _updateKycStatus(userId, 'KYC Verified');
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.successGreen,
-                      ),
-                      child: const Text('Approve KYC'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+  void _openUserDetails(
+    BuildContext context, {
+    required String userId,
+    required Map<String, dynamic> data,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AdminUserDetailsPage(
+          userId: userId,
+          initialUserData: Map<String, dynamic>.from(data),
+        ),
+      ),
     );
   }
 
@@ -419,128 +366,6 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               ),
       ),
     );
-  }
-
-  Widget _buildExtendedUserData(String userId) {
-    return FutureBuilder<Map<String, String>>(
-      future: _loadUserInsights(userId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: LinearProgressIndicator(minHeight: 2),
-          );
-        }
-
-        final details = snapshot.data;
-        if (details == null) {
-          return Text(
-            'Unable to load linked user data.',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          );
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Divider(height: 24),
-            const Text(
-              'Linked Data Overview',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            _detailRow('Loan Applications', details['loanApplications'] ?? '0'),
-            _detailRow('Transactions', details['transactions'] ?? '0'),
-            _detailRow('Notifications', details['notifications'] ?? '0'),
-            _detailRow(
-              'Active Loan Status',
-              details['activeLoanStatus'] ?? '-',
-            ),
-            _detailRow(
-              'Outstanding Balance',
-              details['outstandingBalance'] ?? 'UGX 0',
-            ),
-            _detailRow('Next Payment Date', details['nextPaymentDate'] ?? '-'),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<Map<String, String>> _loadUserInsights(String userId) async {
-    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
-
-    final results = await Future.wait([
-      userRef.collection('loanApplications').get(),
-      userRef.collection('transactions').get(),
-      userRef.collection('notifications').get(),
-      userRef.collection('loans').doc('active').get(),
-    ]);
-
-    final loanApps = results[0] as QuerySnapshot<Map<String, dynamic>>;
-    final transactions = results[1] as QuerySnapshot<Map<String, dynamic>>;
-    final notifications = results[2] as QuerySnapshot<Map<String, dynamic>>;
-    final activeLoan = results[3] as DocumentSnapshot<Map<String, dynamic>>;
-    final activeLoanData = activeLoan.data() ?? const <String, dynamic>{};
-
-    return <String, String>{
-      'loanApplications': '${loanApps.size}',
-      'transactions': '${transactions.size}',
-      'notifications': '${notifications.size}',
-      'activeLoanStatus':
-          (activeLoanData['status'] as String?)?.trim().isNotEmpty == true
-          ? (activeLoanData['status'] as String)
-          : 'None',
-      'outstandingBalance':
-          'UGX ${(activeLoanData['remainingBalanceValue'] as num?)?.toInt() ?? 0}',
-      'nextPaymentDate':
-          (activeLoanData['nextPaymentDate'] as String?)?.trim().isNotEmpty ==
-              true
-          ? (activeLoanData['nextPaymentDate'] as String)
-          : 'N/A',
-    };
-  }
-
-  String _formatTimestamp(Timestamp? value) {
-    if (value == null) {
-      return '-';
-    }
-    final date = value.toDate();
-    final dd = date.day.toString().padLeft(2, '0');
-    final mm = date.month.toString().padLeft(2, '0');
-    final yyyy = date.year.toString();
-    return '$dd/$mm/$yyyy';
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600)),
-          Flexible(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.right,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _updateKycStatus(String userId, String status) async {
-    await FirebaseFirestore.instance.collection('users').doc(userId).set({
-      'kycStatus': status,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('KYC status updated to $status')));
   }
 
   void _confirmDeleteUser(
