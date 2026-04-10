@@ -22,7 +22,7 @@ class ChatHistoryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Chat History'), centerTitle: true),
-      body: StreamBuilder<String>(
+      body: StreamBuilder<String?>(
         stream: AppDataRepository.watchActiveChatConversationIdForCurrentUser(),
         builder: (context, activeSnapshot) {
           final activeConversationId = activeSnapshot.data;
@@ -134,14 +134,14 @@ class ChatHistoryPage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '${conversation.messageCount}',
+                                  '${conversation.unreadCount}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'msgs',
+                                  'unread',
                                   style: TextStyle(
                                     color: Colors.grey.shade600,
                                     fontSize: 11,

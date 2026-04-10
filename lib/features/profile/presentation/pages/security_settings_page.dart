@@ -22,6 +22,7 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
       );
 
   Future<void> _updateSecuritySetting({
+    required AppSecuritySettingsData currentSettings,
     bool? twoFactorEnabled,
     bool? transactionAlerts,
     bool? loginAlerts,
@@ -33,9 +34,11 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
     try {
       setState(() => _isUpdating = true);
       await AppDataRepository.updateSecuritySettingsForCurrentUser(
-        twoFactorEnabled: twoFactorEnabled,
-        transactionAlerts: transactionAlerts,
-        loginAlerts: loginAlerts,
+        biometricEnabled: currentSettings.biometricEnabled,
+        twoFactorEnabled: twoFactorEnabled ?? currentSettings.twoFactorEnabled,
+        transactionAlerts:
+            transactionAlerts ?? currentSettings.transactionAlerts,
+        loginAlerts: loginAlerts ?? currentSettings.loginAlerts,
       );
     } catch (_) {
       _showMessage('Could not update security setting.');
@@ -157,7 +160,10 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
                   settings.twoFactorEnabled,
                   _isUpdating
                       ? null
-                      : (val) => _updateSecuritySetting(twoFactorEnabled: val),
+                      : (val) => _updateSecuritySetting(
+                          currentSettings: settings,
+                          twoFactorEnabled: val,
+                        ),
                 ),
                 _buildToggleTile(
                   Icons.notifications_active,
@@ -166,7 +172,10 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
                   settings.transactionAlerts,
                   _isUpdating
                       ? null
-                      : (val) => _updateSecuritySetting(transactionAlerts: val),
+                      : (val) => _updateSecuritySetting(
+                          currentSettings: settings,
+                          transactionAlerts: val,
+                        ),
                 ),
                 _buildToggleTile(
                   Icons.login,
@@ -175,7 +184,10 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
                   settings.loginAlerts,
                   _isUpdating
                       ? null
-                      : (val) => _updateSecuritySetting(loginAlerts: val),
+                      : (val) => _updateSecuritySetting(
+                          currentSettings: settings,
+                          loginAlerts: val,
+                        ),
                 ),
                 const SizedBox(height: 32),
                 const Text(

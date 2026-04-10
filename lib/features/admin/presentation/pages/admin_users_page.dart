@@ -205,25 +205,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                           DataCell(
                             Row(
                               children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: AppColors.primaryBlue
-                                      .withValues(alpha: 0.1),
-                                  backgroundImage: data['photoUrl'] != null
-                                      ? NetworkImage(data['photoUrl'])
-                                      : null,
-                                  child: data['photoUrl'] == null
-                                      ? Text(
-                                          (data['fullName'] ?? 'U')[0]
-                                              .toString()
-                                              .toUpperCase(),
-                                          style: const TextStyle(
-                                            color: AppColors.primaryBlue,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        )
-                                      : null,
-                                ),
+                                _buildUserAvatar(data),
                                 const SizedBox(width: 12),
                                 Text(data['fullName'] ?? 'Unknown'),
                               ],
@@ -353,6 +335,12 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               _detailRow('National ID', data['nationalId'] ?? '-'),
               _detailRow('KYC Status', data['kycStatus'] ?? '-'),
               _detailRow('Account Type', data['accountType'] ?? '-'),
+              _detailRow(
+                'Joined On',
+                _formatTimestamp(data['createdAt'] as Timestamp?),
+              ),
+              const SizedBox(height: 6),
+              _buildExtendedUserData(userId),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -389,6 +377,139 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
         );
       },
     );
+  }
+
+  Widget _buildUserAvatar(Map<String, dynamic> data) {
+    final String fullName = (data['fullName'] ?? 'U').toString();
+    final String initials = fullName.isEmpty ? 'U' : fullName[0].toUpperCase();
+    final String? photoUrl = (data['photoUrl'] as String?)?.trim();
+
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.primaryBlue.withValues(alpha: 0.1),
+      ),
+      child: ClipOval(
+        child: photoUrl == null || photoUrl.isEmpty
+            ? Center(
+                child: Text(
+                  initials,
+                  style: const TextStyle(
+                    color: AppColors.primaryBlue,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            : Image.network(
+                photoUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) {
+                  return Center(
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        color: AppColors.primaryBlue,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _buildExtendedUserData(String userId) {
+    return FutureBuilder<Map<String, String>>(
+      future: _loadUserInsights(userId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          );
+        }
+
+        final details = snapshot.data;
+        if (details == null) {
+          return Text(
+            'Unable to load linked user data.',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Divider(height: 24),
+            const Text(
+              'Linked Data Overview',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            _detailRow('Loan Applications', details['loanApplications'] ?? '0'),
+            _detailRow('Transactions', details['transactions'] ?? '0'),
+            _detailRow('Notifications', details['notifications'] ?? '0'),
+            _detailRow(
+              'Active Loan Status',
+              details['activeLoanStatus'] ?? '-',
+            ),
+            _detailRow(
+              'Outstanding Balance',
+              details['outstandingBalance'] ?? 'UGX 0',
+            ),
+            _detailRow('Next Payment Date', details['nextPaymentDate'] ?? '-'),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<Map<String, String>> _loadUserInsights(String userId) async {
+    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+
+    final results = await Future.wait([
+      userRef.collection('loanApplications').get(),
+      userRef.collection('transactions').get(),
+      userRef.collection('notifications').get(),
+      userRef.collection('loans').doc('active').get(),
+    ]);
+
+    final loanApps = results[0] as QuerySnapshot<Map<String, dynamic>>;
+    final transactions = results[1] as QuerySnapshot<Map<String, dynamic>>;
+    final notifications = results[2] as QuerySnapshot<Map<String, dynamic>>;
+    final activeLoan = results[3] as DocumentSnapshot<Map<String, dynamic>>;
+    final activeLoanData = activeLoan.data() ?? const <String, dynamic>{};
+
+    return <String, String>{
+      'loanApplications': '${loanApps.size}',
+      'transactions': '${transactions.size}',
+      'notifications': '${notifications.size}',
+      'activeLoanStatus':
+          (activeLoanData['status'] as String?)?.trim().isNotEmpty == true
+          ? (activeLoanData['status'] as String)
+          : 'None',
+      'outstandingBalance':
+          'UGX ${(activeLoanData['remainingBalanceValue'] as num?)?.toInt() ?? 0}',
+      'nextPaymentDate':
+          (activeLoanData['nextPaymentDate'] as String?)?.trim().isNotEmpty ==
+              true
+          ? (activeLoanData['nextPaymentDate'] as String)
+          : 'N/A',
+    };
+  }
+
+  String _formatTimestamp(Timestamp? value) {
+    if (value == null) {
+      return '-';
+    }
+    final date = value.toDate();
+    final dd = date.day.toString().padLeft(2, '0');
+    final mm = date.month.toString().padLeft(2, '0');
+    final yyyy = date.year.toString();
+    return '$dd/$mm/$yyyy';
   }
 
   Widget _detailRow(String label, String value) {

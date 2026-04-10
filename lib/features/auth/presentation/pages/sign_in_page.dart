@@ -225,6 +225,9 @@ class _SignInPageState extends State<SignInPage> {
       AppDataRepository.ensureProfileForCurrentUser().catchError((_) {}),
     );
     unawaited(
+      AppDataRepository.checkAndSendPaymentDueNotification().catchError((_) {}),
+    );
+    unawaited(
       AppDataRepository.addNotificationForCurrentUser(
         title: 'Sign In Successful',
         message: 'You signed in to your account successfully.',

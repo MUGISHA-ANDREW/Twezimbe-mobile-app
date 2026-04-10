@@ -370,7 +370,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: StreamBuilder<String>(
+              child: StreamBuilder<String?>(
                 stream:
                     AppDataRepository.watchActiveChatConversationIdForCurrentUser(),
                 builder: (context, activeConversationSnapshot) {

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
@@ -12,6 +15,72 @@ class MakePaymentPage extends StatefulWidget {
 class _MakePaymentPageState extends State<MakePaymentPage> {
   String _selectedMethod = 'MTN Mobile Money';
   bool _payFullInstallment = true;
+  final TextEditingController _customAmountController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  bool _isProcessing = false;
+
+  // Loan data
+  String _loanType = 'Salary Loan';
+  int _remainingBalance = 0;
+  int _nextInstallmentAmount = 0;
+  String _nextPaymentDate = 'TBD';
+  String _loanId = '-';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLoanData();
+  }
+
+  @override
+  void dispose() {
+    _customAmountController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLoanData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final userDoc = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid);
+    final loanDoc = await userDoc.collection('loans').doc('active').get();
+
+    if (loanDoc.exists) {
+      final data = loanDoc.data() ?? {};
+      setState(() {
+        _loanType = data['type'] ?? 'Salary Loan';
+        _remainingBalance =
+            (data['remainingBalanceValue'] as num?)?.toInt() ?? 0;
+        _loanId = data['loanId'] ?? '-';
+
+        // Calculate next installment (simplified - 5% of remaining balance monthly)
+        if (_remainingBalance <= 0) {
+          _nextInstallmentAmount = 0;
+        } else {
+          _nextInstallmentAmount = (_remainingBalance * 0.05).ceil();
+          if (_nextInstallmentAmount < 10000) {
+            _nextInstallmentAmount = 10000; // Minimum
+          }
+        }
+
+        _nextPaymentDate = data['nextPaymentDate'] ?? 'TBD';
+      });
+    }
+  }
+
+  int get _paymentAmount {
+    if (_payFullInstallment) {
+      return _nextInstallmentAmount;
+    }
+    final digits = _customAmountController.text.replaceAll(
+      RegExp(r'[^0-9]'),
+      '',
+    );
+    return int.tryParse(digits) ?? 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,26 +102,26 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Column(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Salary Loan',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    _loanType,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Outstanding: UGX 1,300,000',
-                    style: TextStyle(
+                    'Outstanding: ${AppDataRepository.formatUgx(_remainingBalance)}',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
-                    'Next installment: UGX 70,000 â€¢ Due Apr 15',
-                    style: TextStyle(color: Colors.white60, fontSize: 13),
+                    'Next installment: ${AppDataRepository.formatUgx(_nextInstallmentAmount)} • Due $_nextPaymentDate',
+                    style: const TextStyle(color: Colors.white60, fontSize: 13),
                   ),
                 ],
               ),
@@ -75,7 +144,11 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
-                  _buildPaymentOption('Pay Installment', 'UGX 70,000', true),
+                  _buildPaymentOption(
+                    'Pay Installment',
+                    AppDataRepository.formatUgx(_nextInstallmentAmount),
+                    true,
+                  ),
                   const SizedBox(height: 12),
                   _buildPaymentOption(
                     'Pay Custom Amount',
@@ -105,6 +178,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
+                      controller: _customAmountController,
                       keyboardType: TextInputType.number,
                       style: const TextStyle(
                         fontSize: 22,
@@ -180,6 +254,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
+                    controller: _phoneController,
                     keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
                       hintText: 'e.g. 0770000000',
@@ -198,23 +273,26 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
             const SizedBox(height: 40),
 
             ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const TransactionSuccessPage(
-                      type: 'Repayment',
-                      amount: 'UGX 70,000',
-                      reference: 'RPY20260308001',
-                      recipient: 'Salary Loan #24VBY764F',
-                    ),
-                  ),
-                );
-              },
+              onPressed: _paymentAmount > 0 && !_isProcessing
+                  ? () => _processPayment()
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.successGreen,
+                padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text('Confirm Payment'),
+              child: _isProcessing
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      'Confirm Payment (${AppDataRepository.formatUgx(_paymentAmount)})',
+                      style: const TextStyle(fontSize: 16),
+                    ),
             ),
           ],
         ),
@@ -324,5 +402,66 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _processPayment() async {
+    if (_remainingBalance <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You have no outstanding loan balance.')),
+      );
+      return;
+    }
+
+    if (_paymentAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid amount')),
+      );
+      return;
+    }
+
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter mobile money number')),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+
+    try {
+      final paidAmount = _paymentAmount > _remainingBalance
+          ? _remainingBalance
+          : _paymentAmount;
+
+      await AppDataRepository.makeLoanRepaymentForCurrentUser(
+        amountValue: _paymentAmount,
+        method: _selectedMethod,
+      );
+
+      if (!mounted) return;
+
+      // Navigate to success page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TransactionSuccessPage(
+            type: 'Repayment',
+            amount: AppDataRepository.formatUgx(paidAmount),
+            reference: 'RPY${DateTime.now().millisecondsSinceEpoch}',
+            recipient: '$_loanType #$_loanId',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Payment failed: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
+    }
   }
 }

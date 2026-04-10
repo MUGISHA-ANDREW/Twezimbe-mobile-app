@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'dart:async';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
 import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
@@ -14,7 +15,7 @@ import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.da
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -23,12 +24,12 @@ Future<void> main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await LocalNotificationService.initialize();
   await PushNotificationService.initialize();
@@ -83,6 +84,11 @@ class _AuthGatePageState extends State<AuthGatePage> {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
       await LocalUserSessionStore.saveUser(currentUser);
+      unawaited(
+        AppDataRepository.checkAndSendPaymentDueNotification().catchError(
+          (_) {},
+        ),
+      );
       if (mounted) setState(() => _isAuthenticated = true);
       return true;
     }
@@ -91,7 +97,7 @@ class _AuthGatePageState extends State<AuthGatePage> {
     if (localSession != null && localSession.uid.isNotEmpty) {
       await LocalUserSessionStore.clear();
     }
-    
+
     if (mounted) setState(() => _isAuthenticated = false);
     return false;
   }
@@ -131,11 +137,7 @@ class _SplashScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0A3A8A),
-              Color(0xFF0A6FD6),
-              Color(0xFF1E60E2),
-            ],
+            colors: [Color(0xFF0A3A8A), Color(0xFF0A6FD6), Color(0xFF1E60E2)],
             stops: [0.0, 0.5, 1.0],
           ),
         ),
@@ -149,10 +151,7 @@ class _SplashScreen extends StatelessWidget {
                   duration: const Duration(milliseconds: 800),
                   curve: Curves.elasticOut,
                   builder: (context, value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: child,
-                    );
+                    return Transform.scale(scale: value, child: child);
                   },
                   child: Container(
                     width: 100,

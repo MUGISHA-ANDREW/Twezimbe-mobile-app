@@ -89,9 +89,7 @@ class _ProfilePageState extends State<ProfilePage> {
         SettableMetadata(contentType: _contentTypeFor(extension)),
       );
       final photoUrl = await storageRef.getDownloadURL();
-      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(
-        photoUrl,
-      ).timeout(const Duration(seconds: 2));
+      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
 
       final oldPhotoUrls = <String>{
         if (oldAuthPhotoUrl != null) oldAuthPhotoUrl,
@@ -107,10 +105,6 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
       _showMessage('Profile photo updated.');
-    } on TimeoutException {
-      _showMessage(
-        'Photo uploaded, but profile save exceeded 2 seconds. Please try again.',
-      );
     } on FirebaseException catch (error) {
       debugPrint(
         'Profile photo upload failed [${error.code}]: ${error.message}',
@@ -303,26 +297,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Stack(
                     alignment: Alignment.bottomRight,
                     children: [
-                      CircleAvatar(
-                        radius: 52,
-                        backgroundColor: AppColors.primaryBlue.withValues(
-                          alpha: 0.12,
+                      Container(
+                        width: 104,
+                        height: 104,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primaryBlue.withValues(alpha: 0.12),
                         ),
-                        backgroundImage: profile.photoUrl != null
-                            ? NetworkImage(profile.photoUrl!)
-                            : null,
-                        child: profile.photoUrl == null
-                            ? Text(
-                                profile.fullName.isNotEmpty
-                                    ? profile.fullName[0].toUpperCase()
-                                    : 'U',
-                                style: const TextStyle(
-                                  color: AppColors.primaryBlue,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 28,
-                                ),
-                              )
-                            : null,
+                        child: ClipOval(child: _buildAvatarImage(profile)),
                       ),
                       Material(
                         color: Colors.white,
@@ -455,6 +437,43 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
               ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAvatarImage(AppProfileData profile) {
+    final photoUrl = profile.photoUrl?.trim();
+    final initials = profile.fullName.isNotEmpty
+        ? profile.fullName[0].toUpperCase()
+        : 'U';
+
+    if (photoUrl == null || photoUrl.isEmpty) {
+      return Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: AppColors.primaryBlue,
+            fontWeight: FontWeight.bold,
+            fontSize: 28,
+          ),
+        ),
+      );
+    }
+
+    return Image.network(
+      photoUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) {
+        return Center(
+          child: Text(
+            initials,
+            style: const TextStyle(
+              color: AppColors.primaryBlue,
+              fontWeight: FontWeight.bold,
+              fontSize: 28,
             ),
           ),
         );
