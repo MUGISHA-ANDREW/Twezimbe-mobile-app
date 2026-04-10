@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/chatbot/domain/chatbot_service.dart';
+import 'package:twezimbeapp/features/chatbot/presentation/pages/chat_history_page.dart';
 
-enum _ChatMenuAction { startNewChat, deletePreviousChats }
+enum _ChatMenuAction { chatHistory, startNewChat, deletePreviousChats }
 
 class ChatbotPage extends StatefulWidget {
   const ChatbotPage({super.key});
@@ -258,6 +259,18 @@ class _ChatbotPageState extends State<ChatbotPage> {
     }
   }
 
+  Future<void> _openChatHistory() async {
+    if (_isAwaitingReply || _isManagingChats) {
+      return;
+    }
+
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => const ChatHistoryPage()),
+    );
+    _scrollToBottom();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -326,6 +339,9 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     enabled: !_isAwaitingReply && !_isManagingChats,
                     onSelected: (action) async {
                       switch (action) {
+                        case _ChatMenuAction.chatHistory:
+                          await _openChatHistory();
+                          break;
                         case _ChatMenuAction.startNewChat:
                           await _startNewChat();
                           break;
@@ -335,6 +351,10 @@ class _ChatbotPageState extends State<ChatbotPage> {
                       }
                     },
                     itemBuilder: (context) => const [
+                      PopupMenuItem<_ChatMenuAction>(
+                        value: _ChatMenuAction.chatHistory,
+                        child: Text('Chat history'),
+                      ),
                       PopupMenuItem<_ChatMenuAction>(
                         value: _ChatMenuAction.startNewChat,
                         child: Text('Start new chat'),

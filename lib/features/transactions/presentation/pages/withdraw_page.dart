@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
-import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 
 class WithdrawPage extends StatefulWidget {
   const WithdrawPage({super.key});
@@ -43,19 +42,6 @@ class _WithdrawPageState extends State<WithdrawPage> {
   int _parseAmount(String raw) {
     final digitsOnly = raw.replaceAll(RegExp(r'[^0-9]'), '');
     return int.tryParse(digitsOnly) ?? 0;
-  }
-
-  String _formatUgx(int amountValue) {
-    final digits = amountValue.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      final reverseIndex = digits.length - i;
-      buffer.write(digits[i]);
-      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
-        buffer.write(',');
-      }
-    }
-    return 'UGX ${buffer.toString()}';
   }
 
   String _maskedPhone(String rawPhone) {
@@ -116,14 +102,6 @@ class _WithdrawPageState extends State<WithdrawPage> {
 
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
-    final String formattedAmount = _formatUgx(amountValue);
-
-    final optimisticTx = AppTransactionData(
-      title: 'Withdrawal to $_selectedMethod',
-      subtitle: '$maskedPhone • Ref $reference',
-      amount: '- $formattedAmount',
-      isCredit: false,
-    );
 
     unawaited(
       _persistWithdrawalInBackground(
@@ -133,25 +111,16 @@ class _WithdrawPageState extends State<WithdrawPage> {
       ),
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MainLayout(
-          initialIndex: 0,
-          initialMessage:
-              'Withdrawal submitted. Balance and recent transactions are updating.',
-          optimisticRecentTransaction: optimisticTx,
-        ),
-      ),
-      (route) => false,
-    );
-
-    if (mounted) {
-      setState(() => _isSubmitting = false);
+    try {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context, true);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -354,13 +323,20 @@ class _WithdrawPageState extends State<WithdrawPage> {
                     backgroundColor: Colors.redAccent,
                   ),
                   child: _isSubmitting
-                      ? const SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                      ? const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Text('Payment processing.........'),
+                          ],
                         )
                       : const Text('Withdraw'),
                 ),

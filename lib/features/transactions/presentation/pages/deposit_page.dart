@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
-import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key});
@@ -31,19 +30,6 @@ class _DepositPageState extends State<DepositPage> {
     return int.tryParse(digitsOnly) ?? 0;
   }
 
-  String _formatUgx(int amountValue) {
-    final digits = amountValue.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      final reverseIndex = digits.length - i;
-      buffer.write(digits[i]);
-      if (reverseIndex > 1 && reverseIndex % 3 == 1) {
-        buffer.write(',');
-      }
-    }
-    return 'UGX ${buffer.toString()}';
-  }
-
   String _maskedPhone(String rawPhone) {
     final digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length < 7) {
@@ -61,15 +47,6 @@ class _DepositPageState extends State<DepositPage> {
     final d = now.day.toString().padLeft(2, '0');
     final millis = now.millisecond.toString().padLeft(3, '0');
     return 'DEP$y$m$d${now.hour}${now.minute}${now.second}$millis';
-  }
-
-  String _readableDate(DateTime dateTime) {
-    final y = dateTime.year.toString().padLeft(4, '0');
-    final m = dateTime.month.toString().padLeft(2, '0');
-    final d = dateTime.day.toString().padLeft(2, '0');
-    final hh = dateTime.hour.toString().padLeft(2, '0');
-    final mm = dateTime.minute.toString().padLeft(2, '0');
-    return '$y-$m-$d $hh:$mm';
   }
 
   Future<void> _persistDepositInBackground({
@@ -109,10 +86,8 @@ class _DepositPageState extends State<DepositPage> {
 
     setState(() => _isSubmitting = true);
 
-    final DateTime now = DateTime.now();
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
-    final String formattedAmount = _formatUgx(amountValue);
 
     unawaited(
       _persistDepositInBackground(
@@ -122,25 +97,16 @@ class _DepositPageState extends State<DepositPage> {
       ),
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    await Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => TransactionSuccessPage(
-          type: 'Deposit',
-          amount: formattedAmount,
-          reference: reference,
-          recipient: '$_selectedMethod ($maskedPhone)',
-          date: _readableDate(now),
-        ),
-      ),
-    );
-
-    if (mounted) {
-      setState(() => _isSubmitting = false);
+    try {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context, true);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -327,13 +293,20 @@ class _DepositPageState extends State<DepositPage> {
                 backgroundColor: AppColors.successGreen,
               ),
               child: _isSubmitting
-                  ? const SizedBox(
-                      height: 18,
-                      width: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text('Payment processing.........'),
+                      ],
                     )
                   : const Text('Deposit Now'),
             ),

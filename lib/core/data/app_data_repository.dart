@@ -135,6 +135,22 @@ class AppChatMessageData {
   final DateTime? createdAt;
 }
 
+class AppChatConversationData {
+  const AppChatConversationData({
+    required this.id,
+    required this.title,
+    required this.lastMessage,
+    required this.lastMessageAt,
+    required this.messageCount,
+  });
+
+  final String id;
+  final String title;
+  final String lastMessage;
+  final DateTime? lastMessageAt;
+  final int messageCount;
+}
+
 class AppSupportData {
   const AppSupportData({
     required this.phone,
@@ -972,6 +988,97 @@ class AppDataRepository {
     return _seedChatForCurrentUser();
   }
 
+  static Future<void> setActiveChatConversationIdForCurrentUser(
+    String conversationId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('No authenticated user found.');
+    }
+
+    final normalizedConversationId = conversationId.trim();
+    if (normalizedConversationId.isEmpty) {
+      throw ArgumentError('Conversation id cannot be empty.');
+    }
+
+    await _userDoc(user.uid).set({
+      'activeChatConversationId': normalizedConversationId,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  static Stream<List<AppChatConversationData>>
+  watchChatConversationsForCurrentUser({int limit = 50}) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<List<AppChatConversationData>>.value(
+        const <AppChatConversationData>[],
+      );
+    }
+
+    unawaited(_seedChatForCurrentUser().then((_) {}).catchError((_) {}));
+    final fallbackConversationId = _defaultChatConversationIdForUser(user.uid);
+
+    return _userDoc(user.uid)
+        .collection('chatMessages')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          final grouped = <String, Map<String, dynamic>>{};
+
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final rawConversationId = (data['conversationId'] as String?)
+                ?.trim();
+            final conversationId =
+                (rawConversationId != null && rawConversationId.isNotEmpty)
+                ? rawConversationId
+                : fallbackConversationId;
+            final text = (data['text'] as String?)?.trim() ?? '';
+            final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+
+            final existing = grouped[conversationId];
+            if (existing == null) {
+              grouped[conversationId] = <String, dynamic>{
+                'lastMessage': text,
+                'lastMessageAt': createdAt,
+                'messageCount': 1,
+              };
+            } else {
+              existing['messageCount'] = (existing['messageCount'] as int) + 1;
+            }
+          }
+
+          final conversations = grouped.entries
+              .map((entry) {
+                final lastMessageAt = entry.value['lastMessageAt'] as DateTime?;
+                return AppChatConversationData(
+                  id: entry.key,
+                  title: _chatConversationTitleFor(entry.key, lastMessageAt),
+                  lastMessage: (entry.value['lastMessage'] as String?) ?? '',
+                  lastMessageAt: lastMessageAt,
+                  messageCount: (entry.value['messageCount'] as int?) ?? 0,
+                );
+              })
+              .toList(growable: false);
+
+          conversations.sort((a, b) {
+            final left = a.lastMessageAt;
+            final right = b.lastMessageAt;
+            if (left == null && right == null) return 0;
+            if (left == null) return 1;
+            if (right == null) return -1;
+            return right.compareTo(left);
+          });
+
+          if (conversations.length <= limit) {
+            return conversations;
+          }
+
+          return conversations.sublist(0, limit);
+        });
+  }
+
   static Future<String> startNewChatForCurrentUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -1620,6 +1727,26 @@ class AppDataRepository {
 
   static String _newChatConversationId() {
     return 'chat_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  static String _chatConversationTitleFor(
+    String conversationId,
+    DateTime? lastMessageAt,
+  ) {
+    if (conversationId.endsWith('_default')) {
+      return 'Default chat';
+    }
+
+    if (lastMessageAt == null) {
+      return 'Chat session';
+    }
+
+    final y = lastMessageAt.year.toString().padLeft(4, '0');
+    final m = lastMessageAt.month.toString().padLeft(2, '0');
+    final d = lastMessageAt.day.toString().padLeft(2, '0');
+    final hh = lastMessageAt.hour.toString().padLeft(2, '0');
+    final mm = lastMessageAt.minute.toString().padLeft(2, '0');
+    return 'Chat $y-$m-$d $hh:$mm';
   }
 
   static String _formatUgx(int amount) {
