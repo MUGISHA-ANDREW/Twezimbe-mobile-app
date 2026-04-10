@@ -19,11 +19,7 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'twezimbe.db');
 
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _onCreate,
-    );
+    return await openDatabase(path, version: 1, onCreate: _onCreate);
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -139,12 +135,30 @@ class DatabaseHelper {
   // User operations
   Future<int> insertUser(Map<String, dynamic> user) async {
     final db = await database;
-    return await db.insert('users', user, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'users',
+      user,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> upsertUsers(List<Map<String, dynamic>> users) async {
+    if (users.isEmpty) return;
+    final db = await database;
+    final batch = db.batch();
+    for (final user in users) {
+      batch.insert('users', user, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<Map<String, dynamic>?> getUser(String userId) async {
     final db = await database;
-    final results = await db.query('users', where: 'id = ?', whereArgs: [userId]);
+    final results = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
     return results.isNotEmpty ? results.first : null;
   }
 
@@ -163,15 +177,47 @@ class DatabaseHelper {
     return await db.delete('users', where: 'id = ?', whereArgs: [userId]);
   }
 
+  Future<void> deleteUserRelatedData(String userId) async {
+    final db = await database;
+    final batch = db.batch();
+    batch.delete('loan_applications', where: 'userId = ?', whereArgs: [userId]);
+    batch.delete('loans', where: 'userId = ?', whereArgs: [userId]);
+    batch.delete('transactions', where: 'userId = ?', whereArgs: [userId]);
+    batch.delete('notifications', where: 'userId = ?', whereArgs: [userId]);
+    batch.delete('admin_requests', where: 'userId = ?', whereArgs: [userId]);
+    batch.delete('users', where: 'id = ?', whereArgs: [userId]);
+    await batch.commit(noResult: true);
+  }
+
   // Loan operations
   Future<int> insertLoan(Map<String, dynamic> loan) async {
     final db = await database;
-    return await db.insert('loans', loan, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'loans',
+      loan,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<Map<String, dynamic>?> getActiveLoan(String userId) async {
     final db = await database;
-    final results = await db.query('loans', where: 'userId = ? AND status = ?', whereArgs: [userId, 'Active']);
+    final results = await db.query(
+      'loans',
+      where: 'userId = ? AND status = ?',
+      whereArgs: [userId, 'Active'],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<Map<String, dynamic>?> getLatestLoanForUser(String userId) async {
+    final db = await database;
+    final results = await db.query(
+      'loans',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'updatedAt DESC, createdAt DESC',
+      limit: 1,
+    );
     return results.isNotEmpty ? results.first : null;
   }
 
@@ -183,12 +229,51 @@ class DatabaseHelper {
   // Loan Application operations
   Future<int> insertLoanApplication(Map<String, dynamic> app) async {
     final db = await database;
-    return await db.insert('loan_applications', app, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'loan_applications',
+      app,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> upsertLoanApplications(List<Map<String, dynamic>> apps) async {
+    if (apps.isEmpty) return;
+    final db = await database;
+    final batch = db.batch();
+    for (final app in apps) {
+      batch.insert(
+        'loan_applications',
+        app,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<List<Map<String, dynamic>>> getLoanApplications(String userId) async {
     final db = await database;
-    return await db.query('loan_applications', where: 'userId = ?', whereArgs: [userId], orderBy: 'createdAt DESC');
+    return await db.query(
+      'loan_applications',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'createdAt DESC',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getLoanApplicationsPaged(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'loan_applications',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllLoanApplications() async {
@@ -198,13 +283,25 @@ class DatabaseHelper {
 
   Future<Map<String, dynamic>?> getLoanApplication(String applicationId) async {
     final db = await database;
-    final results = await db.query('loan_applications', where: 'applicationId = ?', whereArgs: [applicationId]);
+    final results = await db.query(
+      'loan_applications',
+      where: 'applicationId = ?',
+      whereArgs: [applicationId],
+    );
     return results.isNotEmpty ? results.first : null;
   }
 
-  Future<int> updateLoanApplication(String applicationId, Map<String, dynamic> app) async {
+  Future<int> updateLoanApplication(
+    String applicationId,
+    Map<String, dynamic> app,
+  ) async {
     final db = await database;
-    return await db.update('loan_applications', app, where: 'applicationId = ?', whereArgs: [applicationId]);
+    return await db.update(
+      'loan_applications',
+      app,
+      where: 'applicationId = ?',
+      whereArgs: [applicationId],
+    );
   }
 
   // Transaction operations
@@ -213,9 +310,50 @@ class DatabaseHelper {
     return await db.insert('transactions', tx);
   }
 
-  Future<List<Map<String, dynamic>>> getTransactions(String userId, {int limit = 100}) async {
+  Future<void> upsertTransactions(
+    List<Map<String, dynamic>> transactions,
+  ) async {
+    if (transactions.isEmpty) return;
     final db = await database;
-    return await db.query('transactions', where: 'userId = ?', whereArgs: [userId], orderBy: 'createdAt DESC', limit: limit);
+    final batch = db.batch();
+    for (final tx in transactions) {
+      batch.insert(
+        'transactions',
+        tx,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<Map<String, dynamic>>> getTransactions(
+    String userId, {
+    int limit = 100,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'transactions',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getTransactionsPaged(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'transactions',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+      offset: offset,
+    );
   }
 
   // Notification operations
@@ -224,25 +362,80 @@ class DatabaseHelper {
     return await db.insert('notifications', notif);
   }
 
-  Future<List<Map<String, dynamic>>> getNotifications(String userId, {int limit = 100}) async {
+  Future<void> upsertNotifications(
+    List<Map<String, dynamic>> notifications,
+  ) async {
+    if (notifications.isEmpty) return;
     final db = await database;
-    return await db.query('notifications', where: 'userId = ?', whereArgs: [userId], orderBy: 'createdAt DESC', limit: limit);
+    final batch = db.batch();
+    for (final notif in notifications) {
+      batch.insert(
+        'notifications',
+        notif,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<Map<String, dynamic>>> getNotifications(
+    String userId, {
+    int limit = 100,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'notifications',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getNotificationsPaged(
+    String userId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    return await db.query(
+      'notifications',
+      where: 'userId = ?',
+      whereArgs: [userId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+      offset: offset,
+    );
   }
 
   Future<int> markNotificationRead(String notifId) async {
     final db = await database;
-    return await db.update('notifications', {'isRead': 1}, where: 'id = ?', whereArgs: [notifId]);
+    return await db.update(
+      'notifications',
+      {'isRead': 1},
+      where: 'id = ?',
+      whereArgs: [notifId],
+    );
   }
 
   Future<int> markAllNotificationsRead(String userId) async {
     final db = await database;
-    return await db.update('notifications', {'isRead': 1}, where: 'userId = ? AND isRead = 0', whereArgs: [userId]);
+    return await db.update(
+      'notifications',
+      {'isRead': 1},
+      where: 'userId = ? AND isRead = 0',
+      whereArgs: [userId],
+    );
   }
 
   // Admin Request operations
   Future<int> insertAdminRequest(Map<String, dynamic> req) async {
     final db = await database;
-    return await db.insert('admin_requests', req, conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'admin_requests',
+      req,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getAllAdminRequests() async {
@@ -250,9 +443,17 @@ class DatabaseHelper {
     return await db.query('admin_requests', orderBy: 'createdAt DESC');
   }
 
-  Future<int> updateAdminRequest(String requestId, Map<String, dynamic> req) async {
+  Future<int> updateAdminRequest(
+    String requestId,
+    Map<String, dynamic> req,
+  ) async {
     final db = await database;
-    return await db.update('admin_requests', req, where: 'requestId = ?', whereArgs: [requestId]);
+    return await db.update(
+      'admin_requests',
+      req,
+      where: 'requestId = ?',
+      whereArgs: [requestId],
+    );
   }
 
   // Admin: Get all users (for admin dashboard)
@@ -265,9 +466,37 @@ class DatabaseHelper {
   Future<int> getPendingLoansCount() async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM loan_applications WHERE status = 'Pending Review'"
+      "SELECT COUNT(*) as count FROM loan_applications WHERE status = 'Pending Review'",
     );
     return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> getActiveLoansCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as count FROM loan_applications WHERE status = 'Approved' OR status = 'Active'",
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllLoansForAdmin() async {
+    final db = await database;
+    return await db.query('loans', orderBy: 'updatedAt DESC, createdAt DESC');
+  }
+
+  Future<int> getTotalUserBalances() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COALESCE(SUM(balanceValue), 0) as total FROM users',
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentUsersForAdmin({
+    int limit = 5,
+  }) async {
+    final db = await database;
+    return await db.query('users', orderBy: 'createdAt DESC', limit: limit);
   }
 
   // Get total users count

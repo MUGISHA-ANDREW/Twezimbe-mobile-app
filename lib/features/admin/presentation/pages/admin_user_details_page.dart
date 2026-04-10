@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/admin/data/admin_local_repository.dart';
+import 'package:twezimbeapp/features/admin/domain/models/admin_loan_application_model.dart';
+import 'package:twezimbeapp/features/admin/domain/models/admin_notification_model.dart';
+import 'package:twezimbeapp/features/admin/domain/models/admin_transaction_model.dart';
+import 'package:twezimbeapp/features/admin/domain/models/admin_user_model.dart';
 
 enum _ExportAction { csv, pdf }
 
@@ -27,6 +31,11 @@ class AdminUserDetailsPage extends StatefulWidget {
 class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
   static const int _pageSize = 20;
 
+  final AdminLocalRepository _repository = AdminLocalRepository();
+
+  AdminUserModel? _user;
+  bool _isLoadingUser = true;
+
   bool _isUpdatingKyc = false;
   bool _isUpdatingAdminRole = false;
   bool _isExporting = false;
@@ -34,33 +43,57 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
   bool _isLoadingLoans = false;
   bool _hasMoreLoans = true;
   String? _loanError;
-  DocumentSnapshot<Map<String, dynamic>>? _lastLoanDoc;
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> _loanDocs =
-      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+  int _loanOffset = 0;
+  final List<AdminLoanApplicationModel> _loanItems =
+      <AdminLoanApplicationModel>[];
 
   bool _isLoadingTransactions = false;
   bool _hasMoreTransactions = true;
   String? _transactionError;
-  DocumentSnapshot<Map<String, dynamic>>? _lastTransactionDoc;
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> _transactionDocs =
-      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+  int _transactionOffset = 0;
+  final List<AdminTransactionModel> _transactionItems =
+      <AdminTransactionModel>[];
 
   bool _isLoadingNotifications = false;
   bool _hasMoreNotifications = true;
   String? _notificationError;
-  DocumentSnapshot<Map<String, dynamic>>? _lastNotificationDoc;
-  final List<QueryDocumentSnapshot<Map<String, dynamic>>> _notificationDocs =
-      <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-
-  DocumentReference<Map<String, dynamic>> get _userRef =>
-      FirebaseFirestore.instance.collection('users').doc(widget.userId);
+  int _notificationOffset = 0;
+  final List<AdminNotificationModel> _notificationItems =
+      <AdminNotificationModel>[];
 
   @override
   void initState() {
     super.initState();
+    _loadUser(refreshCollections: true);
     _loadLoanApplications(refresh: true);
     _loadTransactions(refresh: true);
     _loadNotifications(refresh: true);
+  }
+
+  Future<void> _loadUser({required bool refreshCollections}) async {
+    setState(() => _isLoadingUser = true);
+    try {
+      if (refreshCollections) {
+        await _repository.syncUserCollectionsFromRemote(widget.userId);
+      }
+
+      final user = await _repository.getUserById(widget.userId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _user = user;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Failed to load user profile: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingUser = false);
+      }
+    }
   }
 
   Future<void> _loadLoanApplications({required bool refresh}) async {
@@ -76,33 +109,27 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
     });
 
     try {
-      var query = _userRef
-          .collection('loanApplications')
-          .orderBy('createdAt', descending: true)
-          .limit(_pageSize);
-
-      if (!refresh && _lastLoanDoc != null) {
-        query = query.startAfterDocument(_lastLoanDoc!);
-      }
-
-      final snapshot = await query.get();
+      final offset = refresh ? 0 : _loanOffset;
+      final page = await _repository.getUserLoanApplicationsPaged(
+        widget.userId,
+        limit: _pageSize,
+        offset: offset,
+      );
       if (!mounted) {
         return;
       }
 
       setState(() {
         if (refresh) {
-          _loanDocs
+          _loanItems
             ..clear()
-            ..addAll(snapshot.docs);
-          _lastLoanDoc = snapshot.docs.isEmpty ? null : snapshot.docs.last;
+            ..addAll(page);
+          _loanOffset = page.length;
         } else {
-          _loanDocs.addAll(snapshot.docs);
-          if (snapshot.docs.isNotEmpty) {
-            _lastLoanDoc = snapshot.docs.last;
-          }
+          _loanItems.addAll(page);
+          _loanOffset += page.length;
         }
-        _hasMoreLoans = snapshot.docs.length == _pageSize;
+        _hasMoreLoans = page.length == _pageSize;
         _loanError = null;
       });
     } catch (error) {
@@ -134,35 +161,27 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
     });
 
     try {
-      var query = _userRef
-          .collection('transactions')
-          .orderBy('createdAt', descending: true)
-          .limit(_pageSize);
-
-      if (!refresh && _lastTransactionDoc != null) {
-        query = query.startAfterDocument(_lastTransactionDoc!);
-      }
-
-      final snapshot = await query.get();
+      final offset = refresh ? 0 : _transactionOffset;
+      final page = await _repository.getUserTransactionsPaged(
+        widget.userId,
+        limit: _pageSize,
+        offset: offset,
+      );
       if (!mounted) {
         return;
       }
 
       setState(() {
         if (refresh) {
-          _transactionDocs
+          _transactionItems
             ..clear()
-            ..addAll(snapshot.docs);
-          _lastTransactionDoc = snapshot.docs.isEmpty
-              ? null
-              : snapshot.docs.last;
+            ..addAll(page);
+          _transactionOffset = page.length;
         } else {
-          _transactionDocs.addAll(snapshot.docs);
-          if (snapshot.docs.isNotEmpty) {
-            _lastTransactionDoc = snapshot.docs.last;
-          }
+          _transactionItems.addAll(page);
+          _transactionOffset += page.length;
         }
-        _hasMoreTransactions = snapshot.docs.length == _pageSize;
+        _hasMoreTransactions = page.length == _pageSize;
         _transactionError = null;
       });
     } catch (error) {
@@ -194,35 +213,27 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
     });
 
     try {
-      var query = _userRef
-          .collection('notifications')
-          .orderBy('createdAt', descending: true)
-          .limit(_pageSize);
-
-      if (!refresh && _lastNotificationDoc != null) {
-        query = query.startAfterDocument(_lastNotificationDoc!);
-      }
-
-      final snapshot = await query.get();
+      final offset = refresh ? 0 : _notificationOffset;
+      final page = await _repository.getUserNotificationsPaged(
+        widget.userId,
+        limit: _pageSize,
+        offset: offset,
+      );
       if (!mounted) {
         return;
       }
 
       setState(() {
         if (refresh) {
-          _notificationDocs
+          _notificationItems
             ..clear()
-            ..addAll(snapshot.docs);
-          _lastNotificationDoc = snapshot.docs.isEmpty
-              ? null
-              : snapshot.docs.last;
+            ..addAll(page);
+          _notificationOffset = page.length;
         } else {
-          _notificationDocs.addAll(snapshot.docs);
-          if (snapshot.docs.isNotEmpty) {
-            _lastNotificationDoc = snapshot.docs.last;
-          }
+          _notificationItems.addAll(page);
+          _notificationOffset += page.length;
         }
-        _hasMoreNotifications = snapshot.docs.length == _pageSize;
+        _hasMoreNotifications = page.length == _pageSize;
         _notificationError = null;
       });
     } catch (error) {
@@ -248,24 +259,17 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
 
     setState(() => _isUpdatingKyc = true);
     try {
-      await _userRef.set({
-        'kycStatus': status,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
+      await _repository.updateKycStatus(widget.userId, status);
+      await _loadUser(refreshCollections: false);
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('KYC status updated to $status')));
+      _showMessage('KYC status updated to $status');
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update KYC status: $error')),
-      );
+      _showMessage('Failed to update KYC status: $error');
     } finally {
       if (mounted) {
         setState(() => _isUpdatingKyc = false);
@@ -280,30 +284,21 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
 
     setState(() => _isUpdatingAdminRole = true);
     try {
-      await _userRef.set({
-        'isAdmin': makeAdmin,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
+      await _repository.toggleAdminRole(widget.userId, makeAdmin);
+      await _loadUser(refreshCollections: false);
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            makeAdmin
-                ? 'User promoted to admin successfully.'
-                : 'Admin role removed successfully.',
-          ),
-        ),
+      _showMessage(
+        makeAdmin
+            ? 'User promoted to admin successfully.'
+            : 'Admin role removed successfully.',
       );
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update admin role: $error')),
-      );
+      _showMessage('Failed to update admin role: $error');
     } finally {
       if (mounted) {
         setState(() => _isUpdatingAdminRole = false);
@@ -322,9 +317,23 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
     setState(() => _isExporting = true);
     try {
       final userData = Map<String, dynamic>.from(currentUserData);
-      final loans = await _fetchAllCollectionDocs('loanApplications');
-      final transactions = await _fetchAllCollectionDocs('transactions');
-      final notifications = await _fetchAllCollectionDocs('notifications');
+      final loans = await _repository.getAllLoanApplicationsForUser(
+        widget.userId,
+      );
+      final transactions = await _repository.getAllTransactionsForUser(
+        widget.userId,
+      );
+      final notifications = await _repository.getAllNotificationsForUser(
+        widget.userId,
+      );
+
+      final loanRows = loans.map(_loanToMap).toList(growable: false);
+      final transactionRows = transactions
+          .map(_transactionToMap)
+          .toList(growable: false);
+      final notificationRows = notifications
+          .map(_notificationToMap)
+          .toList(growable: false);
 
       final fullName = _stringValue(
         userData['fullName'],
@@ -338,18 +347,18 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
           savedPath = await _exportCsv(
             fileBaseName: fileBaseName,
             userData: userData,
-            loans: loans,
-            transactions: transactions,
-            notifications: notifications,
+            loans: loanRows,
+            transactions: transactionRows,
+            notifications: notificationRows,
           );
           break;
         case _ExportAction.pdf:
           savedPath = await _exportPdf(
             fileBaseName: fileBaseName,
             userData: userData,
-            loans: loans,
-            transactions: transactions,
-            notifications: notifications,
+            loans: loanRows,
+            transactions: transactionRows,
+            notifications: notificationRows,
           );
           break;
       }
@@ -376,41 +385,36 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchAllCollectionDocs(
-    String collectionName,
-  ) async {
-    const int pageSize = 300;
-    final List<Map<String, dynamic>> allRows = <Map<String, dynamic>>[];
-    DocumentSnapshot<Map<String, dynamic>>? lastDoc;
+  Map<String, dynamic> _loanToMap(AdminLoanApplicationModel model) {
+    return <String, dynamic>{
+      'applicationId': model.applicationId,
+      'loanType': model.loanType,
+      'amountValue': model.amountValue,
+      'period': model.period,
+      'purpose': model.purpose,
+      'status': model.status,
+      'createdAt': model.createdAt?.toIso8601String(),
+    };
+  }
 
-    while (true) {
-      var query = _userRef
-          .collection(collectionName)
-          .orderBy('createdAt', descending: true)
-          .limit(pageSize);
+  Map<String, dynamic> _transactionToMap(AdminTransactionModel model) {
+    return <String, dynamic>{
+      'title': model.title,
+      'subtitle': model.subtitle,
+      'amountValue': model.amountValue,
+      'isCredit': model.isCredit,
+      'createdAt': model.createdAt?.toIso8601String(),
+    };
+  }
 
-      if (lastDoc != null) {
-        query = query.startAfterDocument(lastDoc);
-      }
-
-      final snapshot = await query.get();
-      if (snapshot.docs.isEmpty) {
-        break;
-      }
-
-      for (final doc in snapshot.docs) {
-        final row = Map<String, dynamic>.from(doc.data());
-        row['_docId'] = doc.id;
-        allRows.add(row);
-      }
-
-      lastDoc = snapshot.docs.last;
-      if (snapshot.docs.length < pageSize) {
-        break;
-      }
-    }
-
-    return allRows;
+  Map<String, dynamic> _notificationToMap(AdminNotificationModel model) {
+    return <String, dynamic>{
+      'title': model.title,
+      'message': model.message,
+      'type': model.type,
+      'isRead': model.isRead,
+      'createdAt': model.createdAt?.toIso8601String(),
+    };
   }
 
   Future<String?> _exportCsv({
@@ -754,107 +758,104 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: _userRef.snapshots(),
-      builder: (context, snapshot) {
-        final liveData = snapshot.data?.data();
-        final userData =
-            liveData ?? widget.initialUserData ?? <String, dynamic>{};
+    final currentUser = _user;
+    final userData =
+        currentUser?.toMap() ?? widget.initialUserData ?? <String, dynamic>{};
 
-        final fullName = _stringValue(
-          userData['fullName'],
-          fallback: 'Unknown User',
-        );
-        final email = _stringValue(userData['email']);
+    final fullName = _stringValue(
+      userData['fullName'],
+      fallback: 'Unknown User',
+    );
+    final email = _stringValue(userData['email']);
 
-        return DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text(fullName),
-              centerTitle: true,
-              actions: [
-                if (_isExporting)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                IconButton(
-                  tooltip: 'Refresh data',
-                  onPressed: () {
-                    _loadLoanApplications(refresh: true);
-                    _loadTransactions(refresh: true);
-                    _loadNotifications(refresh: true);
-                  },
-                  icon: const Icon(Icons.refresh),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(fullName),
+          centerTitle: true,
+          actions: [
+            if (_isExporting)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                PopupMenuButton<_ExportAction>(
-                  tooltip: 'Export',
-                  onSelected: (action) {
-                    _handleExportAction(action, userData);
-                  },
-                  itemBuilder: (context) =>
-                      const <PopupMenuEntry<_ExportAction>>[
-                        PopupMenuItem<_ExportAction>(
-                          value: _ExportAction.csv,
-                          child: Text('Export CSV'),
-                        ),
-                        PopupMenuItem<_ExportAction>(
-                          value: _ExportAction.pdf,
-                          child: Text('Export PDF'),
-                        ),
-                      ],
+              ),
+            IconButton(
+              tooltip: 'Refresh data',
+              onPressed: () {
+                _loadUser(refreshCollections: false);
+                _loadLoanApplications(refresh: true);
+                _loadTransactions(refresh: true);
+                _loadNotifications(refresh: true);
+              },
+              icon: const Icon(Icons.refresh),
+            ),
+            PopupMenuButton<_ExportAction>(
+              tooltip: 'Export',
+              onSelected: (action) {
+                _handleExportAction(action, userData);
+              },
+              itemBuilder: (context) => const <PopupMenuEntry<_ExportAction>>[
+                PopupMenuItem<_ExportAction>(
+                  value: _ExportAction.csv,
+                  child: Text('Export CSV'),
+                ),
+                PopupMenuItem<_ExportAction>(
+                  value: _ExportAction.pdf,
+                  child: Text('Export PDF'),
                 ),
               ],
             ),
-            body: Column(
-              children: [
-                _buildHeader(userData),
-                if (email.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        email,
-                        style: TextStyle(
-                          color: Colors.grey.shade700,
-                          fontWeight: FontWeight.w500,
+          ],
+        ),
+        body: _isLoadingUser && currentUser == null
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  _buildHeader(userData),
+                  if (email.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          email,
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),
+                  Material(
+                    color: Colors.white,
+                    child: const TabBar(
+                      labelColor: AppColors.primaryBlue,
+                      unselectedLabelColor: Colors.grey,
+                      indicatorColor: AppColors.primaryBlue,
+                      tabs: [
+                        Tab(text: 'Loans'),
+                        Tab(text: 'Transactions'),
+                        Tab(text: 'Notifications'),
+                      ],
+                    ),
                   ),
-                Material(
-                  color: Colors.white,
-                  child: const TabBar(
-                    labelColor: AppColors.primaryBlue,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: AppColors.primaryBlue,
-                    tabs: [
-                      Tab(text: 'Loans'),
-                      Tab(text: 'Transactions'),
-                      Tab(text: 'Notifications'),
-                    ],
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        _buildLoanApplicationsTab(),
+                        _buildTransactionsTab(),
+                        _buildNotificationsTab(),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      _buildLoanApplicationsTab(),
-                      _buildTransactionsTab(),
-                      _buildNotificationsTab(),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+                ],
+              ),
+      ),
     );
   }
 
@@ -974,23 +975,22 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
   }
 
   Widget _buildLoanApplicationsTab() {
-    return _buildPaginatedList(
-      docs: _loanDocs,
+    return _buildPaginatedList<AdminLoanApplicationModel>(
+      items: _loanItems,
       isLoading: _isLoadingLoans,
       hasMore: _hasMoreLoans,
       error: _loanError,
       emptyLabel: 'No loan applications found for this user.',
       onRefresh: () => _loadLoanApplications(refresh: true),
       onLoadMore: () => _loadLoanApplications(refresh: false),
-      itemBuilder: (doc) {
-        final data = doc.data();
-        final status = _stringValue(data['status'], fallback: 'Pending Review');
-        final amount = _formatUgx(_intValue(data['amountValue']));
+      itemBuilder: (loan) {
+        final status = loan.status;
+        final amount = _formatUgx(loan.amountValue);
 
         return _cardTile(
-          title: _stringValue(data['loanType'], fallback: 'Loan Application'),
+          title: loan.loanType.isEmpty ? 'Loan Application' : loan.loanType,
           subtitle:
-              'Amount: $amount\nPeriod: ${_stringValue(data['period'], fallback: '-')}\nPurpose: ${_stringValue(data['purpose'], fallback: '-')}',
+              'Amount: $amount\nPeriod: ${loan.period.isEmpty ? '-' : loan.period}\nPurpose: ${loan.purpose.isEmpty ? '-' : loan.purpose}',
           trailing: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -998,7 +998,7 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
               _statusChip(status),
               const SizedBox(height: 6),
               Text(
-                _formatDateTime(data['createdAt']),
+                _formatDateTime(loan.createdAt),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
@@ -1009,25 +1009,24 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
   }
 
   Widget _buildTransactionsTab() {
-    return _buildPaginatedList(
-      docs: _transactionDocs,
+    return _buildPaginatedList<AdminTransactionModel>(
+      items: _transactionItems,
       isLoading: _isLoadingTransactions,
       hasMore: _hasMoreTransactions,
       error: _transactionError,
       emptyLabel: 'No transactions found for this user.',
       onRefresh: () => _loadTransactions(refresh: true),
       onLoadMore: () => _loadTransactions(refresh: false),
-      itemBuilder: (doc) {
-        final data = doc.data();
-        final isCredit = _boolValue(data['isCredit']);
-        final amount = _formatUgx(_intValue(data['amountValue']));
+      itemBuilder: (tx) {
+        final isCredit = tx.isCredit;
+        final amount = _formatUgx(tx.amountValue);
         final amountColor = isCredit
             ? AppColors.successGreen
             : AppColors.errorRed;
 
         return _cardTile(
-          title: _stringValue(data['title'], fallback: 'Transaction'),
-          subtitle: _stringValue(data['subtitle'], fallback: '-'),
+          title: tx.title.isEmpty ? 'Transaction' : tx.title,
+          subtitle: tx.subtitle.isEmpty ? '-' : tx.subtitle,
           trailing: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1041,7 +1040,7 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                _formatDateTime(data['createdAt']),
+                _formatDateTime(tx.createdAt),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
@@ -1052,21 +1051,20 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
   }
 
   Widget _buildNotificationsTab() {
-    return _buildPaginatedList(
-      docs: _notificationDocs,
+    return _buildPaginatedList<AdminNotificationModel>(
+      items: _notificationItems,
       isLoading: _isLoadingNotifications,
       hasMore: _hasMoreNotifications,
       error: _notificationError,
       emptyLabel: 'No notifications found for this user.',
       onRefresh: () => _loadNotifications(refresh: true),
       onLoadMore: () => _loadNotifications(refresh: false),
-      itemBuilder: (doc) {
-        final data = doc.data();
-        final isRead = _boolValue(data['isRead']);
+      itemBuilder: (notif) {
+        final isRead = notif.isRead;
 
         return _cardTile(
-          title: _stringValue(data['title'], fallback: 'Notification'),
-          subtitle: _stringValue(data['message'], fallback: '-'),
+          title: notif.title.isEmpty ? 'Notification' : notif.title,
+          subtitle: notif.message.isEmpty ? '-' : notif.message,
           trailing: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1080,7 +1078,7 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                _formatDateTime(data['createdAt']),
+                _formatDateTime(notif.createdAt),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
               ),
             ],
@@ -1090,18 +1088,17 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
     );
   }
 
-  Widget _buildPaginatedList({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  Widget _buildPaginatedList<T>({
+    required List<T> items,
     required bool isLoading,
     required bool hasMore,
     required String? error,
     required String emptyLabel,
     required Future<void> Function() onRefresh,
     required Future<void> Function() onLoadMore,
-    required Widget Function(QueryDocumentSnapshot<Map<String, dynamic>> doc)
-    itemBuilder,
+    required Widget Function(T item) itemBuilder,
   }) {
-    if (error != null && docs.isEmpty) {
+    if (error != null && items.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -1133,20 +1130,20 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 22),
-        itemCount: docs.length + 1,
+        itemCount: items.length + 1,
         itemBuilder: (context, index) {
-          if (index < docs.length) {
-            return itemBuilder(docs[index]);
+          if (index < items.length) {
+            return itemBuilder(items[index]);
           }
 
-          if (docs.isEmpty && isLoading) {
+          if (items.isEmpty && isLoading) {
             return const Padding(
               padding: EdgeInsets.only(top: 28),
               child: Center(child: CircularProgressIndicator()),
             );
           }
 
-          if (docs.isEmpty) {
+          if (items.isEmpty) {
             return Padding(
               padding: const EdgeInsets.only(top: 26),
               child: Center(
@@ -1397,9 +1394,6 @@ class _AdminUserDetailsPageState extends State<AdminUserDetailsPage> {
   }
 
   DateTime? _asDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
-    }
     if (value is DateTime) {
       return value;
     }

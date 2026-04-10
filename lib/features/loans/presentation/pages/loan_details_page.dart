@@ -25,6 +25,14 @@ class LoanDetailsPage extends StatelessWidget {
               loanData.repaymentProgress.replaceAll(RegExp(r'[^0-9]'), ''),
             ) ??
             0;
+        final outstandingBalance =
+            int.tryParse(
+              loanData.remainingBalance.replaceAll(RegExp(r'[^0-9]'), ''),
+            ) ??
+            0;
+        final canMakePayment =
+            (loanData.status == 'Active' || loanData.status == 'Approved') &&
+            outstandingBalance > 0;
         final monthlyInstallment = _estimateInstallment(
           loanData.remainingBalance,
         );
@@ -201,16 +209,23 @@ class LoanDetailsPage extends StatelessWidget {
                           final bool isCompact = constraints.maxWidth < 420;
 
                           final makePaymentButton = ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const MakePaymentPage(),
-                                ),
-                              );
-                            },
+                            onPressed: canMakePayment
+                                ? () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            const MakePaymentPage(),
+                                      ),
+                                    );
+                                  }
+                                : null,
                             icon: const Icon(Icons.payments_outlined),
-                            label: const Text('Make Payment'),
+                            label: Text(
+                              canMakePayment
+                                  ? 'Make Payment'
+                                  : 'No Payment Due',
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primaryBlue,
                               foregroundColor: Colors.white,

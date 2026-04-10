@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'dart:async';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
 import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
@@ -15,6 +18,8 @@ import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.da
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await _initializeDatabaseFactory();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -34,6 +39,12 @@ Future<void> main() async {
   await LocalNotificationService.initialize();
   await PushNotificationService.initialize();
   runApp(const TwezimbeApp());
+}
+
+Future<void> _initializeDatabaseFactory() async {
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  }
 }
 
 class TwezimbeApp extends StatelessWidget {
@@ -68,10 +79,7 @@ class _AuthGatePageState extends State<AuthGatePage> {
   }
 
   Future<void> _initializeStartup() async {
-    await Future.wait<dynamic>([
-      _resolveInitialAuthState(),
-      Future<void>.delayed(const Duration(milliseconds: 1500)),
-    ]);
+    await _resolveInitialAuthState();
 
     if (!mounted) return;
     setState(() {

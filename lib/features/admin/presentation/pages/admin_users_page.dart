@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/admin/data/admin_local_repository.dart';
+import 'package:twezimbeapp/features/admin/domain/models/admin_user_model.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_user_details_page.dart';
 
 class AdminUsersPage extends StatefulWidget {
@@ -11,8 +12,61 @@ class AdminUsersPage extends StatefulWidget {
 }
 
 class _AdminUsersPageState extends State<AdminUsersPage> {
+  final AdminLocalRepository _repository = AdminLocalRepository();
+
   String _searchQuery = '';
   String _filterStatus = 'All';
+  bool _isLoading = true;
+  bool _isMutating = false;
+  List<AdminUserModel> _users = <AdminUserModel>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePage();
+  }
+
+  Future<void> _initializePage() async {
+    final savedFilter = await _repository.getSavedUsersStatusFilter();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _filterStatus = savedFilter);
+    await _refreshUsers(syncRemote: true);
+  }
+
+  Future<void> _refreshUsers({required bool syncRemote}) async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      if (syncRemote) {
+        await _repository.syncUsersFromRemote();
+      }
+
+      final users = await _repository.getUsers(
+        searchQuery: _searchQuery,
+        statusFilter: _filterStatus,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _users = users);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Failed to load users: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +133,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     setState(() {
                       _filterStatus = value!;
                     });
+                    _repository.saveUsersStatusFilter(_filterStatus);
+                    _refreshUsers(syncRemote: false);
                   },
                 ),
               );
@@ -90,6 +146,17 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     searchField,
                     const SizedBox(height: 12),
                     SizedBox(width: double.infinity, child: filterDropdown),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: _isLoading
+                            ? null
+                            : () => _refreshUsers(syncRemote: true),
+                        icon: const Icon(Icons.sync),
+                        label: const Text('Sync users'),
+                      ),
+                    ),
                   ],
                 );
               }
@@ -99,6 +166,14 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   Expanded(child: searchField),
                   const SizedBox(width: 16),
                   SizedBox(width: 240, child: filterDropdown),
+                  const SizedBox(width: 12),
+                  TextButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () => _refreshUsers(syncRemote: true),
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Sync users'),
+                  ),
                 ],
               );
             },
@@ -112,72 +187,15 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey.shade100),
             ),
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(
-                      child: Text(
-                        'Unable to load users. Check Firestore permissions/index.',
-                        style: TextStyle(color: AppColors.errorRed),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                if (!snapshot.hasData) {
-                  return const Center(
+            child: _isLoading
+                ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(40),
                       child: CircularProgressIndicator(),
                     ),
-                  );
-                }
-
-                final docs = snapshot.data!.docs.toList(growable: false)
-                  ..sort((a, b) {
-                    final aCreatedAt =
-                        (a.data() as Map<String, dynamic>)['createdAt']
-                            as Timestamp?;
-                    final bCreatedAt =
-                        (b.data() as Map<String, dynamic>)['createdAt']
-                            as Timestamp?;
-                    final aMillis = aCreatedAt?.millisecondsSinceEpoch ?? 0;
-                    final bMillis = bCreatedAt?.millisecondsSinceEpoch ?? 0;
-                    return bMillis.compareTo(aMillis);
-                  });
-
-                var users = docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-                  final name = (data['fullName'] ?? '')
-                      .toString()
-                      .toLowerCase();
-                  final email = (data['email'] ?? '').toString().toLowerCase();
-                  final matchesSearch =
-                      _searchQuery.isEmpty ||
-                      name.contains(_searchQuery) ||
-                      email.contains(_searchQuery);
-
-                  final kycStatus = data['kycStatus'] ?? 'Pending';
-                  final matchesFilter =
-                      _filterStatus == 'All' ||
-                      (_filterStatus == 'KYC Verified' &&
-                          kycStatus == 'KYC Verified') ||
-                      (_filterStatus == 'Pending' &&
-                          kycStatus != 'KYC Verified' &&
-                          kycStatus != 'Rejected') ||
-                      (_filterStatus == 'Rejected' && kycStatus == 'Rejected');
-
-                  return matchesSearch && matchesFilter;
-                }).toList();
-
-                if (users.isEmpty) {
-                  return const Padding(
+                  )
+                : _users.isEmpty
+                ? const Padding(
                     padding: EdgeInsets.all(40),
                     child: Center(
                       child: Text(
@@ -185,95 +203,104 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                         style: TextStyle(color: Colors.grey),
                       ),
                     ),
-                  );
-                }
-
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('User')),
-                      DataColumn(label: Text('Email')),
-                      DataColumn(label: Text('Phone')),
-                      DataColumn(label: Text('Customer ID')),
-                      DataColumn(label: Text('Status')),
-                      DataColumn(label: Text('Actions')),
-                    ],
-                    rows: users.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return DataRow(
-                        cells: [
-                          DataCell(
-                            Row(
-                              children: [
-                                _buildUserAvatar(data),
-                                const SizedBox(width: 12),
-                                Text(data['fullName'] ?? 'Unknown'),
+                  )
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('User')),
+                        DataColumn(label: Text('Email')),
+                        DataColumn(label: Text('Phone')),
+                        DataColumn(label: Text('Customer ID')),
+                        DataColumn(label: Text('Status')),
+                        DataColumn(label: Text('Actions')),
+                      ],
+                      rows: _users
+                          .map((user) {
+                            return DataRow(
+                              cells: [
+                                DataCell(
+                                  Row(
+                                    children: [
+                                      _buildUserAvatar(user),
+                                      const SizedBox(width: 12),
+                                      Text(user.fullName),
+                                    ],
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(user.email.isEmpty ? '-' : user.email),
+                                ),
+                                DataCell(
+                                  Text(
+                                    user.phoneNumber.isEmpty
+                                        ? '-'
+                                        : user.phoneNumber,
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    user.customerId.isEmpty
+                                        ? '-'
+                                        : user.customerId,
+                                  ),
+                                ),
+                                DataCell(_buildStatusChip(user.kycStatus)),
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(
+                                          user.isAdmin
+                                              ? Icons.admin_panel_settings
+                                              : Icons.supervised_user_circle,
+                                          color: user.isAdmin
+                                              ? AppColors.primaryBlue
+                                              : Colors.grey,
+                                        ),
+                                        onPressed: _isMutating
+                                            ? null
+                                            : () => _toggleAdminRole(
+                                                context,
+                                                user,
+                                                !user.isAdmin,
+                                              ),
+                                        tooltip: user.isAdmin
+                                            ? 'Remove Admin'
+                                            : 'Make Admin',
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.visibility,
+                                          color: AppColors.primaryBlue,
+                                        ),
+                                        onPressed: () => _openUserDetails(
+                                          context,
+                                          user: user,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: AppColors.errorRed,
+                                        ),
+                                        onPressed: _isMutating
+                                            ? null
+                                            : () => _confirmDeleteUser(
+                                                context,
+                                                user,
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
-                            ),
-                          ),
-                          DataCell(Text(data['email'] ?? '-')),
-                          DataCell(Text(data['phoneNumber'] ?? '-')),
-                          DataCell(Text(data['customerId'] ?? '-')),
-                          DataCell(
-                            _buildStatusChip(data['kycStatus'] ?? 'Pending'),
-                          ),
-                          DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Admin toggle button
-                                IconButton(
-                                  icon: Icon(
-                                    (data['isAdmin'] as bool?) == true
-                                        ? Icons.admin_panel_settings
-                                        : Icons.supervised_user_circle,
-                                    color: (data['isAdmin'] as bool?) == true
-                                        ? AppColors.primaryBlue
-                                        : Colors.grey,
-                                  ),
-                                  onPressed: () => _toggleAdminRole(
-                                    context,
-                                    doc.id,
-                                    data['fullName'],
-                                    !((data['isAdmin'] as bool?) ?? false),
-                                  ),
-                                  tooltip: (data['isAdmin'] as bool?) == true
-                                      ? 'Remove Admin'
-                                      : 'Make Admin',
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.visibility,
-                                    color: AppColors.primaryBlue,
-                                  ),
-                                  onPressed: () => _openUserDetails(
-                                    context,
-                                    userId: doc.id,
-                                    data: data,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete,
-                                    color: AppColors.errorRed,
-                                  ),
-                                  onPressed: () => _confirmDeleteUser(
-                                    context,
-                                    doc.id,
-                                    data['fullName'],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                            );
+                          })
+                          .toList(growable: false),
+                    ),
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -310,26 +337,22 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
-  void _openUserDetails(
-    BuildContext context, {
-    required String userId,
-    required Map<String, dynamic> data,
-  }) {
+  void _openUserDetails(BuildContext context, {required AdminUserModel user}) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AdminUserDetailsPage(
-          userId: userId,
-          initialUserData: Map<String, dynamic>.from(data),
+          userId: user.id,
+          initialUserData: user.toMap(),
         ),
       ),
     );
   }
 
-  Widget _buildUserAvatar(Map<String, dynamic> data) {
-    final String fullName = (data['fullName'] ?? 'U').toString();
+  Widget _buildUserAvatar(AdminUserModel user) {
+    final String fullName = user.fullName;
     final String initials = fullName.isEmpty ? 'U' : fullName[0].toUpperCase();
-    final String? photoUrl = (data['photoUrl'] as String?)?.trim();
+    final String? photoUrl = user.photoUrl?.trim();
 
     return Container(
       width: 36,
@@ -368,16 +391,14 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
-  void _confirmDeleteUser(
-    BuildContext context,
-    String userId,
-    String? userName,
-  ) {
+  void _confirmDeleteUser(BuildContext context, AdminUserModel user) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete user "$userName"?'),
+        content: Text(
+          'Are you sure you want to delete user "${user.fullName}"?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -385,16 +406,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
           ),
           TextButton(
             onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(context);
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(userId)
-                  .delete();
-              if (!mounted) return;
-              messenger.showSnackBar(
-                const SnackBar(content: Text('User deleted successfully')),
-              );
+              await _performMutation(() async {
+                await _repository.deleteUser(user.id);
+                await _refreshUsers(syncRemote: true);
+              });
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.errorRed),
             child: const Text('Delete'),
@@ -406,31 +422,51 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
   Future<void> _toggleAdminRole(
     BuildContext context,
-    String userId,
-    String? userName,
+    AdminUserModel user,
     bool makeAdmin,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(userId).set({
-        'isAdmin': makeAdmin,
-      }, SetOptions(merge: true));
+    await _performMutation(() async {
+      await _repository.toggleAdminRole(user.id, makeAdmin);
+      await _refreshUsers(syncRemote: false);
+      if (!mounted) {
+        return;
+      }
 
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            makeAdmin
-                ? '$userName is now an admin'
-                : 'Admin privileges removed from $userName',
-          ),
-        ),
+      _showMessage(
+        makeAdmin
+            ? '${user.fullName} is now an admin'
+            : 'Admin privileges removed from ${user.fullName}',
       );
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Error updating admin role: $e')),
-      );
+    });
+  }
+
+  Future<void> _performMutation(Future<void> Function() action) async {
+    if (_isMutating) {
+      return;
     }
+
+    setState(() => _isMutating = true);
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage('Operation failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _isMutating = false);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }

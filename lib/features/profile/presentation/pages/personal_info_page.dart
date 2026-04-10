@@ -176,7 +176,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     switch (error.code) {
       case 'unauthorized':
       case 'permission-denied':
-        return 'Upload blocked by Firebase Storage/Firestore rules. Please update project rules and try again.';
+        return 'Upload blocked by storage access rules. Please update project rules and try again.';
       case 'canceled':
         return 'Upload was canceled.';
       case 'object-not-found':

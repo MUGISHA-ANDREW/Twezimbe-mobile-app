@@ -5,6 +5,7 @@ import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_calculator_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_details_page.dart';
+import 'package:twezimbeapp/features/loans/presentation/pages/make_payment_page.dart';
 
 class LoansPage extends StatefulWidget {
   const LoansPage({super.key});
@@ -37,7 +38,7 @@ class _LoansPageState extends State<LoansPage> {
     if (dateTime == null) return 'Just now';
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inSeconds < 60) {
       return 'Just now';
     } else if (difference.inMinutes < 60) {
@@ -69,6 +70,14 @@ class _LoansPageState extends State<LoansPage> {
       stream: AppDataRepository.watchActiveLoanForCurrentUser(),
       builder: (context, loanSnapshot) {
         final loan = loanSnapshot.data ?? _fallbackLoan;
+        final outstandingBalance =
+            int.tryParse(
+              loan.remainingBalance.replaceAll(RegExp(r'[^0-9]'), ''),
+            ) ??
+            0;
+        final canMakePayment =
+            (loan.status == 'Active' || loan.status == 'Approved') &&
+            outstandingBalance > 0;
 
         return StreamBuilder<List<AppLoanApplicationData>>(
           stream: AppDataRepository.watchLoanApplicationsForCurrentUser(
@@ -116,6 +125,28 @@ class _LoansPageState extends State<LoansPage> {
                       children: [
                         _buildActiveLoanCard(context, loan),
                         const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: canMakePayment
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const MakePaymentPage(),
+                                    ),
+                                  );
+                                }
+                              : null,
+                          icon: const Icon(Icons.payments_outlined),
+                          label: Text(
+                            canMakePayment ? 'Make Payment' : 'No Payment Due',
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryBlue,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         ElevatedButton.icon(
                           onPressed: () {
                             Navigator.push(
@@ -349,8 +380,8 @@ class _LoansPageState extends State<LoansPage> {
                     color: app.status == 'Approved'
                         ? AppColors.successGreen.withValues(alpha: 0.1)
                         : app.status == 'Rejected'
-                            ? AppColors.errorRed.withValues(alpha: 0.1)
-                            : AppColors.primaryOrange.withValues(alpha: 0.1),
+                        ? AppColors.errorRed.withValues(alpha: 0.1)
+                        : AppColors.primaryOrange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -361,8 +392,8 @@ class _LoansPageState extends State<LoansPage> {
                       color: app.status == 'Approved'
                           ? AppColors.successGreen
                           : app.status == 'Rejected'
-                              ? AppColors.errorRed
-                              : AppColors.primaryOrange,
+                          ? AppColors.errorRed
+                          : AppColors.primaryOrange,
                     ),
                   ),
                 ),

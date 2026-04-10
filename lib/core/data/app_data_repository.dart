@@ -1,7 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:twezimbeapp/core/data/database_helper.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
 
 class AppProfileData {
@@ -187,9 +190,15 @@ class LoanApplicationException implements Exception {
 class AppDataRepository {
   AppDataRepository._();
 
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static CollectionReference<Map<String, dynamic>> get _usersRef =>
-      _firestore.collection('users');
+  static final DatabaseHelper _db = DatabaseHelper();
+  static const Duration _pollInterval = Duration(milliseconds: 900);
+
+  static const String _chatMessagesPrefix = 'chat_messages_';
+  static const String _chatConversationsPrefix = 'chat_conversations_';
+  static const String _chatActiveConversationPrefix =
+      'chat_active_conversation_';
+  static const String _securitySettingsPrefix = 'security_settings_';
+  static const String _dueReminderPrefix = 'loan_due_reminder_';
 
   static AppSupportData support = const AppSupportData(
     phone: '+256 700 000 000',
@@ -262,7 +271,6 @@ class AppDataRepository {
     ),
   ];
 
-  // Ensure user exists in Firestore database
   static Future<void> ensureProfileForCurrentUser({
     String? fullName,
     String? email,
@@ -271,47 +279,50 @@ class AppDataRepository {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final userRef = _usersRef.doc(user.uid);
-    final snapshot = await userRef.get();
-    final existing = snapshot.data() ?? const <String, dynamic>{};
+    final nowIso = DateTime.now().toIso8601String();
+    final existing = await _db.getUser(user.uid);
+
     final normalizedEmail =
         _nonEmpty(email)?.toLowerCase() ??
         _nonEmpty(user.email)?.toLowerCase() ??
-        _nonEmpty(existing['email']) ??
+        _nonEmpty(existing?['email']) ??
         '';
 
     final payload = <String, dynamic>{
       'id': user.uid,
       'fullName':
           _nonEmpty(fullName) ??
-          _nonEmpty(existing['fullName']) ??
+          _nonEmpty(existing?['fullName']) ??
           _displayNameFor(user),
       'email': normalizedEmail,
       'phoneNumber':
           _nonEmpty(phoneNumber) ??
           _nonEmpty(user.phoneNumber) ??
-          _nonEmpty(existing['phoneNumber']) ??
+          _nonEmpty(existing?['phoneNumber']) ??
           '',
-      'dateOfBirth': _nonEmpty(existing['dateOfBirth']) ?? '',
-      'nationalId': _nonEmpty(existing['nationalId']) ?? '',
-      'address': _nonEmpty(existing['address']) ?? '',
+      'dateOfBirth': _nonEmpty(existing?['dateOfBirth']) ?? '',
+      'nationalId': _nonEmpty(existing?['nationalId']) ?? '',
+      'address': _nonEmpty(existing?['address']) ?? '',
       'photoUrl':
-          _nonEmpty(existing['photoUrl']) ?? _nonEmpty(user.photoURL) ?? '',
-      'customerId': _nonEmpty(existing['customerId']) ?? _customerIdFor(user),
-      'kycStatus': _nonEmpty(existing['kycStatus']) ?? 'Pending',
-      'accountType': _nonEmpty(existing['accountType']) ?? 'Savings Account',
-      'balanceValue': _intFromDynamic(existing['balanceValue']),
+          _nonEmpty(existing?['photoUrl']) ?? _nonEmpty(user.photoURL) ?? '',
+      'customerId': _nonEmpty(existing?['customerId']) ?? _customerIdFor(user),
+      'kycStatus': _nonEmpty(existing?['kycStatus']) ?? 'Pending',
+      'accountType': _nonEmpty(existing?['accountType']) ?? 'Savings Account',
+      'balanceValue': _intFromDynamic(existing?['balanceValue']),
       'isAdmin':
-          _boolFromDynamic(existing['isAdmin']) ||
-          _isAdminEmail(normalizedEmail),
-      'updatedAt': FieldValue.serverTimestamp(),
+          _boolFromDynamic(existing?['isAdmin']) ||
+              _isAdminEmail(normalizedEmail)
+          ? 1
+          : 0,
+      'updatedAt': nowIso,
     };
 
-    if (!snapshot.exists) {
-      payload['createdAt'] = FieldValue.serverTimestamp();
+    if (existing == null) {
+      payload['createdAt'] = nowIso;
+      await _db.insertUser(payload);
+    } else {
+      await _db.updateUser(user.uid, payload);
     }
-
-    await userRef.set(payload, SetOptions(merge: true));
   }
 
   static Stream<AppProfileData> watchProfileForCurrentUser() {
@@ -322,8 +333,8 @@ class AppDataRepository {
 
     unawaited(ensureProfileForCurrentUser().catchError((_) {}));
 
-    return _usersRef.doc(user.uid).snapshots().map((snapshot) {
-      final data = snapshot.data();
+    return _poll<AppProfileData>(() async {
+      final data = await _db.getUser(user.uid);
       if (data == null) {
         return AppProfileData(
           fullName: _displayNameFor(user),
@@ -372,14 +383,14 @@ class AppDataRepository {
       throw StateError('No authenticated user found.');
     }
 
-    await _usersRef.doc(user.uid).set({
+    await _db.updateUser(user.uid, {
       'fullName': fullName.trim(),
       'phoneNumber': phoneNumber.trim(),
       'dateOfBirth': dateOfBirth.trim(),
       'nationalId': nationalId.trim(),
       'address': address.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
   }
 
   static Future<void> updateProfilePhotoUrlForCurrentUser(
@@ -390,15 +401,15 @@ class AppDataRepository {
       throw StateError('No authenticated user found.');
     }
 
-    await _usersRef.doc(user.uid).set({
+    await _db.updateUser(user.uid, {
       'photoUrl': photoUrl,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
 
     try {
       await user.updatePhotoURL(photoUrl);
     } catch (_) {
-      // Ignore auth profile update failures
+      // Ignore auth profile update failures.
     }
   }
 
@@ -408,7 +419,7 @@ class AppDataRepository {
       throw StateError('No authenticated user found.');
     }
 
-    final data = (await _usersRef.doc(user.uid).get()).data();
+    final data = await _db.getUser(user.uid);
     final profilePhotoUrl = _nonEmpty(data?['photoUrl']);
 
     if (profilePhotoUrl != null && profilePhotoUrl.isNotEmpty) {
@@ -423,7 +434,6 @@ class AppDataRepository {
     return null;
   }
 
-  // Loan operations
   static Stream<AppLoanData> watchActiveLoanForCurrentUser() {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -432,12 +442,8 @@ class AppDataRepository {
 
     unawaited(ensureLoanForCurrentUser().catchError((_) {}));
 
-    final activeLoanRef = _usersRef
-        .doc(user.uid)
-        .collection('loans')
-        .doc('active');
-    return activeLoanRef.snapshots().map((snapshot) {
-      final loan = snapshot.data();
+    return _poll<AppLoanData>(() async {
+      final loan = await _db.getLatestLoanForUser(user.uid);
       unawaited(checkAndSendPaymentDueNotification().catchError((_) {}));
 
       if (loan == null) {
@@ -469,14 +475,14 @@ class AppDataRepository {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final loanRef = _usersRef.doc(user.uid).collection('loans').doc('active');
-    final existing = await loanRef.get();
-    if (existing.exists) {
+    final existing = await _db.getLatestLoanForUser(user.uid);
+    if (existing != null) {
       return;
     }
 
-    await loanRef.set({
-      'id': 'active',
+    final nowIso = DateTime.now().toIso8601String();
+    await _db.insertLoan({
+      'id': 'loan_${user.uid}',
       'userId': user.uid,
       'loanId': _loanIdFor(user),
       'type': 'Salary Loan',
@@ -487,9 +493,9 @@ class AppDataRepository {
       'purpose': '',
       'nextPaymentDate': 'TBD',
       'repaymentProgress': 0,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'createdAt': nowIso,
+      'updatedAt': nowIso,
+    });
   }
 
   static Stream<List<AppLoanApplicationData>>
@@ -501,29 +507,27 @@ class AppDataRepository {
       );
     }
 
-    return _usersRef
-        .doc(user.uid)
-        .collection('loanApplications')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) {
-                final data = doc.data();
-                final amountValue = _intFromDynamic(data['amountValue']);
-                return AppLoanApplicationData(
-                  applicationId: _nonEmpty(data['applicationId']) ?? doc.id,
-                  loanType: _nonEmpty(data['loanType']) ?? 'Loan',
-                  amount: _formatUgx(amountValue),
-                  period: _nonEmpty(data['period']) ?? '-',
-                  purpose: _nonEmpty(data['purpose']) ?? '-',
-                  status: _nonEmpty(data['status']) ?? 'Pending Review',
-                  createdAt: _asDateTime(data['createdAt']),
-                );
-              })
-              .toList(growable: false);
-        });
+    return _poll<List<AppLoanApplicationData>>(() async {
+      final rows = await _db.getLoanApplications(user.uid);
+      return rows
+          .take(limit)
+          .map((data) {
+            final amountValue = _intFromDynamic(data['amountValue']);
+            return AppLoanApplicationData(
+              applicationId:
+                  _nonEmpty(data['applicationId']) ??
+                  _nonEmpty(data['id']) ??
+                  '',
+              loanType: _nonEmpty(data['loanType']) ?? 'Loan',
+              amount: _formatUgx(amountValue),
+              period: _nonEmpty(data['period']) ?? '-',
+              purpose: _nonEmpty(data['purpose']) ?? '-',
+              status: _nonEmpty(data['status']) ?? 'Pending Review',
+              createdAt: _asDateTime(data['createdAt']),
+            );
+          })
+          .toList(growable: false);
+    });
   }
 
   static Future<AppLoanApplicationData> submitLoanApplicationForCurrentUser({
@@ -551,21 +555,18 @@ class AppDataRepository {
     await ensureProfileForCurrentUser();
     await ensureLoanForCurrentUser();
 
-    // Check for pending applications
-    final pendingQuery = await _usersRef
-        .doc(user.uid)
-        .collection('loanApplications')
-        .where('status', isEqualTo: 'Pending Review')
-        .limit(1)
-        .get();
-    final hasPending = pendingQuery.docs.isNotEmpty;
+    final existingApplications = await _db.getLoanApplications(user.uid);
+    final hasPending = existingApplications.any(
+      (row) =>
+          (_nonEmpty(row['status']) ?? 'Pending Review') == 'Pending Review',
+    );
     if (hasPending) {
       throw const LoanApplicationException(
         'You already have a pending loan application. Please wait for review.',
       );
     }
 
-    final userData = (await _usersRef.doc(user.uid).get()).data();
+    final userData = await _db.getUser(user.uid);
     final applicantName =
         _nonEmpty(userData?['fullName']) ?? _displayNameFor(user);
     final applicantEmail = _nonEmpty(userData?['email']) ?? (user.email ?? '');
@@ -574,18 +575,9 @@ class AppDataRepository {
     final customerId = _nonEmpty(userData?['customerId']) ?? '';
 
     final applicationId = _applicationIdFor(user.uid);
+    final nowIso = DateTime.now().toIso8601String();
 
-    final appRef = _usersRef
-        .doc(user.uid)
-        .collection('loanApplications')
-        .doc(applicationId);
-    final activeLoanRef = _usersRef
-        .doc(user.uid)
-        .collection('loans')
-        .doc('active');
-
-    final batch = _firestore.batch();
-    batch.set(appRef, {
+    await _db.insertLoanApplication({
       'id': applicationId,
       'applicationId': applicationId,
       'userId': user.uid,
@@ -598,26 +590,43 @@ class AppDataRepository {
       'period': period.trim(),
       'purpose': purpose.trim(),
       'status': 'Pending Review',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'rejectionReason': '',
+      'reviewedBy': '',
+      'reviewedAt': nowIso,
+      'createdAt': nowIso,
+      'updatedAt': nowIso,
+    });
 
-    batch.set(activeLoanRef, {
-      'id': 'active',
-      'userId': user.uid,
-      'loanId': _loanIdFor(user),
-      'type': loanType.trim(),
-      'status': 'Pending Review',
-      'amountValue': amountValue,
-      'remainingBalanceValue': amountValue,
-      'period': period.trim(),
-      'purpose': purpose.trim(),
-      'nextPaymentDate': 'Awaiting approval',
-      'repaymentProgress': 0,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    await batch.commit();
+    final currentLoan = await _db.getLatestLoanForUser(user.uid);
+    if (currentLoan == null) {
+      await _db.insertLoan({
+        'id': 'loan_${user.uid}',
+        'userId': user.uid,
+        'loanId': _loanIdFor(user),
+        'type': loanType.trim(),
+        'status': 'Pending Review',
+        'amountValue': amountValue,
+        'remainingBalanceValue': amountValue,
+        'period': period.trim(),
+        'purpose': purpose.trim(),
+        'nextPaymentDate': 'Awaiting approval',
+        'repaymentProgress': 0,
+        'createdAt': nowIso,
+        'updatedAt': nowIso,
+      });
+    } else {
+      await _db.updateLoan(currentLoan['id'].toString(), {
+        'type': loanType.trim(),
+        'status': 'Pending Review',
+        'amountValue': amountValue,
+        'remainingBalanceValue': amountValue,
+        'period': period.trim(),
+        'purpose': purpose.trim(),
+        'nextPaymentDate': 'Awaiting approval',
+        'repaymentProgress': 0,
+        'updatedAt': nowIso,
+      });
+    }
 
     await addNotificationForUser(
       userId: user.uid,
@@ -637,7 +646,6 @@ class AppDataRepository {
     );
   }
 
-  // Transactions
   static Stream<List<AppTransactionData>>
   watchRecentTransactionsForCurrentUser({int limit = 100}) {
     final user = FirebaseAuth.instance.currentUser;
@@ -647,32 +655,26 @@ class AppDataRepository {
       );
     }
 
-    return _usersRef
-        .doc(user.uid)
-        .collection('transactions')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) {
-                final data = doc.data();
-                final amountValue = _intFromDynamic(data['amountValue']);
-                final isCredit = _boolFromDynamic(data['isCredit']);
-                final sign = isCredit ? '+' : '-';
-                final createdAt = _asDateTime(data['createdAt']);
-                return AppTransactionData(
-                  title: _nonEmpty(data['title']) ?? 'Transaction',
-                  subtitle: createdAt != null
-                      ? _relativeTimeLabel(createdAt)
-                      : 'Just now',
-                  amount: '$sign ${_formatUgx(amountValue)}',
-                  isCredit: isCredit,
-                  createdAt: createdAt,
-                );
-              })
-              .toList(growable: false);
-        });
+    return _poll<List<AppTransactionData>>(() async {
+      final rows = await _db.getTransactions(user.uid, limit: limit);
+      return rows
+          .map((data) {
+            final amountValue = _intFromDynamic(data['amountValue']);
+            final isCredit = _boolFromDynamic(data['isCredit']);
+            final sign = isCredit ? '+' : '-';
+            final createdAt = _asDateTime(data['createdAt']);
+            return AppTransactionData(
+              title: _nonEmpty(data['title']) ?? 'Transaction',
+              subtitle: createdAt != null
+                  ? _relativeTimeLabel(createdAt)
+                  : 'Just now',
+              amount: '$sign ${_formatUgx(amountValue)}',
+              isCredit: isCredit,
+              createdAt: createdAt,
+            );
+          })
+          .toList(growable: false);
+    });
   }
 
   static Future<void> addTransactionForCurrentUser({
@@ -688,34 +690,26 @@ class AppDataRepository {
 
     await ensureProfileForCurrentUser();
 
-    final userRef = _usersRef.doc(user.uid);
-    final txRef = userRef
-        .collection('transactions')
-        .doc('tx_${DateTime.now().millisecondsSinceEpoch}');
+    final userRow = await _db.getUser(user.uid);
+    final currentBalance = _intFromDynamic(userRow?['balanceValue']);
+    final nextBalance = isCredit
+        ? currentBalance + amountValue
+        : (currentBalance - amountValue).clamp(0, 999999999);
+    final nowIso = DateTime.now().toIso8601String();
 
-    await _firestore.runTransaction((transaction) async {
-      final userSnapshot = await transaction.get(userRef);
-      final currentBalance = _intFromDynamic(
-        userSnapshot.data()?['balanceValue'],
-      );
-      final nextBalance = isCredit
-          ? currentBalance + amountValue
-          : (currentBalance - amountValue).clamp(0, 999999999);
+    await _db.updateUser(user.uid, {
+      'balanceValue': nextBalance,
+      'updatedAt': nowIso,
+    });
 
-      transaction.set(userRef, {
-        'balanceValue': nextBalance,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      transaction.set(txRef, {
-        'id': txRef.id,
-        'userId': user.uid,
-        'title': title,
-        'subtitle': subtitle,
-        'amountValue': amountValue,
-        'isCredit': isCredit,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    await _db.insertTransaction({
+      'id': 'tx_${DateTime.now().millisecondsSinceEpoch}',
+      'userId': user.uid,
+      'title': title,
+      'subtitle': subtitle,
+      'amountValue': amountValue,
+      'isCredit': isCredit ? 1 : 0,
+      'createdAt': nowIso,
     });
 
     final flow = isCredit ? 'deposit' : 'withdrawal';
@@ -727,7 +721,6 @@ class AppDataRepository {
     );
   }
 
-  // Notifications
   static Stream<List<AppNotificationData>> watchNotificationsForCurrentUser({
     int limit = 100,
   }) {
@@ -738,27 +731,21 @@ class AppDataRepository {
       );
     }
 
-    return _usersRef
-        .doc(user.uid)
-        .collection('notifications')
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs
-              .map((doc) {
-                final data = doc.data();
-                return AppNotificationData(
-                  id: doc.id,
-                  title: _nonEmpty(data['title']) ?? 'Notification',
-                  message: _nonEmpty(data['message']) ?? '',
-                  type: _nonEmpty(data['type']) ?? 'info',
-                  createdAt: _asDateTime(data['createdAt']),
-                  isRead: _boolFromDynamic(data['isRead']),
-                );
-              })
-              .toList(growable: false);
-        });
+    return _poll<List<AppNotificationData>>(() async {
+      final rows = await _db.getNotifications(user.uid, limit: limit);
+      return rows
+          .map((data) {
+            return AppNotificationData(
+              id: _nonEmpty(data['id']) ?? '',
+              title: _nonEmpty(data['title']) ?? 'Notification',
+              message: _nonEmpty(data['message']) ?? '',
+              type: _nonEmpty(data['type']) ?? 'info',
+              createdAt: _asDateTime(data['createdAt']),
+              isRead: _boolFromDynamic(data['isRead']),
+            );
+          })
+          .toList(growable: false);
+    });
   }
 
   static Future<void> addNotificationForCurrentUser({
@@ -793,58 +780,38 @@ class AppDataRepository {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    await _usersRef
-        .doc(user.uid)
-        .collection('notifications')
-        .doc(notificationId)
-        .set({'isRead': true}, SetOptions(merge: true));
+    await _db.markNotificationRead(notificationId);
   }
 
   static Future<void> markAllNotificationsAsReadForCurrentUser() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final unreadDocs = await _usersRef
-        .doc(user.uid)
-        .collection('notifications')
-        .where('isRead', isEqualTo: false)
-        .get();
-
-    if (unreadDocs.docs.isEmpty) {
-      return;
-    }
-
-    final batch = _firestore.batch();
-    for (final doc in unreadDocs.docs) {
-      batch.set(doc.reference, {'isRead': true}, SetOptions(merge: true));
-    }
-    await batch.commit();
+    await _db.markAllNotificationsRead(user.uid);
   }
 
-  // Admin operations
   static Future<bool> isCurrentUserAdmin() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
 
     if (_isAdminEmail(user.email)) return true;
 
-    final userData = (await _usersRef.doc(user.uid).get()).data();
+    final userData = await _db.getUser(user.uid);
     return _boolFromDynamic(userData?['isAdmin']);
   }
 
   static Future<void> setUserAdminRole(String userId, bool isAdmin) async {
-    await _usersRef.doc(userId).set({
-      'isAdmin': isAdmin,
-    }, SetOptions(merge: true));
+    await _db.updateUser(userId, {
+      'isAdmin': isAdmin ? 1 : 0,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
   }
 
   static Stream<List<AppProfileData>> watchAllUsers() {
-    return _usersRef.orderBy('createdAt', descending: true).snapshots().map((
-      snapshot,
-    ) {
-      return snapshot.docs
-          .map((doc) {
-            final data = doc.data();
+    return _poll<List<AppProfileData>>(() async {
+      final rows = await _db.getAllUsersForAdmin();
+      return rows
+          .map((data) {
             return AppProfileData(
               fullName: _nonEmpty(data['fullName']) ?? 'Unknown',
               email: _nonEmpty(data['email']) ?? '',
@@ -867,87 +834,84 @@ class AppDataRepository {
   }
 
   static Future<int> getTotalUsersCount() async {
-    final aggregate = await _usersRef.count().get();
-    return aggregate.count ?? 0;
+    return _db.getTotalUsersCount();
   }
 
   static Future<int> getPendingLoansCount() async {
-    final aggregate = await _firestore
-        .collectionGroup('loanApplications')
-        .where('status', isEqualTo: 'Pending Review')
-        .count()
-        .get();
-    return aggregate.count ?? 0;
+    return _db.getPendingLoansCount();
   }
 
-  // Admin: Approve loan
   static Future<void> approveLoanApplication(
     String userId,
     String applicationId, {
     String? loanDocumentId,
   }) async {
-    final userRef = _usersRef.doc(userId);
-    final appRef = userRef
-        .collection('loanApplications')
-        .doc(_nonEmpty(loanDocumentId) ?? applicationId);
-    final loanRef = userRef.collection('loans').doc('active');
-
-    final userData = (await userRef.get()).data();
-    if (userData == null) throw StateError('User not found');
-
-    final app = (await appRef.get()).data();
-    if (app == null) throw StateError('Loan application not found');
+    final appId = _nonEmpty(loanDocumentId) ?? applicationId;
+    final app = await _db.getLoanApplication(appId);
+    if (app == null) {
+      throw StateError('Loan application not found');
+    }
 
     final loanAmount = _intFromDynamic(app['amountValue']);
-    final admin = FirebaseAuth.instance.currentUser;
-    final reviewer = admin?.email ?? 'admin';
+    final reviewer = FirebaseAuth.instance.currentUser?.email ?? 'admin';
+    final nowIso = DateTime.now().toIso8601String();
 
-    final txRef = userRef
-        .collection('transactions')
-        .doc('tx_${DateTime.now().millisecondsSinceEpoch}');
-
-    final batch = _firestore.batch();
-    batch.set(appRef, {
+    await _db.updateLoanApplication(appId, {
       'status': 'Approved',
       'reviewedBy': reviewer,
-      'reviewedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'reviewedAt': nowIso,
+      'updatedAt': nowIso,
+    });
 
-    batch.set(loanRef, {
-      'id': 'active',
-      'userId': userId,
-      'loanId': _nonEmpty(app['loanId']) ?? _loanIdFor(null),
-      'type': _nonEmpty(app['loanType']) ?? 'Loan',
-      'status': 'Active',
-      'amountValue': loanAmount,
-      'remainingBalanceValue': loanAmount,
-      'period': _nonEmpty(app['period']) ?? '',
-      'purpose': _nonEmpty(app['purpose']) ?? '',
-      'nextPaymentDate': _nextPaymentDateLabel(),
-      'repaymentProgress': 0,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final currentLoan = await _db.getLatestLoanForUser(userId);
+    if (currentLoan == null) {
+      await _db.insertLoan({
+        'id': 'loan_$userId',
+        'userId': userId,
+        'loanId': _nonEmpty(app['loanId']) ?? _loanIdFor(null),
+        'type': _nonEmpty(app['loanType']) ?? 'Loan',
+        'status': 'Active',
+        'amountValue': loanAmount,
+        'remainingBalanceValue': loanAmount,
+        'period': _nonEmpty(app['period']) ?? '',
+        'purpose': _nonEmpty(app['purpose']) ?? '',
+        'nextPaymentDate': _nextPaymentDateLabel(),
+        'repaymentProgress': 0,
+        'createdAt': nowIso,
+        'updatedAt': nowIso,
+      });
+    } else {
+      await _db.updateLoan(currentLoan['id'].toString(), {
+        'loanId': _nonEmpty(app['loanId']) ?? _loanIdFor(null),
+        'type': _nonEmpty(app['loanType']) ?? 'Loan',
+        'status': 'Active',
+        'amountValue': loanAmount,
+        'remainingBalanceValue': loanAmount,
+        'period': _nonEmpty(app['period']) ?? '',
+        'purpose': _nonEmpty(app['purpose']) ?? '',
+        'nextPaymentDate': _nextPaymentDateLabel(),
+        'repaymentProgress': 0,
+        'updatedAt': nowIso,
+      });
+    }
 
-    batch.set(userRef, {
-      'balanceValue': FieldValue.increment(loanAmount),
-      'lastDueReminderKey': null,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final userData = await _db.getUser(userId);
+    final currentBalance = _intFromDynamic(userData?['balanceValue']);
+    await _db.updateUser(userId, {
+      'balanceValue': currentBalance + loanAmount,
+      'updatedAt': nowIso,
+    });
 
-    batch.set(txRef, {
-      'id': txRef.id,
+    await _db.insertTransaction({
+      'id': 'tx_${DateTime.now().millisecondsSinceEpoch}',
       'userId': userId,
       'title': 'Loan Disbursed',
       'subtitle': 'Loan approved and credited to account',
       'amountValue': loanAmount,
-      'isCredit': true,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'isCredit': 1,
+      'createdAt': nowIso,
+    });
 
-    await batch.commit();
-
-    // Notify user
     await addNotificationForUser(
       userId: userId,
       title: 'Loan Approved',
@@ -957,43 +921,41 @@ class AppDataRepository {
     );
   }
 
-  // Admin: Reject loan
   static Future<void> rejectLoanApplication(
     String userId,
     String applicationId,
     String reason, {
     String? loanDocumentId,
   }) async {
-    final userRef = _usersRef.doc(userId);
-    final appRef = userRef
-        .collection('loanApplications')
-        .doc(_nonEmpty(loanDocumentId) ?? applicationId);
-    final loanRef = userRef.collection('loans').doc('active');
+    final appId = _nonEmpty(loanDocumentId) ?? applicationId;
+    final app = await _db.getLoanApplication(appId);
+    if (app == null) {
+      throw StateError('Loan application not found');
+    }
 
-    final admin = FirebaseAuth.instance.currentUser;
-    final reviewer = admin?.email ?? 'admin';
+    final reviewer = FirebaseAuth.instance.currentUser?.email ?? 'admin';
     final rejectionReason = reason.trim().isEmpty
         ? 'Please contact support for guidance.'
         : reason.trim();
+    final nowIso = DateTime.now().toIso8601String();
 
-    final batch = _firestore.batch();
-    batch.set(appRef, {
+    await _db.updateLoanApplication(appId, {
       'status': 'Rejected',
       'rejectionReason': rejectionReason,
       'reviewedBy': reviewer,
-      'reviewedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'reviewedAt': nowIso,
+      'updatedAt': nowIso,
+    });
 
-    batch.set(loanRef, {
-      'status': 'Rejected',
-      'nextPaymentDate': 'Awaiting new application',
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final loan = await _db.getLatestLoanForUser(userId);
+    if (loan != null) {
+      await _db.updateLoan(loan['id'].toString(), {
+        'status': 'Rejected',
+        'nextPaymentDate': 'Awaiting new application',
+        'updatedAt': nowIso,
+      });
+    }
 
-    await batch.commit();
-
-    // Notify user
     await addNotificationForUser(
       userId: userId,
       title: 'Loan Rejected',
@@ -1009,19 +971,16 @@ class AppDataRepository {
     required String message,
     String type = 'info',
   }) async {
-    final notifRef = _usersRef
-        .doc(userId)
-        .collection('notifications')
-        .doc('notif_${DateTime.now().millisecondsSinceEpoch}');
-    await notifRef.set({
-      'id': notifRef.id,
+    final nowIso = DateTime.now().toIso8601String();
+    await _db.insertNotification({
+      'id': 'notif_${DateTime.now().microsecondsSinceEpoch}',
       'userId': userId,
       'title': title,
       'message': message,
       'type': type,
-      'isRead': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'isRead': 0,
+      'createdAt': nowIso,
+    });
   }
 
   static Future<void> makeLoanRepaymentForCurrentUser({
@@ -1036,76 +995,63 @@ class AppDataRepository {
       throw ArgumentError('Payment amount must be greater than zero.');
     }
 
-    final userRef = _usersRef.doc(user.uid);
-    final loanRef = userRef.collection('loans').doc('active');
-    final txRef = userRef
-        .collection('transactions')
-        .doc('tx_${DateTime.now().millisecondsSinceEpoch}');
+    final loan =
+        await _db.getActiveLoan(user.uid) ??
+        await _db.getLatestLoanForUser(user.uid);
+    if (loan == null) {
+      throw StateError('No active loan found.');
+    }
 
-    int remainingAfterPayment = 0;
+    final status = _nonEmpty(loan['status']) ?? 'None';
+    if (status != 'Active' && status != 'Approved') {
+      throw StateError('Loan is not available for repayment.');
+    }
 
-    await _firestore.runTransaction((transaction) async {
-      final userSnapshot = await transaction.get(userRef);
-      final loanSnapshot = await transaction.get(loanRef);
+    final amountBorrowed = _intFromDynamic(loan['amountValue']);
+    final currentRemaining = _intFromDynamic(loan['remainingBalanceValue']);
+    if (currentRemaining <= 0) {
+      throw StateError('Loan is already fully paid.');
+    }
 
-      if (!loanSnapshot.exists) {
-        throw StateError('No active loan found.');
-      }
+    final amountToApply = amountValue > currentRemaining
+        ? currentRemaining
+        : amountValue;
+    final remainingAfterPayment = currentRemaining - amountToApply;
 
-      final loanData = loanSnapshot.data() ?? const <String, dynamic>{};
-      final status = _nonEmpty(loanData['status']) ?? 'None';
-      if (status != 'Active' && status != 'Approved') {
-        throw StateError('Loan is not available for repayment.');
-      }
+    final safeBorrowed = amountBorrowed <= 0
+        ? currentRemaining
+        : amountBorrowed;
+    final paidSoFar = safeBorrowed - remainingAfterPayment;
+    final progress = ((paidSoFar / safeBorrowed) * 100).round().clamp(0, 100);
 
-      final amountBorrowed = _intFromDynamic(loanData['amountValue']);
-      final currentRemaining = _intFromDynamic(
-        loanData['remainingBalanceValue'],
-      );
-      if (currentRemaining <= 0) {
-        throw StateError('Loan is already fully paid.');
-      }
+    final userRow = await _db.getUser(user.uid);
+    final currentBalance = _intFromDynamic(userRow?['balanceValue']);
+    final nextBalance = (currentBalance - amountToApply).clamp(0, 999999999);
+    final nowIso = DateTime.now().toIso8601String();
 
-      final amountToApply = amountValue > currentRemaining
-          ? currentRemaining
-          : amountValue;
-      remainingAfterPayment = currentRemaining - amountToApply;
+    await _db.updateUser(user.uid, {
+      'balanceValue': nextBalance,
+      'updatedAt': nowIso,
+    });
 
-      final safeBorrowed = amountBorrowed <= 0
-          ? currentRemaining
-          : amountBorrowed;
-      final paidSoFar = safeBorrowed - remainingAfterPayment;
-      final progress = ((paidSoFar / safeBorrowed) * 100).round().clamp(0, 100);
+    await _db.updateLoan(loan['id'].toString(), {
+      'remainingBalanceValue': remainingAfterPayment,
+      'repaymentProgress': progress,
+      'status': remainingAfterPayment <= 0 ? 'Paid Off' : 'Active',
+      'nextPaymentDate': remainingAfterPayment <= 0
+          ? 'N/A'
+          : _nextPaymentDateLabel(),
+      'updatedAt': nowIso,
+    });
 
-      final currentBalance = _intFromDynamic(
-        userSnapshot.data()?['balanceValue'],
-      );
-      final nextBalance = (currentBalance - amountToApply).clamp(0, 999999999);
-
-      transaction.set(userRef, {
-        'balanceValue': nextBalance,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      transaction.set(loanRef, {
-        'remainingBalanceValue': remainingAfterPayment,
-        'repaymentProgress': progress,
-        'status': remainingAfterPayment <= 0 ? 'Paid Off' : 'Active',
-        'nextPaymentDate': remainingAfterPayment <= 0
-            ? 'N/A'
-            : _nextPaymentDateLabel(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      transaction.set(txRef, {
-        'id': txRef.id,
-        'userId': user.uid,
-        'title': 'Loan Repayment',
-        'subtitle': 'Payment via $method',
-        'amountValue': amountToApply,
-        'isCredit': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    await _db.insertTransaction({
+      'id': 'tx_${DateTime.now().millisecondsSinceEpoch}',
+      'userId': user.uid,
+      'title': 'Loan Repayment',
+      'subtitle': 'Payment via $method',
+      'amountValue': amountToApply,
+      'isCredit': 0,
+      'createdAt': nowIso,
     });
 
     if (remainingAfterPayment <= 0) {
@@ -1124,7 +1070,426 @@ class AppDataRepository {
     }
   }
 
-  // Helper methods
+  static Future<String>
+  getOrCreateActiveChatConversationIdForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final prefs = await SharedPreferences.getInstance();
+    final activeKey = '$_chatActiveConversationPrefix${user.uid}';
+    final existing = prefs.getString(activeKey)?.trim();
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+
+    final conversationId = 'chat_${user.uid}';
+    final conversations = await _loadConversations(user.uid);
+    if (!conversations.any((row) => _nonEmpty(row['id']) == conversationId)) {
+      conversations.add({
+        'id': conversationId,
+        'title': 'Current chat',
+        'lastMessage': '',
+        'lastMessageAt': DateTime.now().toIso8601String(),
+        'unreadCount': 0,
+      });
+      await _saveConversations(user.uid, conversations);
+    }
+
+    await prefs.setString(activeKey, conversationId);
+    return conversationId;
+  }
+
+  static Future<void> addChatMessageForCurrentUser({
+    required String conversationId,
+    required String text,
+    required bool isUser,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final nowIso = DateTime.now().toIso8601String();
+    final messages = await _loadMessages(user.uid);
+    messages.add({
+      'id': 'msg_${DateTime.now().microsecondsSinceEpoch}',
+      'conversationId': conversationId,
+      'isUser': isUser,
+      'text': text,
+      'createdAt': nowIso,
+    });
+    await _saveMessages(user.uid, messages);
+
+    final conversations = await _loadConversations(user.uid);
+    final index = conversations.indexWhere(
+      (row) => _nonEmpty(row['id']) == conversationId,
+    );
+    final unread = !isUser
+        ? (index >= 0
+                  ? _intFromDynamic(conversations[index]['unreadCount'])
+                  : 0) +
+              1
+        : (index >= 0
+              ? _intFromDynamic(conversations[index]['unreadCount'])
+              : 0);
+
+    final updated = {
+      'id': conversationId,
+      'title': index >= 0
+          ? (_nonEmpty(conversations[index]['title']) ?? 'Chat')
+          : 'Chat',
+      'lastMessage': text,
+      'lastMessageAt': nowIso,
+      'unreadCount': unread,
+    };
+
+    if (index >= 0) {
+      conversations[index] = updated;
+    } else {
+      conversations.add(updated);
+    }
+    await _saveConversations(user.uid, conversations);
+  }
+
+  static Future<void> updateChatMessageForCurrentUser({
+    required String messageId,
+    required String text,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final messages = await _loadMessages(user.uid);
+    final index = messages.indexWhere((m) => _nonEmpty(m['id']) == messageId);
+    if (index < 0) return;
+
+    messages[index]['text'] = text;
+    await _saveMessages(user.uid, messages);
+  }
+
+  static Future<void> deleteChatMessageForCurrentUser(String messageId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final messages = await _loadMessages(user.uid);
+    messages.removeWhere((m) => _nonEmpty(m['id']) == messageId);
+    await _saveMessages(user.uid, messages);
+  }
+
+  static Future<String> startNewChatForCurrentUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final conversationId =
+        'chat_${user.uid}_${DateTime.now().millisecondsSinceEpoch}';
+    final conversations = await _loadConversations(user.uid);
+    conversations.insert(0, {
+      'id': conversationId,
+      'title': 'New chat',
+      'lastMessage': '',
+      'lastMessageAt': DateTime.now().toIso8601String(),
+      'unreadCount': 0,
+    });
+    await _saveConversations(user.uid, conversations);
+    await setActiveChatConversationIdForCurrentUser(conversationId);
+    return conversationId;
+  }
+
+  static Future<int> deletePreviousChatConversationsForCurrentUser({
+    required String keepConversationId,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final conversations = await _loadConversations(user.uid);
+    final beforeCount = conversations.length;
+    conversations.removeWhere((c) => _nonEmpty(c['id']) != keepConversationId);
+    await _saveConversations(user.uid, conversations);
+
+    final messages = await _loadMessages(user.uid);
+    messages.removeWhere(
+      (m) => _nonEmpty(m['conversationId']) != keepConversationId,
+    );
+    await _saveMessages(user.uid, messages);
+
+    return beforeCount - conversations.length;
+  }
+
+  static Future<void> setActiveChatConversationIdForCurrentUser(
+    String conversationId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      '$_chatActiveConversationPrefix${user.uid}',
+      conversationId,
+    );
+
+    final conversations = await _loadConversations(user.uid);
+    final index = conversations.indexWhere(
+      (c) => _nonEmpty(c['id']) == conversationId,
+    );
+    if (index >= 0) {
+      conversations[index]['unreadCount'] = 0;
+      await _saveConversations(user.uid, conversations);
+    }
+  }
+
+  static Stream<String?> watchActiveChatConversationIdForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const Stream<String?>.empty();
+
+    return _poll<String?>(() async {
+      return getOrCreateActiveChatConversationIdForCurrentUser();
+    });
+  }
+
+  static Stream<List<AppChatMessageData>> watchChatMessagesForCurrentUser({
+    required String conversationId,
+  }) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<List<AppChatMessageData>>.value(
+        const <AppChatMessageData>[],
+      );
+    }
+
+    return _poll<List<AppChatMessageData>>(() async {
+      final messages = await _loadMessages(user.uid);
+      final filtered =
+          messages
+              .where((m) => _nonEmpty(m['conversationId']) == conversationId)
+              .toList(growable: false)
+            ..sort((a, b) {
+              final da =
+                  _asDateTime(a['createdAt']) ??
+                  DateTime.fromMillisecondsSinceEpoch(0);
+              final db =
+                  _asDateTime(b['createdAt']) ??
+                  DateTime.fromMillisecondsSinceEpoch(0);
+              return da.compareTo(db);
+            });
+
+      return filtered
+          .map(
+            (m) => AppChatMessageData(
+              id: _nonEmpty(m['id']) ?? '',
+              conversationId: _nonEmpty(m['conversationId']) ?? '',
+              isUser: _boolFromDynamic(m['isUser']),
+              text: _nonEmpty(m['text']) ?? '',
+              createdAt: _asDateTime(m['createdAt']),
+            ),
+          )
+          .toList(growable: false);
+    });
+  }
+
+  static Stream<List<AppChatConversationData>>
+  watchChatConversationsForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Stream<List<AppChatConversationData>>.value(
+        const <AppChatConversationData>[],
+      );
+    }
+
+    return _poll<List<AppChatConversationData>>(() async {
+      final conversations = await _loadConversations(user.uid);
+      conversations.sort((a, b) {
+        final da =
+            _asDateTime(a['lastMessageAt']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final db =
+            _asDateTime(b['lastMessageAt']) ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return db.compareTo(da);
+      });
+
+      return conversations
+          .map(
+            (c) => AppChatConversationData(
+              id: _nonEmpty(c['id']) ?? '',
+              title: _nonEmpty(c['title']) ?? 'Chat',
+              lastMessage: _nonEmpty(c['lastMessage']) ?? '',
+              lastMessageAt: _asDateTime(c['lastMessageAt']),
+              unreadCount: _intFromDynamic(c['unreadCount']),
+            ),
+          )
+          .toList(growable: false);
+    });
+  }
+
+  static Future<void> updateSecuritySettingsForCurrentUser({
+    required bool biometricEnabled,
+    required bool twoFactorEnabled,
+    required bool transactionAlerts,
+    required bool loginAlerts,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw StateError('No authenticated user found.');
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      '$_securitySettingsPrefix${user.uid}',
+      jsonEncode(<String, dynamic>{
+        'biometricEnabled': biometricEnabled,
+        'twoFactorEnabled': twoFactorEnabled,
+        'transactionAlerts': transactionAlerts,
+        'loginAlerts': loginAlerts,
+      }),
+    );
+  }
+
+  static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Stream<AppSecuritySettingsData>.empty();
+    }
+
+    return _poll<AppSecuritySettingsData>(() async {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_securitySettingsPrefix${user.uid}');
+      if (raw == null || raw.trim().isEmpty) {
+        return const AppSecuritySettingsData(
+          biometricEnabled: false,
+          twoFactorEnabled: false,
+          transactionAlerts: true,
+          loginAlerts: true,
+        );
+      }
+
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map<String, dynamic>) {
+          return const AppSecuritySettingsData(
+            biometricEnabled: false,
+            twoFactorEnabled: false,
+            transactionAlerts: true,
+            loginAlerts: true,
+          );
+        }
+
+        return AppSecuritySettingsData(
+          biometricEnabled: _boolFromDynamic(decoded['biometricEnabled']),
+          twoFactorEnabled: _boolFromDynamic(decoded['twoFactorEnabled']),
+          transactionAlerts: _boolFromDynamic(decoded['transactionAlerts']),
+          loginAlerts: _boolFromDynamic(decoded['loginAlerts']),
+        );
+      } catch (_) {
+        return const AppSecuritySettingsData(
+          biometricEnabled: false,
+          twoFactorEnabled: false,
+          transactionAlerts: true,
+          loginAlerts: true,
+        );
+      }
+    });
+  }
+
+  static Future<void> checkAndSendPaymentDueNotification() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final loan = await _db.getLatestLoanForUser(user.uid);
+      if (loan == null) return;
+
+      final status = _nonEmpty(loan['status']) ?? '';
+      if (status != 'Active') return;
+
+      final remainingBalance = _intFromDynamic(loan['remainingBalanceValue']);
+      if (remainingBalance <= 0) return;
+
+      final dueDate = _parseFlexibleDate(_nonEmpty(loan['nextPaymentDate']));
+      if (dueDate == null) return;
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final normalizedDue = DateTime(dueDate.year, dueDate.month, dueDate.day);
+      final daysUntilDue = normalizedDue.difference(today).inDays;
+
+      if (daysUntilDue >= 0 && daysUntilDue <= 2) {
+        final reminderKey =
+            '${_nonEmpty(loan['loanId']) ?? 'active'}|${normalizedDue.toIso8601String()}|$daysUntilDue';
+        final prefs = await SharedPreferences.getInstance();
+        final prefsKey = '$_dueReminderPrefix${user.uid}';
+        if (prefs.getString(prefsKey) == reminderKey) {
+          return;
+        }
+
+        await addNotificationForUser(
+          userId: user.uid,
+          title: 'Loan Payment Due Soon',
+          message: daysUntilDue == 0
+              ? 'Your loan payment is due TODAY!'
+              : 'Your loan payment is due in $daysUntilDue day${daysUntilDue == 1 ? '' : 's'}.',
+          type: 'reminder',
+        );
+
+        await prefs.setString(prefsKey, reminderKey);
+      }
+    } catch (e) {
+      developer.log(
+        'Error checking payment due notification: $e',
+        name: 'AppDataRepository',
+      );
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _loadMessages(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('$_chatMessagesPrefix$userId');
+    return _decodeList(raw);
+  }
+
+  static Future<void> _saveMessages(
+    String userId,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_chatMessagesPrefix$userId', jsonEncode(rows));
+  }
+
+  static Future<List<Map<String, dynamic>>> _loadConversations(
+    String userId,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('$_chatConversationsPrefix$userId');
+    return _decodeList(raw);
+  }
+
+  static Future<void> _saveConversations(
+    String userId,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_chatConversationsPrefix$userId', jsonEncode(rows));
+  }
+
+  static List<Map<String, dynamic>> _decodeList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return <Map<String, dynamic>>[];
+    }
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return <Map<String, dynamic>>[];
+      }
+
+      return decoded
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: true);
+    } catch (_) {
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  static Stream<T> _poll<T>(Future<T> Function() loader) async* {
+    yield await loader();
+    yield* Stream<T>.periodic(_pollInterval).asyncMap((_) => loader());
+  }
+
   static bool _isAdminEmail(String? email) {
     if (email == null) return false;
     return email.toLowerCase().trim() == 'admin@twezimbe.co.ug';
@@ -1180,192 +1545,19 @@ class AppDataRepository {
   }
 
   static String _formatUgx(int amount) {
-    final String digits = amount.toString();
-    final StringBuffer formatted = StringBuffer();
+    final digits = amount.toString();
+    final buffer = StringBuffer();
     for (int i = 0; i < digits.length; i++) {
-      final int idxFromEnd = digits.length - i;
-      formatted.write(digits[i]);
+      final idxFromEnd = digits.length - i;
+      buffer.write(digits[i]);
       if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
-        formatted.write(',');
+        buffer.write(',');
       }
     }
-    return 'UGX ${formatted.toString()}';
+    return 'UGX ${buffer.toString()}';
   }
 
   static String formatUgx(int amount) => _formatUgx(amount);
-
-  // ============ CHAT METHODS ============
-
-  static Future<String>
-  getOrCreateActiveChatConversationIdForCurrentUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw StateError('No authenticated user found.');
-    return 'chat_${user.uid}';
-  }
-
-  static Future<void> addChatMessageForCurrentUser({
-    required String conversationId,
-    required String text,
-    required bool isUser,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw StateError('No authenticated user found.');
-
-    // Note: In a real app, you'd insert to a chat_messages table
-    // For now, this is a stub
-  }
-
-  static Future<void> updateChatMessageForCurrentUser({
-    required String messageId,
-    required String text,
-  }) async {
-    // Stub - update chat message
-  }
-
-  static Future<void> deleteChatMessageForCurrentUser(String messageId) async {
-    // Stub - delete chat message
-  }
-
-  static Future<String> startNewChatForCurrentUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw StateError('No authenticated user found.');
-    return 'chat_${user.uid}_${DateTime.now().millisecondsSinceEpoch}';
-  }
-
-  static Future<int> deletePreviousChatConversationsForCurrentUser({
-    required String keepConversationId,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw StateError('No authenticated user found.');
-    // Stub - delete old conversations
-    return 0;
-  }
-
-  static Future<void> setActiveChatConversationIdForCurrentUser(
-    String conversationId,
-  ) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw StateError('No authenticated user found.');
-    // Stub - set active conversation
-  }
-
-  static Stream<String?> watchActiveChatConversationIdForCurrentUser() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return const Stream<String?>.empty();
-    return Stream.value('chat_${user.uid}');
-  }
-
-  static Stream<List<AppChatMessageData>> watchChatMessagesForCurrentUser({
-    required String conversationId,
-  }) {
-    return Stream.value(const <AppChatMessageData>[]);
-  }
-
-  static Stream<List<AppChatConversationData>>
-  watchChatConversationsForCurrentUser() {
-    return Stream.value(const <AppChatConversationData>[]);
-  }
-
-  // ============ SECURITY SETTINGS METHODS ============
-
-  static Future<void> updateSecuritySettingsForCurrentUser({
-    required bool biometricEnabled,
-    required bool twoFactorEnabled,
-    required bool transactionAlerts,
-    required bool loginAlerts,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) throw StateError('No authenticated user found.');
-    // Stub - save to SQLite in a security_settings table
-  }
-
-  static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const Stream<AppSecuritySettingsData>.empty();
-    }
-    return Stream.value(
-      const AppSecuritySettingsData(
-        biometricEnabled: false,
-        twoFactorEnabled: false,
-        transactionAlerts: true,
-        loginAlerts: true,
-      ),
-    );
-  }
-
-  // ============ PAYMENT DUE NOTIFICATION CHECK ============
-
-  /// Check if loan payment is due within 2 days and send notification if needed
-  static Future<void> checkAndSendPaymentDueNotification() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final userRef = _usersRef.doc(user.uid);
-      final userDoc = await userRef.get();
-      final userData = userDoc.data();
-      if (userData == null) return;
-
-      final loanDoc = await userRef.collection('loans').doc('active').get();
-      final loan = loanDoc.data();
-      if (loan == null) return;
-
-      final status = _nonEmpty(loan['status']) ?? '';
-      if (status != 'Active') return;
-
-      final remainingBalance = _intFromDynamic(loan['remainingBalanceValue']);
-      if (remainingBalance <= 0) return;
-
-      // Parse next payment date
-      final nextPaymentDateStr = _nonEmpty(loan['nextPaymentDate']) ?? '';
-      if (nextPaymentDateStr == 'TBD' ||
-          nextPaymentDateStr == 'N/A' ||
-          nextPaymentDateStr == 'Awaiting approval' ||
-          nextPaymentDateStr.isEmpty) {
-        return;
-      }
-
-      final parts = nextPaymentDateStr.split('/');
-      if (parts.length != 3) return;
-
-      final day = int.tryParse(parts[0]);
-      final month = int.tryParse(parts[1]);
-      final year = int.tryParse(parts[2]);
-
-      if (day == null || month == null || year == null) return;
-
-      final dueDate = DateTime(year, month, day);
-      final daysUntilDue = dueDate.difference(DateTime.now()).inDays;
-
-      if (daysUntilDue >= 0 && daysUntilDue <= 2) {
-        final reminderKey =
-            '${_nonEmpty(loan['loanId']) ?? 'active'}|$nextPaymentDateStr|$daysUntilDue';
-        if (_nonEmpty(userData['lastDueReminderKey']) == reminderKey) {
-          return;
-        }
-
-        await addNotificationForUser(
-          userId: user.uid,
-          title: 'Loan Payment Due Soon',
-          message: daysUntilDue == 0
-              ? 'Your loan payment is due TODAY!'
-              : 'Your loan payment is due in $daysUntilDue day${daysUntilDue == 1 ? '' : 's'}.',
-          type: 'reminder',
-        );
-
-        await userRef.set({
-          'lastDueReminderKey': reminderKey,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-    } catch (e) {
-      developer.log(
-        'Error checking payment due notification: $e',
-        name: 'AppDataRepository',
-      );
-    }
-  }
 
   static String? _nonEmpty(dynamic value) {
     if (value == null) return null;
@@ -1391,9 +1583,37 @@ class AppDataRepository {
   }
 
   static DateTime? _asDateTime(dynamic value) {
-    if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     if (value is String) return DateTime.tryParse(value);
     return null;
+  }
+
+  static DateTime? _parseFlexibleDate(String? raw) {
+    final text = raw?.trim() ?? '';
+    if (text.isEmpty ||
+        text == 'TBD' ||
+        text == 'N/A' ||
+        text == 'Awaiting approval') {
+      return null;
+    }
+
+    final iso = DateTime.tryParse(text);
+    if (iso != null) {
+      return iso;
+    }
+
+    final parts = text.split('/');
+    if (parts.length != 3) {
+      return null;
+    }
+
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+    if (day == null || month == null || year == null) {
+      return null;
+    }
+
+    return DateTime(year, month, day);
   }
 }

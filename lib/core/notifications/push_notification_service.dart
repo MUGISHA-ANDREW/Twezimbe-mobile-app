@@ -1,6 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'local_notification_service.dart';
 
 class PushNotificationService {
@@ -8,6 +8,7 @@ class PushNotificationService {
 
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static bool _isInitialized = false;
+  static const String _tokenKeyPrefix = 'fcm_token_for_user_';
 
   static Future<void> initialize() async {
     if (_isInitialized || kIsWeb) {
@@ -26,7 +27,9 @@ class PushNotificationService {
     );
 
     if (kDebugMode) {
-      print('Push notification permission status: ${settings.authorizationStatus}');
+      print(
+        'Push notification permission status: ${settings.authorizationStatus}',
+      );
     }
 
     // Get token
@@ -83,21 +86,21 @@ class PushNotificationService {
     NotificationHandler.setPendingNotification(message);
   }
 
-  static Future<void> saveTokenToFirestore(String userId) async {
+  static Future<void> saveTokenLocally(String userId) async {
     final token = await _messaging.getToken();
     if (token == null) return;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('fcm_tokens')
-          .doc(token.hashCode.toString())
-          .set({
-        'token': token,
-        'createdAt': DateTime.now(),
-        'platform': defaultTargetPlatform.name,
-      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_tokenKeyPrefix$userId', token);
+      await prefs.setString(
+        '$_tokenKeyPrefix${userId}_platform',
+        defaultTargetPlatform.name,
+      );
+      await prefs.setString(
+        '$_tokenKeyPrefix${userId}_updatedAt',
+        DateTime.now().toIso8601String(),
+      );
     } catch (e) {
       if (kDebugMode) {
         print('Error saving FCM token: $e');
@@ -125,7 +128,8 @@ class NotificationHandler {
   }
 
   static String? get pendingNotificationType => _pendingNotificationType;
-  static Map<String, dynamic>? get pendingNotificationData => _pendingNotificationData;
+  static Map<String, dynamic>? get pendingNotificationData =>
+      _pendingNotificationData;
 
   static void clearPendingNotification() {
     _pendingNotificationType = null;

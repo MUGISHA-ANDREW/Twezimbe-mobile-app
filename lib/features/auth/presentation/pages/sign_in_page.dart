@@ -107,9 +107,7 @@ class _SignInPageState extends State<SignInPage> {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         unawaited(
-          PushNotificationService.saveTokenToFirestore(
-            user.uid,
-          ).catchError((_) {}),
+          PushNotificationService.saveTokenLocally(user.uid).catchError((_) {}),
         );
       }
 

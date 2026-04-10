@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/admin/data/admin_local_repository.dart';
+import 'package:twezimbeapp/features/admin/domain/models/admin_user_model.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_users_page.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_loans_page.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
@@ -226,11 +226,124 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 }
 
-class AdminHomeTab extends StatelessWidget {
+class AdminHomeTab extends StatefulWidget {
   const AdminHomeTab({super.key});
 
   @override
+  State<AdminHomeTab> createState() => _AdminHomeTabState();
+}
+
+class _AdminHomeTabState extends State<AdminHomeTab> {
+  final AdminLocalRepository _repository = AdminLocalRepository();
+  final TextEditingController _updateTitleController = TextEditingController();
+  final TextEditingController _updateMessageController =
+      TextEditingController();
+
+  bool _isLoading = false;
+  bool _isSendingUpdate = false;
+  String? _error;
+  String _selectedAudience = 'all';
+  String? _selectedUserId;
+  Map<String, int> _metrics = const <String, int>{
+    'totalUsers': 0,
+    'activeLoans': 0,
+    'defaulters': 0,
+    'totalRevenue': 0,
+  };
+  List<AdminUserModel> _recentUsers = <AdminUserModel>[];
+  List<AdminUserModel> _allUsers = <AdminUserModel>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboard();
+  }
+
+  @override
+  void dispose() {
+    _updateTitleController.dispose();
+    _updateMessageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDashboard() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await _repository.syncUsersFromRemote();
+      await _repository.syncLoanApplicationsFromRemote();
+      final metrics = await _repository.getDashboardMetrics();
+      final recentUsers = await _repository.getRecentUsers(limit: 5);
+      final allUsers = await _repository.getUsers();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _metrics = metrics;
+        _recentUsers = recentUsers;
+        _allUsers = allUsers;
+        if (_selectedAudience == 'specific') {
+          final selectedExists = _allUsers.any((u) => u.id == _selectedUserId);
+          if (!selectedExists) {
+            _selectedUserId = _allUsers.isNotEmpty ? _allUsers.first.id : null;
+          }
+        }
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final totalUsers = _metrics['totalUsers'] ?? 0;
+    final activeLoans = _metrics['activeLoans'] ?? 0;
+    final defaulters = _metrics['defaulters'] ?? 0;
+    final totalRevenue = _metrics['totalRevenue'] ?? 0;
+    final canSendSpecific =
+        _selectedAudience != 'specific' ||
+        (_selectedUserId != null && _selectedUserId!.trim().isNotEmpty);
+
+    final cards = [
+      _buildStatCard(
+        'Total Users',
+        '$totalUsers',
+        Icons.people,
+        AppColors.primaryBlue,
+      ),
+      _buildStatCard(
+        'Active Loans',
+        '$activeLoans',
+        Icons.account_balance,
+        AppColors.primaryOrange,
+      ),
+      _buildStatCard(
+        'Defaulters',
+        '$defaulters',
+        Icons.warning_amber_rounded,
+        AppColors.errorRed,
+      ),
+      _buildStatCard(
+        'Total Revenue',
+        _formatUgx(totalRevenue),
+        Icons.attach_money,
+        AppColors.successGreen,
+      ),
+    ];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -251,132 +364,65 @@ class AdminHomeTab extends StatelessWidget {
           ),
           const SizedBox(height: 32),
 
-          // Stats Cards
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance.collection('users').snapshots(),
-            builder: (context, userSnapshot) {
-              if (userSnapshot.hasError) {
-                return _buildLoadError(
-                  'Unable to load dashboard metrics. Check Firestore access.',
+          if (_error != null)
+            _buildLoadError('Unable to load dashboard data: $_error'),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 720) {
+                return Column(
+                  children: [
+                    for (int i = 0; i < cards.length; i++) ...[
+                      cards[i],
+                      if (i < cards.length - 1) const SizedBox(height: 12),
+                    ],
+                  ],
                 );
               }
 
-              if (!userSnapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+              if (constraints.maxWidth < 1180) {
+                final cardWidth = (constraints.maxWidth - 16) / 2;
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: cards
+                      .map((card) => SizedBox(width: cardWidth, child: card))
+                      .toList(growable: false),
+                );
               }
 
-              final userDocs = userSnapshot.data!.docs;
-              final totalUsers = userDocs.length;
-              final totalRevenue = userDocs.fold<int>(0, (runningTotal, doc) {
-                final data = doc.data();
-                final value = (data['balanceValue'] as num?)?.toInt() ?? 0;
-                return runningTotal + value;
-              });
-
-              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collectionGroup('loanApplications')
-                    .snapshots(),
-                builder: (context, loanSnapshot) {
-                  if (loanSnapshot.hasError) {
-                    return _buildLoadError(
-                      'Unable to load loan metrics. Check Firestore indexes/rules.',
-                    );
-                  }
-
-                  final loanDocs = loanSnapshot.data?.docs ?? const [];
-                  final activeLoans = loanDocs.where((doc) {
-                    final status = (doc.data()['status'] as String?) ?? '';
-                    return status == 'Approved' || status == 'Active';
-                  }).length;
-                  final pendingReviews = loanDocs.where((doc) {
-                    final status =
-                        (doc.data()['status'] as String?) ?? 'Pending Review';
-                    return status == 'Pending Review';
-                  }).length;
-
-                  final cards = [
-                    _buildStatCard(
-                      'Total Users',
-                      '$totalUsers',
-                      Icons.people,
-                      AppColors.primaryBlue,
-                    ),
-                    _buildStatCard(
-                      'Active Loans',
-                      '$activeLoans',
-                      Icons.account_balance,
-                      AppColors.primaryOrange,
-                    ),
-                    _buildStatCard(
-                      'Pending Reviews',
-                      '$pendingReviews',
-                      Icons.pending_actions,
-                      AppColors.errorRed,
-                    ),
-                    _buildStatCard(
-                      'Total Revenue',
-                      AppDataRepository.formatUgx(totalRevenue),
-                      Icons.attach_money,
-                      AppColors.successGreen,
-                    ),
-                  ];
-
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (constraints.maxWidth < 720) {
-                        return Column(
-                          children: [
-                            for (int i = 0; i < cards.length; i++) ...[
-                              cards[i],
-                              if (i < cards.length - 1)
-                                const SizedBox(height: 12),
-                            ],
-                          ],
-                        );
-                      }
-
-                      if (constraints.maxWidth < 1180) {
-                        final cardWidth = (constraints.maxWidth - 16) / 2;
-                        return Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
-                          children: cards
-                              .map(
-                                (card) =>
-                                    SizedBox(width: cardWidth, child: card),
-                              )
-                              .toList(growable: false),
-                        );
-                      }
-
-                      return Row(
-                        children: [
-                          Expanded(child: cards[0]),
-                          const SizedBox(width: 16),
-                          Expanded(child: cards[1]),
-                          const SizedBox(width: 16),
-                          Expanded(child: cards[2]),
-                          const SizedBox(width: 16),
-                          Expanded(child: cards[3]),
-                        ],
-                      );
-                    },
-                  );
-                },
+              return Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[1]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[2]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[3]),
+                ],
               );
             },
           ),
           const SizedBox(height: 32),
 
           // Recent Activities
-          const Text(
-            'Recent Activities',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textMain,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Recent Activities',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMain,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _isLoading ? null : _loadDashboard,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Refresh'),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Container(
@@ -386,67 +432,261 @@ class AdminHomeTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey.shade100),
             ),
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .limit(5)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return _buildLoadError(
-                    'Unable to load recent activities. Check Firestore access.',
-                  );
-                }
-
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final users = snapshot.data!.docs;
-                return Column(
-                  children: users.map((user) {
-                    final data = user.data() as Map<String, dynamic>;
-                    return ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryBlue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.person,
-                          color: AppColors.primaryBlue,
-                        ),
-                      ),
-                      title: Text(data['fullName'] ?? 'Unknown'),
-                      subtitle: Text(data['email'] ?? ''),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.successGreen.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          data['kycStatus'] ?? 'Verified',
-                          style: const TextStyle(
-                            color: AppColors.successGreen,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+            child: _recentUsers.isEmpty
+                ? Text(
+                    _isLoading
+                        ? 'Fetching latest activities...'
+                        : 'No recent users found.',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  )
+                : Column(
+                    children: _recentUsers
+                        .map((user) {
+                          return ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryBlue.withValues(
+                                  alpha: 0.1,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.person,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                            title: Text(
+                              user.fullName.isEmpty ? 'Unknown' : user.fullName,
+                            ),
+                            subtitle: Text(user.email),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.successGreen.withValues(
+                                  alpha: 0.1,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                user.kycStatus,
+                                style: const TextStyle(
+                                  color: AppColors.successGreen,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          );
+                        })
+                        .toList(growable: false),
+                  ),
+          ),
+          const SizedBox(height: 32),
+          const Text(
+            'Client Communication',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textMain,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade100),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedAudience,
+                  decoration: const InputDecoration(
+                    labelText: 'Recipients',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Clients')),
+                    DropdownMenuItem(
+                      value: 'defaulters',
+                      child: Text('Defaulters Only'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'specific',
+                      child: Text('Specific Client'),
+                    ),
+                  ],
+                  onChanged: _isSendingUpdate
+                      ? null
+                      : (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedAudience = value;
+                            if (_selectedAudience == 'specific' &&
+                                (_selectedUserId == null ||
+                                    !_allUsers.any(
+                                      (u) => u.id == _selectedUserId,
+                                    ))) {
+                              _selectedUserId = _allUsers.isNotEmpty
+                                  ? _allUsers.first.id
+                                  : null;
+                            }
+                          });
+                        },
+                ),
+                if (_selectedAudience == 'specific') ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _selectedUserId,
+                    decoration: const InputDecoration(
+                      labelText: 'Client',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _allUsers
+                        .map(
+                          (user) => DropdownMenuItem<String>(
+                            value: user.id,
+                            child: Text(
+                              user.email.isEmpty
+                                  ? user.fullName
+                                  : '${user.fullName} (${user.email})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
+                        )
+                        .toList(growable: false),
+                    onChanged: _isSendingUpdate
+                        ? null
+                        : (value) => setState(() => _selectedUserId = value),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _updateTitleController,
+                  enabled: !_isSendingUpdate,
+                  maxLength: 80,
+                  decoration: const InputDecoration(
+                    labelText: 'Update Title',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _updateMessageController,
+                  enabled: !_isSendingUpdate,
+                  maxLines: 4,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    labelText: 'Update Message',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSendingUpdate || !canSendSpecific
+                        ? null
+                        : _sendClientUpdate,
+                    icon: _isSendingUpdate
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                    label: Text(
+                      _isSendingUpdate ? 'Sending...' : 'Send Update',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _sendClientUpdate() async {
+    final title = _updateTitleController.text.trim();
+    final message = _updateMessageController.text.trim();
+    if (title.isEmpty || message.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please provide both title and message.')),
+      );
+      return;
+    }
+
+    if (_selectedAudience == 'specific' &&
+        (_selectedUserId == null || _selectedUserId!.trim().isEmpty)) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a specific client.')),
+      );
+      return;
+    }
+
+    setState(() => _isSendingUpdate = true);
+    try {
+      final sentCount = await _repository.sendClientNotification(
+        title: title,
+        message: message,
+        audience: _selectedAudience,
+        userId: _selectedUserId,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      _updateMessageController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Update sent to $sentCount client(s).')),
+      );
+      await _loadDashboard();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to send update: $error')));
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingUpdate = false);
+      }
+    }
+  }
+
+  String _formatUgx(int amount) {
+    final digits = amount.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final idxFromEnd = digits.length - i;
+      buffer.write(digits[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+    return 'UGX ${buffer.toString()}';
   }
 
   Widget _buildStatCard(
