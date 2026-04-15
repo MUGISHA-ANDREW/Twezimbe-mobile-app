@@ -282,11 +282,16 @@ class DatabaseHelper {
   }
 
   Future<Map<String, dynamic>?> getLoanApplication(String applicationId) async {
+    final lookupId = applicationId.trim();
+    if (lookupId.isEmpty) {
+      return null;
+    }
+
     final db = await database;
     final results = await db.query(
       'loan_applications',
-      where: 'applicationId = ?',
-      whereArgs: [applicationId],
+      where: '(applicationId = ? OR id = ?)',
+      whereArgs: [lookupId, lookupId],
     );
     return results.isNotEmpty ? results.first : null;
   }
@@ -295,12 +300,17 @@ class DatabaseHelper {
     String applicationId,
     Map<String, dynamic> app,
   ) async {
+    final lookupId = applicationId.trim();
+    if (lookupId.isEmpty) {
+      return 0;
+    }
+
     final db = await database;
     return await db.update(
       'loan_applications',
       app,
-      where: 'applicationId = ?',
-      whereArgs: [applicationId],
+      where: '(applicationId = ? OR id = ?)',
+      whereArgs: [lookupId, lookupId],
     );
   }
 

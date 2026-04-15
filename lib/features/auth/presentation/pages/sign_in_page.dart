@@ -98,11 +98,13 @@ class _SignInPageState extends State<SignInPage> {
 
     try {
       await _signInWithRetry(email: email, password: password);
-      await AppDataRepository.ensureProfileForCurrentUser(email: email);
-
-      await LocalUserSessionStore.saveFromCurrentUser();
-      final isAdminUser = await AppDataRepository.isCurrentUserAdmin();
-      _syncProfileInBackground();
+      bool isAdminUser = false;
+      try {
+        isAdminUser = await AppDataRepository.isCurrentUserAdmin();
+      } catch (error) {
+        debugPrint('SignIn admin role check failed: $error');
+      }
+      _syncProfileInBackground(email: email);
 
       // Save FCM token for push notifications
       final user = FirebaseAuth.instance.currentUser;
@@ -219,9 +221,12 @@ class _SignInPageState extends State<SignInPage> {
     }
   }
 
-  void _syncProfileInBackground() {
+  void _syncProfileInBackground({required String email}) {
+    unawaited(LocalUserSessionStore.saveFromCurrentUser().catchError((_) {}));
     unawaited(
-      AppDataRepository.ensureProfileForCurrentUser().catchError((_) {}),
+      AppDataRepository.ensureProfileForCurrentUser(
+        email: email,
+      ).catchError((_) {}),
     );
     unawaited(
       AppDataRepository.checkAndSendPaymentDueNotification().catchError((_) {}),

@@ -396,10 +396,28 @@ class AdminLocalRepository {
     required String period,
     required String purpose,
   }) async {
+    final application = await _db.getLoanApplication(applicationId);
+    if (application == null) {
+      throw StateError('Loan application not found.');
+    }
+
+    final currentStatus = _string(application['status']);
+    if (currentStatus != 'Pending Review') {
+      throw StateError('Only pending applications can be approved.');
+    }
+
+    final effectiveApplicationId =
+        _string(application['applicationId']).isNotEmpty
+        ? _string(application['applicationId'])
+        : _string(application['id']);
+    if (effectiveApplicationId.isEmpty) {
+      throw StateError('Loan application has no valid identifier.');
+    }
+
     final now = DateTime.now();
     final nowIso = now.toIso8601String();
 
-    await _db.updateLoanApplication(applicationId, {
+    await _db.updateLoanApplication(effectiveApplicationId, {
       'status': 'Approved',
       'rejectionReason': null,
       'reviewedBy': 'local_admin',
@@ -407,8 +425,8 @@ class AdminLocalRepository {
       'updatedAt': nowIso,
     });
 
-    final existingLoan = await _db.getActiveLoan(userId);
-    if (existingLoan == null) {
+    final latestLoan = await _db.getLatestLoanForUser(userId);
+    if (latestLoan == null) {
       await _db.insertLoan({
         'id': 'active_$userId',
         'userId': userId,
@@ -425,13 +443,33 @@ class AdminLocalRepository {
         'updatedAt': nowIso,
       });
     } else {
-      final currentRemaining = _int(existingLoan['remainingBalanceValue']);
-      final currentPrincipal = _int(existingLoan['amountValue']);
-      await _db.updateLoan(existingLoan['id'].toString(), {
-        'remainingBalanceValue': currentRemaining + amountValue,
-        'amountValue': currentPrincipal + amountValue,
-        'updatedAt': nowIso,
-      });
+      final latestStatus = _string(latestLoan['status']);
+      if (latestStatus == 'Active' || latestStatus == 'Approved') {
+        final currentRemaining = _int(latestLoan['remainingBalanceValue']);
+        final currentPrincipal = _int(latestLoan['amountValue']);
+        await _db.updateLoan(latestLoan['id'].toString(), {
+          'remainingBalanceValue': currentRemaining + amountValue,
+          'amountValue': currentPrincipal + amountValue,
+          'updatedAt': nowIso,
+        });
+      } else {
+        await _db.updateLoan(latestLoan['id'].toString(), {
+          'loanId': _string(latestLoan['loanId']).isNotEmpty
+              ? _string(latestLoan['loanId'])
+              : 'LN${now.millisecondsSinceEpoch}',
+          'type': loanType,
+          'status': 'Active',
+          'amountValue': amountValue,
+          'remainingBalanceValue': amountValue,
+          'period': period,
+          'purpose': purpose,
+          'nextPaymentDate': now
+              .add(const Duration(days: 30))
+              .toIso8601String(),
+          'repaymentProgress': 0,
+          'updatedAt': nowIso,
+        });
+      }
     }
 
     final user = await _db.getUser(userId);
@@ -456,7 +494,7 @@ class AdminLocalRepository {
       'userId': userId,
       'title': 'Loan Approved',
       'message':
-          'Your loan application ($applicationId) was approved. Funds have been credited to your account.',
+          'Your loan application ($effectiveApplicationId) was approved. Funds have been credited to your account.',
       'type': 'loan_approved',
       'isRead': 0,
       'createdAt': nowIso,
@@ -468,22 +506,54 @@ class AdminLocalRepository {
     required String userId,
     required String reason,
   }) async {
+    final application = await _db.getLoanApplication(applicationId);
+    if (application == null) {
+      throw StateError('Loan application not found.');
+    }
+
+    final currentStatus = _string(application['status']);
+    if (currentStatus != 'Pending Review') {
+      throw StateError('Only pending applications can be rejected.');
+    }
+
+    final effectiveApplicationId =
+        _string(application['applicationId']).isNotEmpty
+        ? _string(application['applicationId'])
+        : _string(application['id']);
+    if (effectiveApplicationId.isEmpty) {
+      throw StateError('Loan application has no valid identifier.');
+    }
+
+    final cleanReason = reason.trim().isEmpty
+        ? 'Please contact support for guidance.'
+        : reason.trim();
     final nowIso = DateTime.now().toIso8601String();
 
-    await _db.updateLoanApplication(applicationId, {
+    await _db.updateLoanApplication(effectiveApplicationId, {
       'status': 'Rejected',
-      'rejectionReason': reason,
+      'rejectionReason': cleanReason,
       'reviewedBy': 'local_admin',
       'reviewedAt': nowIso,
       'updatedAt': nowIso,
     });
+
+    final latestLoan = await _db.getLatestLoanForUser(userId);
+    if (latestLoan != null &&
+        _string(latestLoan['status']) == 'Pending Review') {
+      await _db.updateLoan(latestLoan['id'].toString(), {
+        'status': 'Rejected',
+        'nextPaymentDate': 'Awaiting new application',
+        'repaymentProgress': 0,
+        'updatedAt': nowIso,
+      });
+    }
 
     await _db.insertNotification({
       'id': 'notif_${DateTime.now().microsecondsSinceEpoch}',
       'userId': userId,
       'title': 'Loan Rejected',
       'message':
-          'Your loan application ($applicationId) was rejected. Reason: $reason',
+          'Your loan application ($effectiveApplicationId) was rejected. Reason: $cleanReason',
       'type': 'loan_rejected',
       'isRead': 0,
       'createdAt': nowIso,

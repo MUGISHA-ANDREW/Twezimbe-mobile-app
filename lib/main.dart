@@ -79,22 +79,33 @@ class _AuthGatePageState extends State<AuthGatePage> {
   }
 
   Future<void> _initializeStartup() async {
-    await _resolveInitialAuthState();
-
-    if (!mounted) return;
-    setState(() {
-      _isAuthenticated = _isAuthenticated;
-      _isLoading = false;
-    });
+    try {
+      await _resolveInitialAuthState();
+    } catch (error) {
+      debugPrint('AuthGate startup error: $error');
+      if (mounted) {
+        setState(() {
+          _isAuthenticated = FirebaseAuth.instance.currentUser != null;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<bool> _resolveInitialAuthState() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      await AppDataRepository.ensureProfileForCurrentUser(
-        email: currentUser.email,
+      unawaited(
+        AppDataRepository.ensureProfileForCurrentUser(
+          email: currentUser.email,
+        ).catchError((_) {}),
       );
-      await LocalUserSessionStore.saveUser(currentUser);
+      unawaited(LocalUserSessionStore.saveUser(currentUser).catchError((_) {}));
       unawaited(
         AppDataRepository.checkAndSendPaymentDueNotification().catchError(
           (_) {},
@@ -104,9 +115,13 @@ class _AuthGatePageState extends State<AuthGatePage> {
       return true;
     }
 
-    final localSession = await LocalUserSessionStore.readSession();
-    if (localSession != null && localSession.uid.isNotEmpty) {
-      await LocalUserSessionStore.clear();
+    try {
+      final localSession = await LocalUserSessionStore.readSession();
+      if (localSession != null && localSession.uid.isNotEmpty) {
+        await LocalUserSessionStore.clear();
+      }
+    } catch (error) {
+      debugPrint('AuthGate local session cleanup failed: $error');
     }
 
     if (mounted) setState(() => _isAuthenticated = false);

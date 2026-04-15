@@ -274,12 +274,16 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       ],
                       rows: _visibleApplications
                           .map((loan) {
-                            final appId = loan.applicationId;
-                            final isBusy = _decisionLoading[appId] ?? false;
+                            final appId = _applicationLookupId(loan);
+                            final decisionKey =
+                                appId ??
+                                '${loan.userId}_${loan.createdAt?.millisecondsSinceEpoch ?? 0}';
+                            final isBusy =
+                                _decisionLoading[decisionKey] ?? false;
 
                             return DataRow(
                               cells: [
-                                DataCell(Text(appId)),
+                                DataCell(Text(appId ?? '-')),
                                 DataCell(
                                   SizedBox(
                                     width: 190,
@@ -332,11 +336,15 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                                                   color: AppColors.successGreen,
                                                 ),
                                           onPressed:
-                                              isBusy || loan.userId.isEmpty
+                                              isBusy ||
+                                                  loan.userId.isEmpty ||
+                                                  appId == null
                                               ? null
-                                              : () => _approveLoan(loan),
-                                          tooltip: loan.userId.isEmpty
-                                              ? 'Cannot resolve applicant'
+                                              : () => _approveLoan(loan, appId),
+                                          tooltip:
+                                              loan.userId.isEmpty ||
+                                                  appId == null
+                                              ? 'Cannot resolve application'
                                               : 'Approve',
                                         ),
                                         IconButton(
@@ -345,14 +353,19 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                                             color: AppColors.errorRed,
                                           ),
                                           onPressed:
-                                              isBusy || loan.userId.isEmpty
+                                              isBusy ||
+                                                  loan.userId.isEmpty ||
+                                                  appId == null
                                               ? null
                                               : () =>
                                                     _rejectLoanWithReasonDialog(
                                                       loan,
+                                                      appId,
                                                     ),
-                                          tooltip: loan.userId.isEmpty
-                                              ? 'Cannot resolve applicant'
+                                          tooltip:
+                                              loan.userId.isEmpty ||
+                                                  appId == null
+                                              ? 'Cannot resolve application'
                                               : 'Reject',
                                         ),
                                       ],
@@ -423,6 +436,16 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     return '-';
   }
 
+  String? _applicationLookupId(AdminLoanApplicationModel loan) {
+    if (loan.applicationId.trim().isNotEmpty) {
+      return loan.applicationId.trim();
+    }
+    if (loan.id.trim().isNotEmpty) {
+      return loan.id.trim();
+    }
+    return null;
+  }
+
   Widget _buildStatusChip(String status) {
     Color color;
     switch (status) {
@@ -454,6 +477,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
   }
 
   void _showLoanDetails(BuildContext context, AdminLoanApplicationModel loan) {
+    final appId = _applicationLookupId(loan);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -470,7 +494,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
-              _detailRow('Application ID', loan.applicationId),
+              _detailRow('Application ID', appId ?? '-'),
               _detailRow(
                 'Applicant',
                 loan.userName.isEmpty ? '-' : loan.userName,
@@ -499,8 +523,8 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       child: OutlinedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          if (loan.userId.isNotEmpty) {
-                            _rejectLoanWithReasonDialog(loan);
+                          if (loan.userId.isNotEmpty && appId != null) {
+                            _rejectLoanWithReasonDialog(loan, appId);
                           }
                         },
                         style: OutlinedButton.styleFrom(
@@ -515,8 +539,8 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          if (loan.userId.isNotEmpty) {
-                            _approveLoan(loan);
+                          if (loan.userId.isNotEmpty && appId != null) {
+                            _approveLoan(loan, appId);
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -555,13 +579,14 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
 
   Future<void> _rejectLoanWithReasonDialog(
     AdminLoanApplicationModel loan,
+    String appId,
   ) async {
     final reason = await _promptRejectionReason();
     if (reason == null) {
       return;
     }
 
-    await _rejectLoan(loan, reason);
+    await _rejectLoan(loan, appId, reason);
   }
 
   Future<String?> _promptRejectionReason() async {
@@ -602,8 +627,10 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     return reason;
   }
 
-  Future<void> _approveLoan(AdminLoanApplicationModel loan) async {
-    final appId = loan.applicationId;
+  Future<void> _approveLoan(
+    AdminLoanApplicationModel loan,
+    String appId,
+  ) async {
     if (mounted) {
       setState(() => _decisionLoading[appId] = true);
     }
@@ -635,9 +662,9 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
 
   Future<void> _rejectLoan(
     AdminLoanApplicationModel loan,
+    String appId,
     String reason,
   ) async {
-    final appId = loan.applicationId;
     if (mounted) {
       setState(() => _decisionLoading[appId] = true);
     }

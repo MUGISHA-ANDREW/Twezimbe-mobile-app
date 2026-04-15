@@ -58,12 +58,14 @@ class AdminLoanApplicationModel {
       return 0;
     }
 
+    final id = valueAsString(data['id']);
+    final applicationId = valueAsString(data['applicationId'], fallback: id);
     final rejectionReason = valueAsString(data['rejectionReason']);
     final reviewedBy = valueAsString(data['reviewedBy']);
 
     return AdminLoanApplicationModel(
-      id: valueAsString(data['id']),
-      applicationId: valueAsString(data['applicationId']),
+      id: id,
+      applicationId: applicationId,
       userId: valueAsString(data['userId']),
       userName: valueAsString(data['userName']),
       userEmail: valueAsString(data['userEmail']),
