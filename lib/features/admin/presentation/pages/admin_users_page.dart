@@ -19,6 +19,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   bool _isLoading = true;
   bool _isMutating = false;
   List<AdminUserModel> _users = <AdminUserModel>[];
+  DateTime? _lastRefreshedAt;
 
   @override
   void initState() {
@@ -34,6 +35,15 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
     setState(() => _filterStatus = savedFilter);
     await _refreshUsers(syncRemote: true);
+
+    // Trigger a second refresh shortly after first paint to capture
+    // user records written during recent sign-in/signup transitions.
+    Future<void>.delayed(const Duration(milliseconds: 700), () {
+      if (!mounted) {
+        return;
+      }
+      _refreshUsers(syncRemote: false);
+    });
   }
 
   Future<void> _refreshUsers({required bool syncRemote}) async {
@@ -55,7 +65,10 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
         return;
       }
 
-      setState(() => _users = users);
+      setState(() {
+        _users = users;
+        _lastRefreshedAt = DateTime.now();
+      });
     } catch (error) {
       if (!mounted) {
         return;
@@ -89,6 +102,15 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
             style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
+
+          if (_lastRefreshedAt != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Updated ${_lastRefreshedAt!.hour.toString().padLeft(2, '0')}:${_lastRefreshedAt!.minute.toString().padLeft(2, '0')}',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ),
 
           // Search and Filter
           LayoutBuilder(

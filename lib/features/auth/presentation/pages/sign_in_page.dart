@@ -98,6 +98,7 @@ class _SignInPageState extends State<SignInPage> {
 
     try {
       await _signInWithRetry(email: email, password: password);
+      await AppDataRepository.ensureProfileForCurrentUser(email: email);
 
       await LocalUserSessionStore.saveFromCurrentUser();
       final isAdminUser = await AppDataRepository.isCurrentUserAdmin();

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:twezimbeapp/core/data/database_helper.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_loan_application_model.dart';
@@ -41,7 +43,145 @@ class AdminLocalRepository {
   }
 
   Future<void> syncUsersFromRemote() async {
-    // SQLite-only mode: no remote source to sync.
+    // Keep local cache aligned with whichever Firebase user is currently signed in.
+    await _syncCurrentSignedInUserToSqlite();
+
+    // Pull full auth users list from a privileged backend callable, then cache in SQLite.
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'listAuthUsers',
+      );
+      final response = await callable.call();
+
+      final data = response.data;
+      if (data is! Map) {
+        return;
+      }
+
+      final rawUsers = data['users'];
+      if (rawUsers is! List) {
+        return;
+      }
+
+      final rows = <Map<String, dynamic>>[];
+      final nowIso = DateTime.now().toIso8601String();
+
+      for (final entry in rawUsers) {
+        if (entry is! Map) {
+          continue;
+        }
+
+        final uid = _string(entry['uid']);
+        if (uid.isEmpty) {
+          continue;
+        }
+
+        final existing = await _db.getUser(uid);
+        final email = _string(entry['email']);
+        final fullName = _string(entry['displayName']).isNotEmpty
+            ? _string(entry['displayName'])
+            : _string(existing?['fullName']).isNotEmpty
+            ? _string(existing?['fullName'])
+            : (email.isNotEmpty ? email.split('@').first : 'Member');
+
+        rows.add({
+          'id': uid,
+          'fullName': fullName,
+          'email': email,
+          'phoneNumber': _string(entry['phoneNumber']).isNotEmpty
+              ? _string(entry['phoneNumber'])
+              : _string(existing?['phoneNumber']),
+          'dateOfBirth': _string(existing?['dateOfBirth']),
+          'nationalId': _string(existing?['nationalId']),
+          'address': _string(existing?['address']),
+          'photoUrl': _string(entry['photoURL']).isNotEmpty
+              ? _string(entry['photoURL'])
+              : _string(existing?['photoUrl']),
+          'customerId': _string(existing?['customerId']).isNotEmpty
+              ? _string(existing?['customerId'])
+              : _customerIdFromUid(uid),
+          'kycStatus': _string(existing?['kycStatus']).isNotEmpty
+              ? _string(existing?['kycStatus'])
+              : 'Pending',
+          'accountType': _string(existing?['accountType']).isNotEmpty
+              ? _string(existing?['accountType'])
+              : 'Savings Account',
+          'balanceValue': _int(existing?['balanceValue']),
+          'isAdmin': (_int(existing?['isAdmin']) == 1 || _isAdminEmail(email))
+              ? 1
+              : 0,
+          'createdAt': _string(existing?['createdAt']).isNotEmpty
+              ? _string(existing?['createdAt'])
+              : (_string(entry['creationTime']).isNotEmpty
+                    ? _string(entry['creationTime'])
+                    : nowIso),
+          'updatedAt': _string(entry['lastSignInTime']).isNotEmpty
+              ? _string(entry['lastSignInTime'])
+              : nowIso,
+        });
+      }
+
+      if (rows.isNotEmpty) {
+        await _db.upsertUsers(rows);
+      }
+    } on FirebaseFunctionsException {
+      // Function unavailable/unauthorized: keep using local cache.
+    } catch (_) {
+      // Network/parse issue: keep using local cache.
+    }
+  }
+
+  Future<void> _syncCurrentSignedInUserToSqlite() async {
+    final current = FirebaseAuth.instance.currentUser;
+    if (current == null) {
+      return;
+    }
+
+    final existing = await _db.getUser(current.uid);
+    final nowIso = DateTime.now().toIso8601String();
+    final email = _string(current.email).toLowerCase();
+    final fullName = _string(current.displayName).isNotEmpty
+        ? _string(current.displayName)
+        : _string(existing?['fullName']).isNotEmpty
+        ? _string(existing?['fullName'])
+        : (email.isNotEmpty ? email.split('@').first : 'Member');
+
+    final payload = <String, dynamic>{
+      'id': current.uid,
+      'fullName': fullName,
+      'email': email,
+      'phoneNumber': _string(current.phoneNumber).isNotEmpty
+          ? _string(current.phoneNumber)
+          : _string(existing?['phoneNumber']),
+      'dateOfBirth': _string(existing?['dateOfBirth']),
+      'nationalId': _string(existing?['nationalId']),
+      'address': _string(existing?['address']),
+      'photoUrl': _string(current.photoURL).isNotEmpty
+          ? _string(current.photoURL)
+          : _string(existing?['photoUrl']),
+      'customerId': _string(existing?['customerId']).isNotEmpty
+          ? _string(existing?['customerId'])
+          : _customerIdFromUid(current.uid),
+      'kycStatus': _string(existing?['kycStatus']).isNotEmpty
+          ? _string(existing?['kycStatus'])
+          : 'Pending',
+      'accountType': _string(existing?['accountType']).isNotEmpty
+          ? _string(existing?['accountType'])
+          : 'Savings Account',
+      'balanceValue': _int(existing?['balanceValue']),
+      'isAdmin': (_int(existing?['isAdmin']) == 1 || _isAdminEmail(email))
+          ? 1
+          : 0,
+      'updatedAt': nowIso,
+    };
+
+    if (existing == null) {
+      payload['createdAt'] =
+          current.metadata.creationTime?.toIso8601String() ?? nowIso;
+      await _db.insertUser(payload);
+    } else {
+      await _db.updateUser(current.uid, payload);
+    }
   }
 
   Future<List<AdminUserModel>> getUsers({
@@ -426,6 +566,19 @@ class AdminLocalRepository {
       return '';
     }
     return value.toString().trim();
+  }
+
+  String _customerIdFromUid(String uid) {
+    final normalized = uid.codeUnits.fold<int>(
+      0,
+      (sum, code) => (sum + code) % 99999,
+    );
+    final suffix = normalized.toString().padLeft(5, '0');
+    return 'CUS$suffix';
+  }
+
+  bool _isAdminEmail(String email) {
+    return email.trim().toLowerCase() == 'admin@twezimbe.co.ug';
   }
 
   DateTime? _parseFlexibleDate(String? raw) {

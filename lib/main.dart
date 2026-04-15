@@ -91,6 +91,9 @@ class _AuthGatePageState extends State<AuthGatePage> {
   Future<bool> _resolveInitialAuthState() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
+      await AppDataRepository.ensureProfileForCurrentUser(
+        email: currentUser.email,
+      );
       await LocalUserSessionStore.saveUser(currentUser);
       unawaited(
         AppDataRepository.checkAndSendPaymentDueNotification().catchError(
