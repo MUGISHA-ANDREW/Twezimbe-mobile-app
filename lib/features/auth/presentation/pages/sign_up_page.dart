@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/auth/domain/auth_input_validators.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -46,14 +47,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
-    }
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value.trim())) {
-      return 'Please enter a valid email';
-    }
-    return null;
+    return AuthInputValidators.validateEmail(value);
   }
 
   String? _validatePhone(String? value) {
@@ -70,13 +64,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Password is required';
-    }
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters';
-    }
-    return null;
+    return AuthInputValidators.validateSignUpPassword(value);
   }
 
   String? _validateConfirmPassword(String? value) {
@@ -106,7 +94,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
     final username = _usernameController.text.trim();
     final phoneNumber = _phoneController.text.trim();
-    final email = _emailController.text.trim().toLowerCase();
+    final email = AuthInputValidators.normalizeEmail(_emailController.text);
     final password = _passwordController.text;
 
     setState(() => _isLoading = true);

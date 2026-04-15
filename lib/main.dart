@@ -85,7 +85,7 @@ class _AuthGatePageState extends State<AuthGatePage> {
       debugPrint('AuthGate startup error: $error');
       if (mounted) {
         setState(() {
-          _isAuthenticated = FirebaseAuth.instance.currentUser != null;
+          _isAuthenticated = false;
         });
       }
     } finally {

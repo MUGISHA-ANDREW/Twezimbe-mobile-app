@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/features/auth/domain/auth_input_validators.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
@@ -11,6 +13,14 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   int _currentStep = 0; // 0 = enter account, 1 = OTP, 2 = new password
+  final TextEditingController _emailController = TextEditingController();
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +77,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Enter your account number or registered phone number and we will send you an OTP to reset your password.',
+          'Enter your registered email address and we will send a password reset link.',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.grey.shade600,
@@ -77,13 +87,16 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         ),
         const SizedBox(height: 32),
         const Text(
-          'Account Number / Phone',
+          'Email Address',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         TextFormField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
           decoration: InputDecoration(
-            hintText: 'e.g. AC00000001 or 0770000000',
+            hintText: 'e.g. user@example.com',
             hintStyle: TextStyle(color: Colors.grey.shade400),
             filled: true,
             fillColor: Colors.grey.shade50,
@@ -95,11 +108,78 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         ),
         const SizedBox(height: 32),
         ElevatedButton(
-          onPressed: () => setState(() => _currentStep = 1),
-          child: const Text('Send OTP'),
+          onPressed: _isSending ? null : _sendPasswordResetEmail,
+          child: _isSending
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Send Reset Link'),
         ),
       ],
     );
+  }
+
+  Future<void> _sendPasswordResetEmail() async {
+    FocusScope.of(context).unfocus();
+
+    final validationError = AuthInputValidators.validateEmail(
+      _emailController.text,
+    );
+    if (validationError != null) {
+      _showInlineMessage(validationError, isError: true);
+      return;
+    }
+
+    final email = AuthInputValidators.normalizeEmail(_emailController.text);
+
+    setState(() => _isSending = true);
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      _showSuccessDialog(context);
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      _showInlineMessage(_resetErrorMessage(e), isError: true);
+    } catch (_) {
+      if (!mounted) return;
+      _showInlineMessage(
+        'Unable to send reset link right now. Please try again.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
+    }
+  }
+
+  String _resetErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-email':
+        return 'The email address is invalid.';
+      case 'too-many-requests':
+        return 'Too many attempts. Try again later.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network.';
+      default:
+        return 'Could not send reset link. Please try again.';
+    }
+  }
+
+  void _showInlineMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError
+              ? AppColors.errorRed
+              : AppColors.successGreen,
+        ),
+      );
   }
 
   // Step 2: OTP entry

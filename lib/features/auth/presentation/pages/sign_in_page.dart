@@ -6,6 +6,7 @@ import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
+import 'package:twezimbeapp/features/auth/domain/auth_input_validators.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_dashboard_page.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_up_page.dart';
@@ -63,24 +64,11 @@ class _SignInPageState extends State<SignInPage> {
   }
 
   String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
-    }
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value.trim())) {
-      return 'Please enter a valid email';
-    }
-    return null;
+    return AuthInputValidators.validateEmail(value);
   }
 
   String? _validatePassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Password is required';
-    }
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters';
-    }
-    return null;
+    return AuthInputValidators.validateSignInPassword(value);
   }
 
   Future<void> _signIn() async {
@@ -91,7 +79,7 @@ class _SignInPageState extends State<SignInPage> {
       return;
     }
 
-    final email = _emailController.text.trim().toLowerCase();
+    final email = AuthInputValidators.normalizeEmail(_emailController.text);
     final password = _passwordController.text;
 
     setState(() => _isLoading = true);
@@ -207,6 +195,7 @@ class _SignInPageState extends State<SignInPage> {
         return 'No account found for this email.';
       case 'wrong-password':
       case 'invalid-credential':
+      case 'invalid-login-credentials':
         return 'Incorrect email or password.';
       case 'too-many-requests':
         return 'Too many attempts. Try again later.';
