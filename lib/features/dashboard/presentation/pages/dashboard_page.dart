@@ -5,6 +5,7 @@ import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_calculator_page.dart';
+import 'package:twezimbeapp/features/loans/presentation/pages/loan_repayment_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/deposit_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/withdraw_page.dart';
 import 'package:twezimbeapp/features/profile/presentation/pages/profile_page.dart';
@@ -625,6 +626,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 16),
+        // First Row
         Row(
           children: [
             Expanded(
@@ -692,6 +694,32 @@ class _DashboardPageState extends State<DashboardPage> {
                 },
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Second Row - Loan Repayment (Featured)
+        Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: _QuickActionButton(
+                icon: Icons.payment,
+                label: 'Loan Repayment',
+                color: AppColors.primaryBlue,
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoanRepaymentPage(),
+                    ),
+                  );
+                  if (mounted) setState(() {});
+                },
+                isFeatured: true,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(child: SizedBox.shrink()),
           ],
         ),
       ],
@@ -845,12 +873,14 @@ class _QuickActionButton extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final bool isFeatured;
 
   const _QuickActionButton({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
+    this.isFeatured = false,
   });
 
   @override
@@ -858,10 +888,14 @@ class _QuickActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        padding: EdgeInsets.symmetric(
+          vertical: isFeatured ? 20 : 16,
+          horizontal: isFeatured ? 16 : 8,
+        ),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isFeatured ? color.withValues(alpha: 0.1) : Colors.white,
           borderRadius: BorderRadius.circular(16),
+          border: isFeatured ? Border.all(color: color, width: 2) : null,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.04),
@@ -870,28 +904,51 @@ class _QuickActionButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+        child: isFeatured
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: color, size: 22),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMain,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
-              child: Icon(icon, color: color, size: 22),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textMain,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
       ),
     );
   }
