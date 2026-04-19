@@ -5,7 +5,7 @@ import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/loan_calculator_page.dart';
-import 'package:twezimbeapp/features/loans/presentation/pages/loan_repayment_page.dart';
+import 'package:twezimbeapp/features/loans/presentation/pages/make_payment_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/deposit_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/withdraw_page.dart';
 import 'package:twezimbeapp/features/profile/presentation/pages/profile_page.dart';
@@ -710,7 +710,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const LoanRepaymentPage(),
+                      builder: (context) => const MakePaymentPage(),
                     ),
                   );
                   if (mounted) setState(() {});
