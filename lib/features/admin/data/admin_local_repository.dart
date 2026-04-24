@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,90 @@ class AdminLocalRepository {
       'admin_loans_status_filter_preference';
 
   final DatabaseHelper _db = DatabaseHelper();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Stream<List<AdminUserModel>> watchUsersFromFirestore() {
+    return _firestore
+        .collection('users')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) {
+          return snap.docs
+              .map((doc) {
+                final data = doc.data();
+                return AdminUserModel(
+                  id: _string(data['uid']).isNotEmpty
+                      ? _string(data['uid'])
+                      : doc.id,
+                  fullName: _string(data['name']).isNotEmpty
+                      ? _string(data['name'])
+                      : 'Unknown',
+                  email: _string(data['email']),
+                  phoneNumber: _string(data['phone']),
+                  customerId: _string(data['customerId']),
+                  kycStatus: _string(data['kycStatus']).isNotEmpty
+                      ? _string(data['kycStatus'])
+                      : 'Pending',
+                  accountType: _string(data['accountType']).isNotEmpty
+                      ? _string(data['accountType'])
+                      : 'Savings Account',
+                  photoUrl: _string(data['photoUrl']).isEmpty
+                      ? null
+                      : _string(data['photoUrl']),
+                  isAdmin: _string(data['role']).toLowerCase() == 'admin',
+                  balanceValue: _int(data['balanceValue']),
+                  dateOfBirth: _string(data['dateOfBirth']),
+                  nationalId: _string(data['nationalId']),
+                  address: _string(data['address']),
+                  createdAt: _toDateTime(data['createdAt']),
+                  updatedAt: _toDateTime(data['updatedAt']),
+                );
+              })
+              .toList(growable: false);
+        });
+  }
+
+  Stream<List<AdminLoanApplicationModel>> watchLoanApplicationsFromFirestore() {
+    return _firestore
+        .collection('loan_applications')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) {
+          return snap.docs
+              .map((doc) {
+                final data = doc.data();
+                final status = _normalizeLoanStatus(_string(data['status']));
+                return AdminLoanApplicationModel(
+                  id: doc.id,
+                  applicationId: _string(data['applicationId']).isNotEmpty
+                      ? _string(data['applicationId'])
+                      : doc.id,
+                  userId: _string(data['userId']),
+                  userName: _string(data['userName']),
+                  userEmail: _string(data['userEmail']),
+                  userPhone: _string(data['userPhone']),
+                  customerId: _string(data['customerId']),
+                  loanType: _string(data['loanType']),
+                  amountValue: _int(data['amount'] ?? data['amountValue']),
+                  period: _string(data['duration']).isNotEmpty
+                      ? _string(data['duration'])
+                      : _string(data['period']),
+                  purpose: _string(data['purpose']),
+                  status: status,
+                  rejectionReason: _string(data['rejectionReason']).isEmpty
+                      ? null
+                      : _string(data['rejectionReason']),
+                  reviewedBy: _string(data['adminId']).isEmpty
+                      ? null
+                      : _string(data['adminId']),
+                  reviewedAt: _toDateTime(data['decisionAt']),
+                  createdAt: _toDateTime(data['createdAt']),
+                  updatedAt: _toDateTime(data['updatedAt']),
+                );
+              })
+              .toList(growable: false);
+        });
+  }
 
   Future<String> getSavedUsersStatusFilter() async {
     final prefs = await SharedPreferences.getInstance();
@@ -234,10 +319,20 @@ class AdminLocalRepository {
       'isAdmin': makeAdmin ? 1 : 0,
       'updatedAt': now,
     });
+
+    await _firestore.collection('users').doc(userId).set({
+      'role': makeAdmin ? 'admin' : 'client',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> deleteUser(String userId) async {
     await _db.deleteUserRelatedData(userId);
+
+    await _firestore.collection('users').doc(userId).set({
+      'deleted': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   Future<void> syncLoanApplicationsFromRemote() async {
@@ -397,8 +492,29 @@ class AdminLocalRepository {
     required String purpose,
   }) async {
     final application = await _db.getLoanApplication(applicationId);
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+
     if (application == null) {
-      throw StateError('Loan application not found.');
+      // ADD THIS: Firestore-first decision path when admin device has no local row.
+      await _firestore.collection('loan_applications').doc(applicationId).set({
+        'status': 'approved',
+        'decisionAt': FieldValue.serverTimestamp(),
+        'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final approvedNotifRef = _firestore.collection('notifications').doc();
+      await approvedNotifRef.set({
+        'id': approvedNotifRef.id,
+        'userId': userId,
+        'title': 'Loan Approved',
+        'message':
+            'Your loan application ($applicationId) was approved. Funds have been credited to your account.',
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return;
     }
 
     final currentStatus = _string(application['status']);
@@ -413,9 +529,6 @@ class AdminLocalRepository {
     if (effectiveApplicationId.isEmpty) {
       throw StateError('Loan application has no valid identifier.');
     }
-
-    final now = DateTime.now();
-    final nowIso = now.toIso8601String();
 
     await _db.updateLoanApplication(effectiveApplicationId, {
       'status': 'Approved',
@@ -499,6 +612,28 @@ class AdminLocalRepository {
       'isRead': 0,
       'createdAt': nowIso,
     });
+
+    // ADD THIS: keep Firestore admin loan workflow updated.
+    await _firestore
+        .collection('loan_applications')
+        .doc(effectiveApplicationId)
+        .set({
+          'status': 'approved',
+          'decisionAt': FieldValue.serverTimestamp(),
+          'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+    final approvedNotifRef = _firestore.collection('notifications').doc();
+    await approvedNotifRef.set({
+      'id': approvedNotifRef.id,
+      'userId': userId,
+      'title': 'Loan Approved',
+      'message':
+          'Your loan application ($effectiveApplicationId) was approved. Funds have been credited to your account.',
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> rejectLoanApplication({
@@ -507,8 +642,32 @@ class AdminLocalRepository {
     required String reason,
   }) async {
     final application = await _db.getLoanApplication(applicationId);
+    final cleanReason = reason.trim().isEmpty
+        ? 'Please contact support for guidance.'
+        : reason.trim();
+    final nowIso = DateTime.now().toIso8601String();
+
     if (application == null) {
-      throw StateError('Loan application not found.');
+      // ADD THIS: Firestore-first decision path when admin device has no local row.
+      await _firestore.collection('loan_applications').doc(applicationId).set({
+        'status': 'rejected',
+        'rejectionReason': cleanReason,
+        'decisionAt': FieldValue.serverTimestamp(),
+        'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final rejectedNotifRef = _firestore.collection('notifications').doc();
+      await rejectedNotifRef.set({
+        'id': rejectedNotifRef.id,
+        'userId': userId,
+        'title': 'Loan Rejected',
+        'message':
+            'Your loan application ($applicationId) was rejected. Reason: $cleanReason',
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return;
     }
 
     final currentStatus = _string(application['status']);
@@ -523,11 +682,6 @@ class AdminLocalRepository {
     if (effectiveApplicationId.isEmpty) {
       throw StateError('Loan application has no valid identifier.');
     }
-
-    final cleanReason = reason.trim().isEmpty
-        ? 'Please contact support for guidance.'
-        : reason.trim();
-    final nowIso = DateTime.now().toIso8601String();
 
     await _db.updateLoanApplication(effectiveApplicationId, {
       'status': 'Rejected',
@@ -557,6 +711,29 @@ class AdminLocalRepository {
       'type': 'loan_rejected',
       'isRead': 0,
       'createdAt': nowIso,
+    });
+
+    // ADD THIS: keep Firestore admin loan workflow updated.
+    await _firestore
+        .collection('loan_applications')
+        .doc(effectiveApplicationId)
+        .set({
+          'status': 'rejected',
+          'rejectionReason': cleanReason,
+          'decisionAt': FieldValue.serverTimestamp(),
+          'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+    final rejectedNotifRef = _firestore.collection('notifications').doc();
+    await rejectedNotifRef.set({
+      'id': rejectedNotifRef.id,
+      'userId': userId,
+      'title': 'Loan Rejected',
+      'message':
+          'Your loan application ($effectiveApplicationId) was rejected. Reason: $cleanReason',
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -641,7 +818,7 @@ class AdminLocalRepository {
   String _customerIdFromUid(String uid) {
     final normalized = uid.codeUnits.fold<int>(
       0,
-      (sum, code) => (sum + code) % 99999,
+      (accumulator, code) => (accumulator + code) % 99999,
     );
     final suffix = normalized.toString().padLeft(5, '0');
     return 'CUS$suffix';
@@ -678,5 +855,24 @@ class AdminLocalRepository {
     }
 
     return DateTime(year, month, day);
+  }
+
+  DateTime? _toDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String && value.trim().isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
+  String _normalizeLoanStatus(String raw) {
+    final value = raw.toLowerCase();
+    if (value == 'approved') return 'Approved';
+    if (value == 'rejected') return 'Rejected';
+    if (value == 'pending') return 'Pending';
+    if (raw.trim().isEmpty) return 'Pending';
+    return raw;
   }
 }

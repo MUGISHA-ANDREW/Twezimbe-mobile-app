@@ -1,6 +1,8 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:twezimbeapp/core/data/firestore_sync_service.dart';
 import 'local_notification_service.dart';
 
 class PushNotificationService {
@@ -9,6 +11,7 @@ class PushNotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static bool _isInitialized = false;
   static const String _tokenKeyPrefix = 'fcm_token_for_user_';
+  static final FirestoreSyncService _firestore = FirestoreSyncService.instance;
 
   static Future<void> initialize() async {
     if (_isInitialized || kIsWeb) {
@@ -40,6 +43,15 @@ class PushNotificationService {
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+    // ADD THIS: keep Firestore fcmToken current after token rotation.
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+      final current = FirebaseAuth.instance.currentUser;
+      if (current == null) {
+        return;
+      }
+      await saveTokenLocally(current.uid, tokenOverride: token);
+    });
 
     // Handle background messages when app is opened from notification
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
@@ -86,8 +98,11 @@ class PushNotificationService {
     NotificationHandler.setPendingNotification(message);
   }
 
-  static Future<void> saveTokenLocally(String userId) async {
-    final token = await _messaging.getToken();
+  static Future<void> saveTokenLocally(
+    String userId, {
+    String? tokenOverride,
+  }) async {
+    final token = tokenOverride ?? await _messaging.getToken();
     if (token == null) return;
 
     try {
@@ -101,6 +116,9 @@ class PushNotificationService {
         '$_tokenKeyPrefix${userId}_updatedAt',
         DateTime.now().toIso8601String(),
       );
+
+      // ADD THIS: persist token to Firestore users collection.
+      await _firestore.updateFcmToken(uid: userId, token: token);
     } catch (e) {
       if (kDebugMode) {
         print('Error saving FCM token: $e');

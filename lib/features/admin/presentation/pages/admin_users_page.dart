@@ -16,9 +16,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
   String _searchQuery = '';
   String _filterStatus = 'All';
-  bool _isLoading = true;
   bool _isMutating = false;
-  List<AdminUserModel> _users = <AdminUserModel>[];
   DateTime? _lastRefreshedAt;
 
   @override
@@ -34,51 +32,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     }
 
     setState(() => _filterStatus = savedFilter);
-    await _refreshUsers(syncRemote: true);
-
-    // Trigger a second refresh shortly after first paint to capture
-    // user records written during recent sign-in/signup transitions.
-    Future<void>.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) {
-        return;
-      }
-      _refreshUsers(syncRemote: false);
-    });
-  }
-
-  Future<void> _refreshUsers({required bool syncRemote}) async {
-    if (!mounted) {
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    try {
-      if (syncRemote) {
-        await _repository.syncUsersFromRemote();
-      }
-
-      final users = await _repository.getUsers(
-        searchQuery: _searchQuery,
-        statusFilter: _filterStatus,
-      );
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _users = users;
-        _lastRefreshedAt = DateTime.now();
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      _showMessage('Failed to load users: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+    setState(() => _lastRefreshedAt = DateTime.now());
   }
 
   @override
@@ -143,7 +97,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   value: _filterStatus,
                   underline: const SizedBox(),
                   isExpanded: true,
-                  items: ['All', 'KYC Verified', 'Pending', 'Rejected']
+                  items: ['All', 'Admin', 'Client']
                       .map(
                         (status) => DropdownMenuItem(
                           value: status,
@@ -156,7 +110,6 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                       _filterStatus = value!;
                     });
                     _repository.saveUsersStatusFilter(_filterStatus);
-                    _refreshUsers(syncRemote: false);
                   },
                 ),
               );
@@ -172,11 +125,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton.icon(
-                        onPressed: _isLoading
-                            ? null
-                            : () => _refreshUsers(syncRemote: true),
+                        onPressed: () {
+                          setState(() => _lastRefreshedAt = DateTime.now());
+                        },
                         icon: const Icon(Icons.sync),
-                        label: const Text('Sync users'),
+                        label: const Text('Refresh'),
                       ),
                     ),
                   ],
@@ -190,11 +143,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                   SizedBox(width: 240, child: filterDropdown),
                   const SizedBox(width: 12),
                   TextButton.icon(
-                    onPressed: _isLoading
-                        ? null
-                        : () => _refreshUsers(syncRemote: true),
+                    onPressed: () {
+                      setState(() => _lastRefreshedAt = DateTime.now());
+                    },
                     icon: const Icon(Icons.sync),
-                    label: const Text('Sync users'),
+                    label: const Text('Refresh'),
                   ),
                 ],
               );
@@ -209,15 +162,42 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.grey.shade100),
             ),
-            child: _isLoading
-                ? const Center(
+            child: StreamBuilder<List<AdminUserModel>>(
+              stream: _repository.watchUsersFromFirestore(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(40),
                       child: CircularProgressIndicator(),
                     ),
-                  )
-                : _users.isEmpty
-                ? const Padding(
+                  );
+                }
+
+                final users = (snapshot.data ?? const <AdminUserModel>[])
+                    .where((user) {
+                      final query = _searchQuery.trim().toLowerCase();
+                      final matchesQuery =
+                          query.isEmpty ||
+                          user.fullName.toLowerCase().contains(query) ||
+                          user.email.toLowerCase().contains(query);
+
+                      if (!matchesQuery) {
+                        return false;
+                      }
+
+                      if (_filterStatus == 'Admin') {
+                        return user.isAdmin;
+                      }
+                      if (_filterStatus == 'Client') {
+                        return !user.isAdmin;
+                      }
+                      return true;
+                    })
+                    .toList(growable: false);
+
+                if (users.isEmpty) {
+                  return const Padding(
                     padding: EdgeInsets.all(40),
                     child: Center(
                       child: Text(
@@ -225,104 +205,94 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                         style: TextStyle(color: Colors.grey),
                       ),
                     ),
-                  )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('User')),
-                        DataColumn(label: Text('Email')),
-                        DataColumn(label: Text('Phone')),
-                        DataColumn(label: Text('Customer ID')),
-                        DataColumn(label: Text('Status')),
-                        DataColumn(label: Text('Actions')),
-                      ],
-                      rows: _users
-                          .map((user) {
-                            return DataRow(
-                              cells: [
-                                DataCell(
-                                  Row(
-                                    children: [
-                                      _buildUserAvatar(user),
-                                      const SizedBox(width: 12),
-                                      Text(user.fullName),
-                                    ],
-                                  ),
+                  );
+                }
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('User')),
+                      DataColumn(label: Text('Email')),
+                      DataColumn(label: Text('Role')),
+                      DataColumn(label: Text('Actions')),
+                    ],
+                    rows: users
+                        .map((user) {
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Row(
+                                  children: [
+                                    _buildUserAvatar(user),
+                                    const SizedBox(width: 12),
+                                    Text(user.fullName),
+                                  ],
                                 ),
-                                DataCell(
-                                  Text(user.email.isEmpty ? '-' : user.email),
+                              ),
+                              DataCell(
+                                Text(user.email.isEmpty ? '-' : user.email),
+                              ),
+                              DataCell(
+                                _buildStatusChip(
+                                  user.isAdmin ? 'Admin' : 'Client',
                                 ),
-                                DataCell(
-                                  Text(
-                                    user.phoneNumber.isEmpty
-                                        ? '-'
-                                        : user.phoneNumber,
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    user.customerId.isEmpty
-                                        ? '-'
-                                        : user.customerId,
-                                  ),
-                                ),
-                                DataCell(_buildStatusChip(user.kycStatus)),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(
-                                          user.isAdmin
-                                              ? Icons.admin_panel_settings
-                                              : Icons.supervised_user_circle,
-                                          color: user.isAdmin
-                                              ? AppColors.primaryBlue
-                                              : Colors.grey,
-                                        ),
-                                        onPressed: _isMutating
-                                            ? null
-                                            : () => _toggleAdminRole(
-                                                context,
-                                                user,
-                                                !user.isAdmin,
-                                              ),
-                                        tooltip: user.isAdmin
-                                            ? 'Remove Admin'
-                                            : 'Make Admin',
+                              ),
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        user.isAdmin
+                                            ? Icons.admin_panel_settings
+                                            : Icons.supervised_user_circle,
+                                        color: user.isAdmin
+                                            ? AppColors.primaryBlue
+                                            : Colors.grey,
                                       ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.visibility,
-                                          color: AppColors.primaryBlue,
-                                        ),
-                                        onPressed: () => _openUserDetails(
-                                          context,
-                                          user: user,
-                                        ),
+                                      onPressed: _isMutating
+                                          ? null
+                                          : () => _toggleAdminRole(
+                                              context,
+                                              user,
+                                              !user.isAdmin,
+                                            ),
+                                      tooltip: user.isAdmin
+                                          ? 'Remove Admin'
+                                          : 'Make Admin',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.visibility,
+                                        color: AppColors.primaryBlue,
                                       ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: AppColors.errorRed,
-                                        ),
-                                        onPressed: _isMutating
-                                            ? null
-                                            : () => _confirmDeleteUser(
-                                                context,
-                                                user,
-                                              ),
+                                      onPressed: () =>
+                                          _openUserDetails(context, user: user),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: AppColors.errorRed,
                                       ),
-                                    ],
-                                  ),
+                                      onPressed: _isMutating
+                                          ? null
+                                          : () => _confirmDeleteUser(
+                                              context,
+                                              user,
+                                            ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            );
-                          })
-                          .toList(growable: false),
-                    ),
+                              ),
+                            ],
+                          );
+                        })
+                        .toList(growable: false),
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -332,11 +302,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   Widget _buildStatusChip(String status) {
     Color color;
     switch (status) {
-      case 'KYC Verified':
+      case 'Admin':
         color = AppColors.successGreen;
         break;
-      case 'Rejected':
-        color = AppColors.errorRed;
+      case 'Client':
+        color = AppColors.primaryBlue;
         break;
       default:
         color = AppColors.primaryOrange;
@@ -431,7 +401,6 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               Navigator.pop(context);
               await _performMutation(() async {
                 await _repository.deleteUser(user.id);
-                await _refreshUsers(syncRemote: true);
               });
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.errorRed),
@@ -449,7 +418,6 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   ) async {
     await _performMutation(() async {
       await _repository.toggleAdminRole(user.id, makeAdmin);
-      await _refreshUsers(syncRemote: false);
       if (!mounted) {
         return;
       }

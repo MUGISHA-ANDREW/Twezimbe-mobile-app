@@ -107,6 +107,11 @@ class _AuthGatePageState extends State<AuthGatePage> {
       );
       unawaited(LocalUserSessionStore.saveUser(currentUser).catchError((_) {}));
       unawaited(
+        PushNotificationService.saveTokenLocally(
+          currentUser.uid,
+        ).catchError((_) {}),
+      );
+      unawaited(
         AppDataRepository.checkAndSendPaymentDueNotification().catchError(
           (_) {},
         ),

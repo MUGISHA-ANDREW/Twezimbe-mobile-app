@@ -86,6 +86,10 @@ class _SignInPageState extends State<SignInPage> {
 
     try {
       await _signInWithRetry(email: email, password: password);
+
+      // ADD THIS: ensure auth user is synced to local DB + Firestore users collection.
+      await AppDataRepository.ensureProfileForCurrentUser(email: email);
+
       bool isAdminUser = false;
       try {
         isAdminUser = await AppDataRepository.isCurrentUserAdmin();

@@ -17,11 +17,6 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
 
   String _filterStatus = 'All';
   Timer? _refreshTimer;
-  bool _isLoading = true;
-  List<AdminLoanApplicationModel> _allApplications =
-      <AdminLoanApplicationModel>[];
-  List<AdminLoanApplicationModel> _visibleApplications =
-      <AdminLoanApplicationModel>[];
   final Map<String, bool> _decisionLoading = <String, bool>{};
 
   @override
@@ -48,37 +43,11 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     }
 
     setState(() => _filterStatus = savedFilter);
-    await _refreshLoans();
   }
 
   Future<void> _refreshLoans() async {
-    if (!mounted) {
-      return;
-    }
-
-    setState(() => _isLoading = true);
-    try {
-      await _repository.syncLoanApplicationsFromRemote();
-      final allLoans = await _repository.getLoanApplications(
-        statusFilter: 'All',
-      );
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _allApplications = allLoans;
-        _visibleApplications = _applyFilter(allLoans, _filterStatus);
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      _showMessage('Failed to load loan applications: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -118,278 +87,298 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingCount = _allApplications
-        .where((item) => item.status == 'Pending Review')
-        .length;
-    final approvedCount = _allApplications
-        .where((item) => item.status == 'Approved')
-        .length;
-    final rejectedCount = _allApplications
-        .where((item) => item.status == 'Rejected')
-        .length;
+    return StreamBuilder<List<AdminLoanApplicationModel>>(
+      stream: _repository.watchLoanApplicationsFromFirestore(),
+      builder: (context, snapshot) {
+        final allApplications =
+            snapshot.data ?? const <AdminLoanApplicationModel>[];
+        final visibleApplications = _applyFilter(
+          allApplications,
+          _filterStatus,
+        );
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Loan Applications',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textMain,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Review and manage loan applications',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 24),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final filterDropdown = Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
+        final pendingCount = allApplications
+            .where((item) => item.status == 'Pending')
+            .length;
+        final approvedCount = allApplications
+            .where((item) => item.status == 'Approved')
+            .length;
+        final rejectedCount = allApplications
+            .where((item) => item.status == 'Rejected')
+            .length;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Loan Applications',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMain,
                 ),
-                child: DropdownButton<String>(
-                  value: _filterStatus,
-                  underline: const SizedBox(),
-                  isExpanded: true,
-                  items: ['All', 'Pending Review', 'Approved', 'Rejected']
-                      .map(
-                        (status) => DropdownMenuItem(
-                          value: status,
-                          child: Text(status),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Review and manage loan applications',
+                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 24),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final filterDropdown = Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _filterStatus,
+                      underline: const SizedBox(),
+                      isExpanded: true,
+                      items: ['All', 'Pending', 'Approved', 'Rejected']
+                          .map(
+                            (status) => DropdownMenuItem(
+                              value: status,
+                              child: Text(status),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setState(() {
+                          _filterStatus = value;
+                        });
+                        _repository.saveLoansStatusFilter(_filterStatus);
+                      },
+                    ),
+                  );
+
+                  final badges = Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildStatBadge('Pending', pendingCount),
+                      _buildStatBadge('Approved', approvedCount),
+                      _buildStatBadge('Rejected', rejectedCount),
+                    ],
+                  );
+
+                  if (constraints.maxWidth < 860) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        filterDropdown,
+                        const SizedBox(height: 12),
+                        badges,
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _refreshLoans,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh'),
+                          ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _filterStatus = value;
-                      _visibleApplications = _applyFilter(
-                        _allApplications,
-                        _filterStatus,
-                      );
-                    });
-                    _repository.saveLoansStatusFilter(_filterStatus);
-                  },
-                ),
-              );
+                      ],
+                    );
+                  }
 
-              final badges = Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildStatBadge('Pending', pendingCount),
-                  _buildStatBadge('Approved', approvedCount),
-                  _buildStatBadge('Rejected', rejectedCount),
-                ],
-              );
-
-              if (constraints.maxWidth < 860) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    filterDropdown,
-                    const SizedBox(height: 12),
-                    badges,
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _isLoading ? null : _refreshLoans,
+                  return Row(
+                    children: [
+                      SizedBox(width: 260, child: filterDropdown),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: badges,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      TextButton.icon(
+                        onPressed: _refreshLoans,
                         icon: const Icon(Icons.refresh),
                         label: const Text('Refresh'),
                       ),
-                    ),
-                  ],
-                );
-              }
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade100),
+                ),
+                child: snapshot.connectionState == ConnectionState.waiting
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : visibleApplications.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Center(
+                          child: Text(
+                            'No loan applications found',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          columns: const [
+                            DataColumn(label: Text('Application ID')),
+                            DataColumn(label: Text('Applicant')),
+                            DataColumn(label: Text('Loan Type')),
+                            DataColumn(label: Text('Amount')),
+                            DataColumn(label: Text('Period')),
+                            DataColumn(label: Text('Purpose')),
+                            DataColumn(label: Text('Status')),
+                            DataColumn(label: Text('Date')),
+                            DataColumn(label: Text('Actions')),
+                          ],
+                          rows: visibleApplications
+                              .map((loan) {
+                                final appId = _applicationLookupId(loan);
+                                final decisionKey =
+                                    appId ??
+                                    '${loan.userId}_${loan.createdAt?.millisecondsSinceEpoch ?? 0}';
+                                final isBusy =
+                                    _decisionLoading[decisionKey] ?? false;
 
-              return Row(
-                children: [
-                  SizedBox(width: 260, child: filterDropdown),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: badges,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  TextButton.icon(
-                    onPressed: _isLoading ? null : _refreshLoans,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh'),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 24),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade100),
-            ),
-            child: _isLoading
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: CircularProgressIndicator(),
-                    ),
-                  )
-                : _visibleApplications.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(
-                      child: Text(
-                        'No loan applications found',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ),
-                  )
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('Application ID')),
-                        DataColumn(label: Text('Applicant')),
-                        DataColumn(label: Text('Loan Type')),
-                        DataColumn(label: Text('Amount')),
-                        DataColumn(label: Text('Period')),
-                        DataColumn(label: Text('Purpose')),
-                        DataColumn(label: Text('Status')),
-                        DataColumn(label: Text('Date')),
-                        DataColumn(label: Text('Actions')),
-                      ],
-                      rows: _visibleApplications
-                          .map((loan) {
-                            final appId = _applicationLookupId(loan);
-                            final decisionKey =
-                                appId ??
-                                '${loan.userId}_${loan.createdAt?.millisecondsSinceEpoch ?? 0}';
-                            final isBusy =
-                                _decisionLoading[decisionKey] ?? false;
-
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(appId ?? '-')),
-                                DataCell(
-                                  SizedBox(
-                                    width: 190,
-                                    child: Text(
-                                      _getLoanApplicantLabel(loan),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    loan.loanType.isEmpty ? '-' : loan.loanType,
-                                  ),
-                                ),
-                                DataCell(Text(_formatUgx(loan.amountValue))),
-                                DataCell(
-                                  Text(loan.period.isEmpty ? '-' : loan.period),
-                                ),
-                                DataCell(
-                                  SizedBox(
-                                    width: 150,
-                                    child: Text(
-                                      loan.purpose.isEmpty ? '-' : loan.purpose,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                                DataCell(_buildStatusChip(loan.status)),
-                                DataCell(
-                                  Text(_getRelativeTime(loan.createdAt)),
-                                ),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (loan.status == 'Pending Review') ...[
-                                        IconButton(
-                                          icon: isBusy
-                                              ? const SizedBox(
-                                                  height: 16,
-                                                  width: 16,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                      ),
-                                                )
-                                              : const Icon(
-                                                  Icons.check_circle,
-                                                  color: AppColors.successGreen,
-                                                ),
-                                          onPressed:
-                                              isBusy ||
-                                                  loan.userId.isEmpty ||
-                                                  appId == null
-                                              ? null
-                                              : () => _approveLoan(loan, appId),
-                                          tooltip:
-                                              loan.userId.isEmpty ||
-                                                  appId == null
-                                              ? 'Cannot resolve application'
-                                              : 'Approve',
+                                return DataRow(
+                                  cells: [
+                                    DataCell(Text(appId ?? '-')),
+                                    DataCell(
+                                      SizedBox(
+                                        width: 190,
+                                        child: Text(
+                                          _getLoanApplicantLabel(loan),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.cancel,
-                                            color: AppColors.errorRed,
-                                          ),
-                                          onPressed:
-                                              isBusy ||
-                                                  loan.userId.isEmpty ||
-                                                  appId == null
-                                              ? null
-                                              : () =>
-                                                    _rejectLoanWithReasonDialog(
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        loan.loanType.isEmpty
+                                            ? '-'
+                                            : loan.loanType,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(_formatUgx(loan.amountValue)),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        loan.period.isEmpty ? '-' : loan.period,
+                                      ),
+                                    ),
+                                    DataCell(
+                                      SizedBox(
+                                        width: 150,
+                                        child: Text(
+                                          loan.purpose.isEmpty
+                                              ? '-'
+                                              : loan.purpose,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(_buildStatusChip(loan.status)),
+                                    DataCell(
+                                      Text(_getRelativeTime(loan.createdAt)),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (loan.status == 'Pending') ...[
+                                            IconButton(
+                                              icon: isBusy
+                                                  ? const SizedBox(
+                                                      height: 16,
+                                                      width: 16,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.check_circle,
+                                                      color: AppColors
+                                                          .successGreen,
+                                                    ),
+                                              onPressed:
+                                                  isBusy ||
+                                                      loan.userId.isEmpty ||
+                                                      appId == null
+                                                  ? null
+                                                  : () => _approveLoan(
                                                       loan,
                                                       appId,
                                                     ),
-                                          tooltip:
-                                              loan.userId.isEmpty ||
-                                                  appId == null
-                                              ? 'Cannot resolve application'
-                                              : 'Reject',
-                                        ),
-                                      ],
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.visibility,
-                                          color: AppColors.primaryBlue,
-                                        ),
-                                        onPressed: () =>
-                                            _showLoanDetails(context, loan),
-                                        tooltip: 'View Details',
+                                              tooltip:
+                                                  loan.userId.isEmpty ||
+                                                      appId == null
+                                                  ? 'Cannot resolve application'
+                                                  : 'Approve',
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.cancel,
+                                                color: AppColors.errorRed,
+                                              ),
+                                              onPressed:
+                                                  isBusy ||
+                                                      loan.userId.isEmpty ||
+                                                      appId == null
+                                                  ? null
+                                                  : () =>
+                                                        _rejectLoanWithReasonDialog(
+                                                          loan,
+                                                          appId,
+                                                        ),
+                                              tooltip:
+                                                  loan.userId.isEmpty ||
+                                                      appId == null
+                                                  ? 'Cannot resolve application'
+                                                  : 'Reject',
+                                            ),
+                                          ],
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.visibility,
+                                              color: AppColors.primaryBlue,
+                                            ),
+                                            onPressed: () =>
+                                                _showLoanDetails(context, loan),
+                                            tooltip: 'View Details',
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          })
-                          .toList(growable: false),
-                    ),
-                  ),
+                                    ),
+                                  ],
+                                );
+                              })
+                              .toList(growable: false),
+                        ),
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -516,7 +505,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
               _detailRow('Purpose', loan.purpose.isEmpty ? '-' : loan.purpose),
               _detailRow('Status', loan.status),
               const SizedBox(height: 20),
-              if (loan.status == 'Pending Review')
+              if (loan.status == 'Pending')
                 Row(
                   children: [
                     Expanded(

@@ -5,6 +5,7 @@ import 'dart:developer' as developer;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:twezimbeapp/core/data/database_helper.dart';
+import 'package:twezimbeapp/core/data/firestore_sync_service.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
 
 class AppProfileData {
@@ -191,6 +192,7 @@ class AppDataRepository {
   AppDataRepository._();
 
   static final DatabaseHelper _db = DatabaseHelper();
+  static final FirestoreSyncService _firestore = FirestoreSyncService.instance;
   static const Duration _pollInterval = Duration(milliseconds: 900);
 
   static const String _chatMessagesPrefix = 'chat_messages_';
@@ -323,6 +325,15 @@ class AppDataRepository {
     } else {
       await _db.updateUser(user.uid, payload);
     }
+
+    // ADD THIS: keep Firestore users collection in sync with auth/local profile.
+    await _firestore.ensureUserDocument(
+      user: user,
+      name: _nonEmpty(payload['fullName']),
+      email: _nonEmpty(payload['email']),
+      phone: _nonEmpty(payload['phoneNumber']),
+      role: _boolFromDynamic(payload['isAdmin']) ? 'admin' : 'client',
+    );
   }
 
   static Stream<AppProfileData> watchProfileForCurrentUser() {
@@ -334,6 +345,13 @@ class AppDataRepository {
     unawaited(ensureProfileForCurrentUser().catchError((_) {}));
 
     return _poll<AppProfileData>(() async {
+      // Check admin status from all sources
+      bool isAdminUser = _isAdminEmail(user.email);
+      if (!isAdminUser) {
+        final firestoreRole = await _firestore.getRoleForUser(user.uid);
+        isAdminUser = firestoreRole == 'admin';
+      }
+
       final data = await _db.getUser(user.uid);
       if (data == null) {
         return AppProfileData(
@@ -348,11 +366,13 @@ class AppDataRepository {
           kycStatus: 'Pending',
           accountType: 'Savings Account',
           availableBalance: 'UGX 0',
-          isAdmin: _isAdminEmail(user.email),
+          isAdmin: isAdminUser,
         );
       }
 
       final balanceValue = _intFromDynamic(data['balanceValue']);
+      // Use Firestore role check or database value, whichever is true
+      final databaseIsAdmin = _boolFromDynamic(data['isAdmin']);
       return AppProfileData(
         fullName: _nonEmpty(data['fullName']) ?? _displayNameFor(user),
         email: _nonEmpty(data['email']) ?? (user.email ?? ''),
@@ -366,7 +386,7 @@ class AppDataRepository {
         kycStatus: _nonEmpty(data['kycStatus']) ?? 'Pending',
         accountType: _nonEmpty(data['accountType']) ?? 'Savings Account',
         availableBalance: _formatUgx(balanceValue),
-        isAdmin: _boolFromDynamic(data['isAdmin']),
+        isAdmin: isAdminUser || databaseIsAdmin,
       );
     });
   }
@@ -597,6 +617,16 @@ class AppDataRepository {
       'updatedAt': nowIso,
     });
 
+    // ADD THIS: write loan application to Firestore for admin realtime management.
+    await _firestore.saveLoanApplication(
+      applicationId: applicationId,
+      userId: user.uid,
+      userName: applicantName,
+      amount: amountValue,
+      duration: period.trim(),
+      purpose: purpose.trim(),
+    );
+
     final currentLoan = await _db.getLatestLoanForUser(user.uid);
     if (currentLoan == null) {
       await _db.insertLoan({
@@ -731,17 +761,18 @@ class AppDataRepository {
       );
     }
 
-    return _poll<List<AppNotificationData>>(() async {
-      final rows = await _db.getNotifications(user.uid, limit: limit);
+    // MODIFY THIS: use Firestore realtime notifications collection.
+    return _firestore.streamNotificationsForUser(user.uid).map((rows) {
       return rows
+          .take(limit)
           .map((data) {
             return AppNotificationData(
               id: _nonEmpty(data['id']) ?? '',
               title: _nonEmpty(data['title']) ?? 'Notification',
               message: _nonEmpty(data['message']) ?? '',
               type: _nonEmpty(data['type']) ?? 'info',
-              createdAt: _asDateTime(data['createdAt']),
-              isRead: _boolFromDynamic(data['isRead']),
+              createdAt: _asDateTimeFromFirestore(data['createdAt']),
+              isRead: _boolFromDynamic(data['read']),
             );
           })
           .toList(growable: false);
@@ -781,6 +812,8 @@ class AppDataRepository {
     if (user == null) return;
 
     await _db.markNotificationRead(notificationId);
+    // ADD THIS: mark Firestore notification as read.
+    await _firestore.markNotificationRead(notificationId);
   }
 
   static Future<void> markAllNotificationsAsReadForCurrentUser() async {
@@ -788,6 +821,8 @@ class AppDataRepository {
     if (user == null) return;
 
     await _db.markAllNotificationsRead(user.uid);
+    // ADD THIS: bulk mark Firestore notifications for current user.
+    await _firestore.markAllNotificationsReadForUser(user.uid);
   }
 
   static Future<bool> isCurrentUserAdmin() async {
@@ -795,6 +830,12 @@ class AppDataRepository {
     if (user == null) return false;
 
     if (_isAdminEmail(user.email)) return true;
+
+    // ADD THIS: check Firestore role first.
+    final firestoreRole = await _firestore.getRoleForUser(user.uid);
+    if (firestoreRole == 'admin') {
+      return true;
+    }
 
     final userData = await _db.getUser(user.uid);
     return _boolFromDynamic(userData?['isAdmin']);
@@ -919,6 +960,16 @@ class AppDataRepository {
           'Your loan of ${_formatUgx(loanAmount)} has been approved and credited to your account!',
       type: 'loan',
     );
+
+    // ADD THIS: update Firestore loan status + decision metadata.
+    await _firestore.updateLoanDecision(
+      applicationId: appId,
+      status: 'approved',
+      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+    );
+
+    // ADD THIS: create user notification in Firestore for loan decision.
+    await _firestore.notifyLoanDecisionUser(userId: userId, status: 'approved');
   }
 
   static Future<void> rejectLoanApplication(
@@ -963,6 +1014,16 @@ class AppDataRepository {
           'Your loan application has been rejected. Reason: $rejectionReason',
       type: 'loan',
     );
+
+    // ADD THIS: update Firestore loan status + decision metadata.
+    await _firestore.updateLoanDecision(
+      applicationId: appId,
+      status: 'rejected',
+      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'admin',
+    );
+
+    // ADD THIS: create user notification in Firestore for loan decision.
+    await _firestore.notifyLoanDecisionUser(userId: userId, status: 'rejected');
   }
 
   static Future<void> addNotificationForUser({
@@ -981,6 +1042,13 @@ class AppDataRepository {
       'isRead': 0,
       'createdAt': nowIso,
     });
+
+    // ADD THIS: mirror notifications to Firestore collection.
+    await _firestore.createNotification(
+      userId: userId,
+      title: title,
+      message: message,
+    );
   }
 
   static Future<void> makeLoanRepaymentForCurrentUser({
@@ -1585,6 +1653,27 @@ class AppDataRepository {
   static DateTime? _asDateTime(dynamic value) {
     if (value is DateTime) return value;
     if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
+
+  static DateTime? _asDateTimeFromFirestore(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    if (value is Map<String, dynamic>) {
+      final seconds = _intFromDynamic(value['_seconds']);
+      if (seconds > 0) {
+        return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+      }
+    }
+    if (value.runtimeType.toString() == 'Timestamp') {
+      try {
+        final dynamic ts = value;
+        return ts.toDate() as DateTime?;
+      } catch (_) {
+        return null;
+      }
+    }
     return null;
   }
 
