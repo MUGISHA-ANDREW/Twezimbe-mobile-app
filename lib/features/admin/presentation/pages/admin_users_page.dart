@@ -19,6 +19,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   bool _isMutating = false;
   DateTime? _lastRefreshedAt;
 
+  static const Color _surfaceBorder = Color(0xFFDCE5F3);
+
   @override
   void initState() {
     super.initState();
@@ -38,23 +40,11 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Manage Users',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textMain,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'View and manage registered users',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
+          _buildHeroHeader(),
           const SizedBox(height: 24),
 
           if (_lastRefreshedAt != null)
@@ -66,37 +56,33 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               ),
             ),
 
-          // Search and Filter
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final searchField = TextField(
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value.toLowerCase();
-                  });
-                },
-                decoration: InputDecoration(
-                  hintText: 'Search by name or email...',
-                  prefixIcon: const Icon(Icons.search),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-              );
+          _buildSectionHeader(
+            title: 'Directory Controls',
+            subtitle: 'Search, filter, and refresh the user directory',
+          ),
+          const SizedBox(height: 12),
 
-              final filterDropdown = Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: DropdownButton<String>(
-                  value: _filterStatus,
-                  underline: const SizedBox(),
-                  isExpanded: true,
+          _buildSectionCard(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final searchField = TextField(
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value.toLowerCase();
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    hintText: 'Search by name or email...',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                );
+
+                final filterDropdown = DropdownButtonFormField<String>(
+                  initialValue: _filterStatus,
+                  decoration: const InputDecoration(
+                    labelText: 'Role Filter',
+                    prefixIcon: Icon(Icons.filter_list_rounded),
+                  ),
                   items: ['All', 'Admin', 'Client']
                       .map(
                         (status) => DropdownMenuItem(
@@ -104,63 +90,76 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                           child: Text(status),
                         ),
                       )
-                      .toList(),
+                      .toList(growable: false),
                   onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
                     setState(() {
-                      _filterStatus = value!;
+                      _filterStatus = value;
                     });
                     _repository.saveUsersStatusFilter(_filterStatus);
                   },
-                ),
-              );
+                );
 
-              if (constraints.maxWidth < 760) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    searchField,
-                    const SizedBox(height: 12),
-                    SizedBox(width: double.infinity, child: filterDropdown),
-                    const SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () {
-                          setState(() => _lastRefreshedAt = DateTime.now());
-                        },
-                        icon: const Icon(Icons.sync),
-                        label: const Text('Refresh'),
+                final refreshButton = OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() => _lastRefreshedAt = DateTime.now());
+                  },
+                  icon: const Icon(Icons.sync_rounded),
+                  label: const Text('Refresh'),
+                );
+
+                if (constraints.maxWidth < 760) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      searchField,
+                      const SizedBox(height: 12),
+                      filterDropdown,
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: refreshButton,
                       ),
-                    ),
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: searchField),
+                    const SizedBox(width: 14),
+                    SizedBox(width: 220, child: filterDropdown),
+                    const SizedBox(width: 10),
+                    refreshButton,
                   ],
                 );
-              }
-
-              return Row(
-                children: [
-                  Expanded(child: searchField),
-                  const SizedBox(width: 16),
-                  SizedBox(width: 240, child: filterDropdown),
-                  const SizedBox(width: 12),
-                  TextButton.icon(
-                    onPressed: () {
-                      setState(() => _lastRefreshedAt = DateTime.now());
-                    },
-                    icon: const Icon(Icons.sync),
-                    label: const Text('Refresh'),
-                  ),
-                ],
-              );
-            },
+              },
+            ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
 
-          // Users Table
-          Container(
+          _buildSectionHeader(
+            title: 'Registered Users',
+            subtitle: 'Manage account roles, review profiles, or remove users',
+          ),
+          const SizedBox(height: 12),
+
+          _buildSectionCard(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade100),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _surfaceBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: StreamBuilder<List<AdminUserModel>>(
               stream: _repository.watchUsersFromFirestore(),
@@ -197,13 +196,13 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                     .toList(growable: false);
 
                 if (users.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(
-                      child: Text(
-                        'No users found',
-                        style: TextStyle(color: Colors.grey),
-                      ),
+                  return Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: _buildInlineEmptyState(
+                      icon: Icons.group_off_outlined,
+                      title: 'No users found',
+                      subtitle:
+                          'Try changing your search text or role filter to see more results.',
                     ),
                   );
                 }
@@ -211,6 +210,12 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
+                    headingRowColor: WidgetStateProperty.resolveWith(
+                      (_) => const Color(0xFFF4F8FF),
+                    ),
+                    dividerThickness: 0.8,
+                    dataRowMinHeight: 62,
+                    dataRowMaxHeight: 72,
                     columns: const [
                       DataColumn(label: Text('User')),
                       DataColumn(label: Text('Email')),
@@ -264,7 +269,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                                     ),
                                     IconButton(
                                       icon: const Icon(
-                                        Icons.visibility,
+                                        Icons.visibility_outlined,
                                         color: AppColors.primaryBlue,
                                       ),
                                       onPressed: () =>
@@ -299,6 +304,104 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     );
   }
 
+  Widget _buildHeroHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF15408D), Color(0xFF1E60E2), Color(0xFF3D7BFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryBlue.withValues(alpha: 0.24),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _HeaderIcon(icon: Icons.groups_2_rounded),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'User Administration',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Manage user access, monitor account roles, and keep the platform secure.',
+            style: TextStyle(color: Colors.white, fontSize: 13, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required String title,
+    required String subtitle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMain,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionCard({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(16),
+    BoxDecoration? decoration,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration:
+          decoration ??
+          BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _surfaceBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+      child: child,
+    );
+  }
+
   Widget _buildStatusChip(String status) {
     Color color;
     switch (status) {
@@ -313,10 +416,10 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         status,
@@ -387,23 +490,56 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete User'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.errorRed.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.errorRed,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Delete User',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
         content: Text(
-          'Are you sure you want to delete user "${user.fullName}"?',
+          'Are you sure you want to remove "${user.fullName}" from the platform? This action cannot be undone.',
+          style: TextStyle(color: Colors.grey.shade700, height: 1.35),
         ),
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () async {
               Navigator.pop(context);
               await _performMutation(() async {
                 await _repository.deleteUser(user.id);
+                if (mounted) {
+                  _showMessage('User removed successfully.', isSuccess: true);
+                }
               });
             },
-            style: TextButton.styleFrom(foregroundColor: AppColors.errorRed),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.errorRed,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -426,6 +562,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
         makeAdmin
             ? '${user.fullName} is now an admin'
             : 'Admin privileges removed from ${user.fullName}',
+        isSuccess: true,
       );
     });
   }
@@ -442,7 +579,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
       if (!mounted) {
         return;
       }
-      _showMessage('Operation failed: $error');
+      _showMessage('Operation failed: $error', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isMutating = false);
@@ -450,13 +587,99 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
     }
   }
 
-  void _showMessage(String message) {
+  Widget _buildInlineEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _surfaceBorder.withValues(alpha: 0.9)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: AppColors.primaryBlue, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMain,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMessage(
+    String message, {
+    bool isError = false,
+    bool isSuccess = false,
+  }) {
     if (!mounted) {
       return;
     }
 
+    final Color backgroundColor = isError
+        ? AppColors.errorRed
+        : (isSuccess ? AppColors.successGreen : AppColors.primaryBlue);
+    final IconData icon = isError
+        ? Icons.error_outline_rounded
+        : (isSuccess ? Icons.check_circle_outline_rounded : Icons.info_outline);
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: backgroundColor,
+          content: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        ),
+      );
+  }
+}
+
+class _HeaderIcon extends StatelessWidget {
+  const _HeaderIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white24,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
   }
 }

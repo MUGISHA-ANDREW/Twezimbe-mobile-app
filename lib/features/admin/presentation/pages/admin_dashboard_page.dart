@@ -31,42 +31,81 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         MediaQuery.sizeOf(context).width < _compactBreakpoint;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF2F6FC),
       appBar: isCompact
-          ? AppBar(title: Text(_titleForIndex(_selectedIndex)))
+          ? AppBar(
+              title: Text(_titleForIndex(_selectedIndex)),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+            )
           : null,
       drawer: isCompact
           ? Drawer(
               width: 300,
+              backgroundColor: Colors.transparent,
               child: SafeArea(child: _buildNavigationPane(isDrawer: true)),
             )
           : null,
-      body: isCompact
-          ? _pages[_selectedIndex]
-          : Row(
-              children: [
-                SizedBox(width: 260, child: _buildNavigationPane()),
-                Expanded(child: _pages[_selectedIndex]),
-              ],
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFFDCE8FF).withValues(alpha: 0.45),
+              const Color(0xFFF6F9FF),
+              Colors.white,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: isCompact
+            ? _pages[_selectedIndex]
+            : Row(
+                children: [
+                  SizedBox(width: 280, child: _buildNavigationPane()),
+                  Expanded(child: _pages[_selectedIndex]),
+                ],
+              ),
+      ),
     );
   }
 
   Widget _buildNavigationPane({bool isDrawer = false}) {
     return Container(
-      color: AppColors.darkBlue,
+      margin: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF0F2F68), Color(0xFF163F89)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.darkBlue.withValues(alpha: 0.28),
+            blurRadius: 26,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
       child: Column(
         children: [
-          const SizedBox(height: 40),
+          const SizedBox(height: 22),
           Container(
-            padding: const EdgeInsets.all(20),
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
             child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
                     Icons.admin_panel_settings,
@@ -79,8 +118,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   'Admin Panel',
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -88,14 +127,20 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   'Twezimbe Management',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 13,
+                    fontSize: 12.5,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(color: Colors.white24),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            color: Colors.white.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 14),
           _buildMenuItem(
             0,
             Icons.dashboard,
@@ -116,13 +161,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           ),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.errorRed,
-                borderRadius: BorderRadius.circular(10),
+                color: AppColors.errorRed.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: ListTile(
+                dense: true,
                 leading: const Icon(Icons.logout, color: Colors.white),
                 title: const Text(
                   'Logout',
@@ -135,7 +181,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -202,26 +248,43 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     required bool closeDrawerOnTap,
   }) {
     final isSelected = _selectedIndex == index;
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: isSelected ? AppColors.primaryBlue : Colors.white70,
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isSelected ? Colors.white : Colors.white70,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.28)
+              : Colors.transparent,
         ),
       ),
-      selected: isSelected,
-      selectedTileColor: Colors.white.withValues(alpha: 0.1),
-      onTap: () {
-        setState(() => _selectedIndex = index);
-        if (closeDrawerOnTap && Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-      },
+      child: ListTile(
+        leading: Icon(icon, color: isSelected ? Colors.white : Colors.white70),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        trailing: isSelected
+            ? const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.white,
+              )
+            : null,
+        selected: isSelected,
+        onTap: () {
+          setState(() => _selectedIndex = index);
+          if (closeDrawerOnTap && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        },
+      ),
     );
   }
 }
@@ -323,49 +386,54 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
         '$totalUsers',
         Icons.people,
         AppColors.primaryBlue,
+        hint: 'Registered clients',
       ),
       _buildStatCard(
         'Active Loans',
         '$activeLoans',
         Icons.account_balance,
         AppColors.primaryOrange,
+        hint: 'In repayment cycle',
       ),
       _buildStatCard(
         'Defaulters',
         '$defaulters',
         Icons.warning_amber_rounded,
         AppColors.errorRed,
+        hint: 'Need intervention',
       ),
       _buildStatCard(
         'Total Revenue',
         _formatUgx(totalRevenue),
         Icons.attach_money,
         AppColors.successGreen,
+        hint: 'Recovered payments',
       ),
     ];
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Admin Dashboard',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textMain,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Welcome back, Admin',
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 32),
+          _buildHeroHeader(),
+          const SizedBox(height: 22),
 
           if (_error != null)
             _buildLoadError('Unable to load dashboard data: $_error'),
+          if (_error != null) const SizedBox(height: 18),
+
+          _buildSectionHeader(
+            title: 'Performance Overview',
+            subtitle: 'Track platform health at a glance',
+            action: OutlinedButton.icon(
+              onPressed: _isLoading ? null : _loadDashboard,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Refresh Data'),
+            ),
+          ),
+          const SizedBox(height: 14),
+
           LayoutBuilder(
             builder: (context, constraints) {
               if (constraints.maxWidth < 720) {
@@ -403,105 +471,48 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
               );
             },
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
 
-          // Recent Activities
-          Row(
-            children: [
-              const Text(
-                'Recent Activities',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMain,
-                ),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: _isLoading ? null : _loadDashboard,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Refresh'),
-              ),
-            ],
+          _buildSectionHeader(
+            title: 'Recent Activities',
+            subtitle: 'Latest onboarding and verification activity',
           ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade100),
-            ),
+          const SizedBox(height: 12),
+          _buildSectionCard(
             child: _recentUsers.isEmpty
-                ? Text(
-                    _isLoading
+                ? _buildInlineEmptyState(
+                    icon: _isLoading
+                        ? Icons.hourglass_top_rounded
+                        : Icons.history_toggle_off_rounded,
+                    title: _isLoading
                         ? 'Fetching latest activities...'
-                        : 'No recent users found.',
-                    style: TextStyle(color: Colors.grey.shade600),
+                        : 'No recent users found',
+                    subtitle: _isLoading
+                        ? 'Please wait while we load the latest onboarding events.'
+                        : 'New client activity will appear here once users join or update profiles.',
                   )
                 : Column(
                     children: _recentUsers
+                        .asMap()
+                        .entries
                         .map((user) {
-                          return ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryBlue.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                color: AppColors.primaryBlue,
-                              ),
-                            ),
-                            title: Text(
-                              user.fullName.isEmpty ? 'Unknown' : user.fullName,
-                            ),
-                            subtitle: Text(user.email),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.successGreen.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                user.kycStatus,
-                                style: const TextStyle(
-                                  color: AppColors.successGreen,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                          final item = user.value;
+                          return _buildActivityRow(
+                            user: item,
+                            showDivider: user.key < _recentUsers.length - 1,
                           );
                         })
                         .toList(growable: false),
                   ),
           ),
-          const SizedBox(height: 32),
-          const Text(
-            'Client Communication',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textMain,
-            ),
+          const SizedBox(height: 24),
+
+          _buildSectionHeader(
+            title: 'Client Communication',
+            subtitle: 'Broadcast updates or message a specific client',
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade100),
-            ),
+          _buildSectionCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -509,7 +520,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   initialValue: _selectedAudience,
                   decoration: const InputDecoration(
                     labelText: 'Recipients',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.group_outlined),
                   ),
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('All Clients')),
@@ -548,7 +559,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                     initialValue: _selectedUserId,
                     decoration: const InputDecoration(
                       labelText: 'Client',
-                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person_outline),
                     ),
                     items: _allUsers
                         .map(
@@ -575,7 +586,7 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   maxLength: 80,
                   decoration: const InputDecoration(
                     labelText: 'Update Title',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.title_rounded),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -586,14 +597,14 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                   maxLength: 500,
                   decoration: const InputDecoration(
                     labelText: 'Update Message',
-                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.campaign_outlined),
                     alignLabelWithHint: true,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
+                  child: FilledButton.icon(
                     onPressed: _isSendingUpdate || !canSendSpecific
                         ? null
                         : _sendClientUpdate,
@@ -601,13 +612,20 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
-                        : const Icon(Icons.send),
+                        : const Icon(Icons.send_rounded),
                     label: Text(
                       _isSendingUpdate ? 'Sending...' : 'Send Update',
                     ),
-                    style: ElevatedButton.styleFrom(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
                       backgroundColor: AppColors.primaryBlue,
                       foregroundColor: Colors.white,
                     ),
@@ -621,27 +639,287 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     );
   }
 
+  Widget _buildHeroHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF15408D), Color(0xFF1E60E2), Color(0xFF3D7BFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryBlue.withValues(alpha: 0.24),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Admin Control Center',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Monitor users, manage loans, and communicate with clients from one professional workspace.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDCE5F3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required String title,
+    required String subtitle,
+    Widget? action,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMain,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+        if (action != null) action,
+      ],
+    );
+  }
+
+  Widget _buildActivityRow({
+    required AdminUserModel user,
+    required bool showDivider,
+  }) {
+    final statusColor = _statusColor(user.kycStatus);
+    return Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.person_add_alt_1_rounded,
+                color: AppColors.primaryBlue,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.fullName.isEmpty ? 'Unknown user' : user.fullName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMain,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    user.email,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                user.kycStatus,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (showDivider) ...[
+          const SizedBox(height: 12),
+          Divider(color: Colors.grey.shade200, height: 1),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  Color _statusColor(String status) {
+    final value = status.trim().toLowerCase();
+    if (value == 'kyc verified') return AppColors.successGreen;
+    if (value == 'rejected') return AppColors.errorRed;
+    return AppColors.primaryOrange;
+  }
+
+  Widget _buildInlineEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDCE5F3)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: AppColors.primaryBlue, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMain,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAdminSnackBar(
+    String message, {
+    bool isError = false,
+    bool isSuccess = false,
+  }) {
+    if (!mounted) return;
+
+    final Color backgroundColor = isError
+        ? AppColors.errorRed
+        : (isSuccess ? AppColors.successGreen : AppColors.primaryBlue);
+    final IconData icon = isError
+        ? Icons.error_outline_rounded
+        : (isSuccess ? Icons.check_circle_outline_rounded : Icons.info_outline);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: backgroundColor,
+          content: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        ),
+      );
+  }
+
   Future<void> _sendClientUpdate() async {
     final title = _updateTitleController.text.trim();
     final message = _updateMessageController.text.trim();
     if (title.isEmpty || message.isEmpty) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please provide both title and message.')),
+      _showAdminSnackBar(
+        'Please provide both title and message.',
+        isError: true,
       );
       return;
     }
 
     if (_selectedAudience == 'specific' &&
         (_selectedUserId == null || _selectedUserId!.trim().isEmpty)) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a specific client.')),
-      );
+      _showAdminSnackBar('Please select a specific client.', isError: true);
       return;
     }
 
@@ -658,17 +936,16 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
       }
 
       _updateMessageController.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update sent to $sentCount client(s).')),
+      _showAdminSnackBar(
+        'Update sent to $sentCount client(s).',
+        isSuccess: true,
       );
       await _loadDashboard();
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to send update: $error')));
+      _showAdminSnackBar('Failed to send update: $error', isError: true);
     } finally {
       if (mounted) {
         setState(() => _isSendingUpdate = false);
@@ -693,39 +970,72 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
     String title,
     String value,
     IconData icon,
-    Color color,
-  ) {
+    Color color, {
+    required String hint,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade100),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFDCE5F3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 24),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLight,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Text(
+                  'Live',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
+            title,
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 4),
+          Text(
             value,
             style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
               color: AppColors.textMain,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            title,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            hint,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         ],
       ),

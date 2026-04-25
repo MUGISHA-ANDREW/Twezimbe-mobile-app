@@ -19,6 +19,8 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
   Timer? _refreshTimer;
   final Map<String, bool> _decisionLoading = <String, bool>{};
 
+  static const Color _surfaceBorder = Color(0xFFDCE5F3);
+
   @override
   void initState() {
     super.initState();
@@ -108,37 +110,27 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
             .length;
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Loan Applications',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textMain,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Review and manage loan applications',
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-              ),
+              _buildHeroHeader(),
               const SizedBox(height: 24),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final filterDropdown = Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: DropdownButton<String>(
-                      value: _filterStatus,
-                      underline: const SizedBox(),
-                      isExpanded: true,
+
+              _buildSectionHeader(
+                title: 'Pipeline Controls',
+                subtitle: 'Filter submissions and monitor review workload',
+              ),
+              const SizedBox(height: 12),
+              _buildSectionCard(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final filterDropdown = DropdownButtonFormField<String>(
+                      initialValue: _filterStatus,
+                      decoration: const InputDecoration(
+                        labelText: 'Application Status',
+                        prefixIcon: Icon(Icons.filter_alt_outlined),
+                      ),
                       items: ['All', 'Pending', 'Approved', 'Rejected']
                           .map(
                             (status) => DropdownMenuItem(
@@ -146,7 +138,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                               child: Text(status),
                             ),
                           )
-                          .toList(),
+                          .toList(growable: false),
                       onChanged: (value) {
                         if (value == null) {
                           return;
@@ -156,65 +148,79 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                         });
                         _repository.saveLoansStatusFilter(_filterStatus);
                       },
-                    ),
-                  );
+                    );
 
-                  final badges = Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildStatBadge('Pending', pendingCount),
-                      _buildStatBadge('Approved', approvedCount),
-                      _buildStatBadge('Rejected', rejectedCount),
-                    ],
-                  );
-
-                  if (constraints.maxWidth < 860) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                    final badges = Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        filterDropdown,
-                        const SizedBox(height: 12),
-                        badges,
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: _refreshLoans,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Refresh'),
-                          ),
-                        ),
+                        _buildStatBadge('Pending', pendingCount),
+                        _buildStatBadge('Approved', approvedCount),
+                        _buildStatBadge('Rejected', rejectedCount),
                       ],
                     );
-                  }
 
-                  return Row(
-                    children: [
-                      SizedBox(width: 260, child: filterDropdown),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: badges,
+                    final refreshButton = OutlinedButton.icon(
+                      onPressed: _refreshLoans,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Refresh'),
+                    );
+
+                    if (constraints.maxWidth < 860) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          filterDropdown,
+                          const SizedBox(height: 12),
+                          badges,
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: refreshButton,
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(width: 260, child: filterDropdown),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: badges,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      TextButton.icon(
-                        onPressed: _refreshLoans,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Refresh'),
-                      ),
-                    ],
-                  );
-                },
+                        const SizedBox(width: 12),
+                        refreshButton,
+                      ],
+                    );
+                  },
+                ),
               ),
-              const SizedBox(height: 24),
-              Container(
+              const SizedBox(height: 22),
+
+              _buildSectionHeader(
+                title: 'Loan Review Queue',
+                subtitle: 'Approve, reject, or inspect each application record',
+              ),
+              const SizedBox(height: 12),
+
+              _buildSectionCard(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade100),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: _surfaceBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 14,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
                 child: snapshot.connectionState == ConnectionState.waiting
                     ? const Center(
@@ -224,18 +230,24 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                         ),
                       )
                     : visibleApplications.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(40),
-                        child: Center(
-                          child: Text(
-                            'No loan applications found',
-                            style: TextStyle(color: Colors.grey),
-                          ),
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: _buildInlineEmptyState(
+                          icon: Icons.assignment_late_outlined,
+                          title: 'No loan applications found',
+                          subtitle:
+                              'There are no submissions for the selected status right now.',
                         ),
                       )
                     : SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
+                          headingRowColor: WidgetStateProperty.resolveWith(
+                            (_) => const Color(0xFFF4F8FF),
+                          ),
+                          dividerThickness: 0.8,
+                          dataRowMinHeight: 62,
+                          dataRowMaxHeight: 76,
                           columns: const [
                             DataColumn(label: Text('Application ID')),
                             DataColumn(label: Text('Applicant')),
@@ -382,24 +394,126 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
-  Widget _buildStatBadge(String label, int count) {
+  Widget _buildHeroHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primaryBlue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF15408D), Color(0xFF1E60E2), Color(0xFF3D7BFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryBlue.withValues(alpha: 0.24),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _HeaderIcon(icon: Icons.request_quote_rounded),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Loan Operations',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Review every application with confidence and keep approvals consistent.',
+            style: TextStyle(color: Colors.white, fontSize: 13, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required String title,
+    required String subtitle,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textMain,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionCard({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(16),
+    BoxDecoration? decoration,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration:
+          decoration ??
+          BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _surfaceBorder),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+      child: child,
+    );
+  }
+
+  Widget _buildStatBadge(String label, int count) {
+    final Color color = switch (label) {
+      'Pending' => AppColors.primaryOrange,
+      'Approved' => AppColors.successGreen,
+      'Rejected' => AppColors.errorRed,
+      _ => AppColors.primaryBlue,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '$label: ',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          ),
+          Text('$label: ', style: TextStyle(color: color, fontSize: 12)),
           Text(
             '$count',
-            style: const TextStyle(
-              color: AppColors.primaryBlue,
+            style: TextStyle(
+              color: color,
               fontWeight: FontWeight.bold,
               fontSize: 12,
             ),
@@ -449,10 +563,10 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         status,
@@ -465,24 +579,98 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     );
   }
 
+  Widget _buildInlineEmptyState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7FAFF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _surfaceBorder.withValues(alpha: 0.9)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: AppColors.primaryBlue, size: 20),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMain,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showLoanDetails(BuildContext context, AdminLoanApplicationModel loan) {
     final appId = _applicationLookupId(loan);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.all(24),
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: _surfaceBorder),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Loan Application Details',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.description_outlined,
+                      color: AppColors.primaryBlue,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Loan Application Details',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               _detailRow('Application ID', appId ?? '-'),
               _detailRow(
                 'Applicant',
@@ -504,38 +692,41 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
               _detailRow('Period', loan.period.isEmpty ? '-' : loan.period),
               _detailRow('Purpose', loan.purpose.isEmpty ? '-' : loan.purpose),
               _detailRow('Status', loan.status),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               if (loan.status == 'Pending')
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
+                      child: OutlinedButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
                           if (loan.userId.isNotEmpty && appId != null) {
                             _rejectLoanWithReasonDialog(loan, appId);
                           }
                         },
+                        icon: const Icon(Icons.cancel_outlined),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.errorRed,
                           side: const BorderSide(color: AppColors.errorRed),
                         ),
-                        child: const Text('Reject'),
+                        label: const Text('Reject'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: ElevatedButton(
+                      child: FilledButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
                           if (loan.userId.isNotEmpty && appId != null) {
                             _approveLoan(loan, appId);
                           }
                         },
-                        style: ElevatedButton.styleFrom(
+                        icon: const Icon(Icons.check_circle_outline),
+                        style: FilledButton.styleFrom(
                           backgroundColor: AppColors.successGreen,
+                          foregroundColor: Colors.white,
                         ),
-                        child: const Text('Approve'),
+                        label: const Text('Approve'),
                       ),
                     ),
                   ],
@@ -550,18 +741,27 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
   Widget _detailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600)),
-          Flexible(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.right,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF7FAFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _surfaceBorder.withValues(alpha: 0.85)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(color: Colors.grey.shade600)),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                value,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+                textAlign: TextAlign.right,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -584,21 +784,50 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Reject Loan Application'),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+          contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.errorRed.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.report_gmailerrorred_rounded,
+                  color: AppColors.errorRed,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Reject Loan Application',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
           content: TextField(
             controller: controller,
             maxLines: 3,
             textInputAction: TextInputAction.done,
             decoration: const InputDecoration(
               hintText: 'Enter rejection reason',
+              prefixIcon: Icon(Icons.comment_outlined),
             ),
           ),
           actions: [
-            TextButton(
+            OutlinedButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Cancel'),
             ),
-            TextButton(
+            FilledButton(
               onPressed: () {
                 final value = controller.text.trim();
                 if (value.isEmpty) {
@@ -606,6 +835,10 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                 }
                 Navigator.of(dialogContext).pop(value);
               },
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.errorRed,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Reject'),
             ),
           ],
@@ -638,10 +871,11 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
       if (!mounted) return;
       _showMessage(
         'Loan approved. ${_formatUgx(loan.amountValue)} credited to user account.',
+        isSuccess: true,
       );
     } catch (e) {
       if (!mounted) return;
-      _showMessage('Error approving loan: $e');
+      _showMessage('Error approving loan: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() => _decisionLoading.remove(appId));
@@ -667,10 +901,10 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
 
       await _refreshLoans();
       if (!mounted) return;
-      _showMessage('Loan rejected successfully.');
+      _showMessage('Loan rejected successfully.', isSuccess: true);
     } catch (e) {
       if (!mounted) return;
-      _showMessage('Error rejecting loan: $e');
+      _showMessage('Error rejecting loan: $e', isError: true);
     } finally {
       if (mounted) {
         setState(() => _decisionLoading.remove(appId));
@@ -678,13 +912,37 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
     }
   }
 
-  void _showMessage(String message) {
+  void _showMessage(
+    String message, {
+    bool isError = false,
+    bool isSuccess = false,
+  }) {
     if (!mounted) {
       return;
     }
+
+    final Color backgroundColor = isError
+        ? AppColors.errorRed
+        : (isSuccess ? AppColors.successGreen : AppColors.primaryBlue);
+    final IconData icon = isError
+        ? Icons.error_outline_rounded
+        : (isSuccess ? Icons.check_circle_outline_rounded : Icons.info_outline);
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: backgroundColor,
+          content: Row(
+            children: [
+              Icon(icon, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+        ),
+      );
   }
 
   String _formatUgx(int amount) {
@@ -698,5 +956,23 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
       }
     }
     return 'UGX ${buffer.toString()}';
+  }
+}
+
+class _HeaderIcon extends StatelessWidget {
+  const _HeaderIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white24,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: Colors.white, size: 20),
+    );
   }
 }
