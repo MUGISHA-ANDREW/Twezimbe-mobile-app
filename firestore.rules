@@ -5,6 +5,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isBootstrapAdminEmail() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email.lower() == 'admin@twezimbe.co.ug';
+    }
+
     function isAdmin() {
       return isSignedIn() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
@@ -17,7 +23,13 @@ service cloud.firestore {
         isAdmin() ||
         (
           request.auth.uid == userId &&
-          request.resource.data.role == resource.data.role
+          (
+            request.resource.data.role == resource.data.role ||
+            (
+              isBootstrapAdminEmail() &&
+              request.resource.data.role == 'admin'
+            )
+          )
         )
       );
       allow delete: if isAdmin();

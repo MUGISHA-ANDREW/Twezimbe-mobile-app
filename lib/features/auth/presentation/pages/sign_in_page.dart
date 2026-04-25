@@ -87,14 +87,20 @@ class _SignInPageState extends State<SignInPage> {
     try {
       await _signInWithRetry(email: email, password: password);
 
-      // ADD THIS: ensure auth user is synced to local DB + Firestore users collection.
-      await AppDataRepository.ensureProfileForCurrentUser(email: email);
-
-      bool isAdminUser = false;
+      // Do not block successful auth on profile sync issues.
       try {
-        isAdminUser = await AppDataRepository.isCurrentUserAdmin();
+        await AppDataRepository.ensureProfileForCurrentUser(email: email);
       } catch (error) {
-        debugPrint('SignIn admin role check failed: $error');
+        debugPrint('SignIn profile sync failed: $error');
+      }
+
+      bool isAdminUser = _isBootstrapAdminEmail(email);
+      if (!isAdminUser) {
+        try {
+          isAdminUser = await AppDataRepository.isCurrentUserAdmin();
+        } catch (error) {
+          debugPrint('SignIn admin role check failed: $error');
+        }
       }
       _syncProfileInBackground(email: email);
 
@@ -231,6 +237,11 @@ class _SignInPageState extends State<SignInPage> {
         type: 'security',
       ).catchError((_) {}),
     );
+  }
+
+  bool _isBootstrapAdminEmail(String? email) {
+    if (email == null) return false;
+    return email.trim().toLowerCase() == 'admin@twezimbe.co.ug';
   }
 
   @override

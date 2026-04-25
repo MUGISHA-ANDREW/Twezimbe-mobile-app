@@ -121,7 +121,7 @@ class _SignUpPageState extends State<SignUpPage> {
           builder: (context) => SignInPage(
             initialEmail: email,
             initialPassword: password,
-            initialMessage: '🎉 Account created! Please sign in to continue.',
+            initialMessage: 'Account created! Please sign in to continue.',
           ),
         ),
         (route) => false,

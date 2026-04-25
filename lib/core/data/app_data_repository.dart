@@ -326,14 +326,21 @@ class AppDataRepository {
       await _db.updateUser(user.uid, payload);
     }
 
-    // ADD THIS: keep Firestore users collection in sync with auth/local profile.
-    await _firestore.ensureUserDocument(
-      user: user,
-      name: _nonEmpty(payload['fullName']),
-      email: _nonEmpty(payload['email']),
-      phone: _nonEmpty(payload['phoneNumber']),
-      role: _boolFromDynamic(payload['isAdmin']) ? 'admin' : 'client',
-    );
+    // Keep Firestore users collection in sync without blocking app auth flows.
+    try {
+      await _firestore.ensureUserDocument(
+        user: user,
+        name: _nonEmpty(payload['fullName']),
+        email: _nonEmpty(payload['email']),
+        phone: _nonEmpty(payload['phoneNumber']),
+        role: _boolFromDynamic(payload['isAdmin']) ? 'admin' : 'client',
+      );
+    } catch (error) {
+      developer.log(
+        'ensureUserDocument failed: $error',
+        name: 'AppDataRepository.ensureProfileForCurrentUser',
+      );
+    }
   }
 
   static Stream<AppProfileData> watchProfileForCurrentUser() {

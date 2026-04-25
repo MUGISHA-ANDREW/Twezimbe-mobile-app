@@ -70,6 +70,7 @@ class AuthGatePage extends StatefulWidget {
 
 class _AuthGatePageState extends State<AuthGatePage> {
   bool? _isAuthenticated;
+  bool _isBootstrapAdmin = false;
   bool _isLoading = true;
 
   @override
@@ -100,6 +101,7 @@ class _AuthGatePageState extends State<AuthGatePage> {
   Future<bool> _resolveInitialAuthState() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
+      _isBootstrapAdmin = _isBootstrapAdminEmail(currentUser.email);
       unawaited(
         AppDataRepository.ensureProfileForCurrentUser(
           email: currentUser.email,
@@ -119,6 +121,8 @@ class _AuthGatePageState extends State<AuthGatePage> {
       if (mounted) setState(() => _isAuthenticated = true);
       return true;
     }
+
+    _isBootstrapAdmin = false;
 
     try {
       final localSession = await LocalUserSessionStore.readSession();
@@ -140,9 +144,18 @@ class _AuthGatePageState extends State<AuthGatePage> {
     }
 
     if (_isAuthenticated!) {
+      if (_isBootstrapAdmin) {
+        return const AdminDashboardPage();
+      }
+
       return StreamBuilder<AppProfileData>(
         stream: AppDataRepository.watchProfileForCurrentUser(),
         builder: (context, snapshot) {
+          final currentUser = FirebaseAuth.instance.currentUser;
+          if (_isBootstrapAdminEmail(currentUser?.email)) {
+            return const AdminDashboardPage();
+          }
+
           final profile = snapshot.data;
           // Show admin dashboard if user is admin
           if (profile?.isAdmin == true) {
@@ -154,6 +167,11 @@ class _AuthGatePageState extends State<AuthGatePage> {
     }
 
     return const SignInPage();
+  }
+
+  bool _isBootstrapAdminEmail(String? email) {
+    if (email == null) return false;
+    return email.trim().toLowerCase() == 'admin@twezimbe.co.ug';
   }
 }
 
