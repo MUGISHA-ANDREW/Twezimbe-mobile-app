@@ -535,6 +535,18 @@ class AppDataRepository {
     }
 
     return _firestore.streamLoanApplicationsForUser(user.uid).map((rows) {
+      unawaited(
+        _syncLoanDecisionIntoLocalAccount(
+          userId: user.uid,
+          rows: rows,
+        ).catchError((error) {
+          developer.log(
+            'Loan decision sync failed: $error',
+            name: 'AppDataRepository.watchLoanApplicationsForCurrentUser',
+          );
+        }),
+      );
+
       final localRows = <Map<String, dynamic>>[];
 
       final models = rows
@@ -1096,7 +1108,101 @@ class AppDataRepository {
       userId: userId,
       title: title,
       message: message,
+      type: type,
     );
+  }
+
+  static Future<void> _syncLoanDecisionIntoLocalAccount({
+    required String userId,
+    required List<Map<String, dynamic>> rows,
+  }) async {
+    if (rows.isEmpty) {
+      return;
+    }
+
+    final latest = rows.first;
+    final status = _normalizeLoanApplicationStatus(
+      _nonEmpty(latest['status']) ?? 'Pending Review',
+    );
+
+    if (status != 'Approved' && status != 'Rejected') {
+      return;
+    }
+
+    final loan = await _db.getLatestLoanForUser(userId);
+    if (loan == null) {
+      return;
+    }
+
+    final loanStatus = _normalizeLoanApplicationStatus(
+      _nonEmpty(loan['status']) ?? 'Pending Review',
+    );
+    final nowIso = DateTime.now().toIso8601String();
+
+    if (status == 'Approved') {
+      // Only apply once when a pending local loan transitions to approved.
+      if (loanStatus != 'Pending Review') {
+        return;
+      }
+
+      final amountValue = _intFromDynamic(
+        latest['amountValue'] ?? latest['amount'],
+      );
+      final loanType = _nonEmpty(latest['loanType']) ?? _nonEmpty(loan['type']);
+      final period =
+          _nonEmpty(latest['period']) ?? _nonEmpty(latest['duration']);
+      final purpose =
+          _nonEmpty(latest['purpose']) ?? _nonEmpty(loan['purpose']);
+      final applicationId =
+          _nonEmpty(latest['applicationId']) ?? _nonEmpty(latest['id']) ?? '';
+
+      await _db.updateLoan(loan['id'].toString(), {
+        'type': loanType,
+        'status': 'Active',
+        'amountValue': amountValue,
+        'remainingBalanceValue': amountValue,
+        'period': period,
+        'purpose': purpose,
+        'nextPaymentDate': _nextPaymentDateLabel(),
+        'repaymentProgress': 0,
+        'updatedAt': nowIso,
+      });
+
+      final user = await _db.getUser(userId);
+      final currentBalance = _intFromDynamic(user?['balanceValue']);
+      await _db.updateUser(userId, {
+        'balanceValue': currentBalance + amountValue,
+        'updatedAt': nowIso,
+      });
+
+      final txId = applicationId.isEmpty
+          ? 'tx_loan_disbursed_${DateTime.now().millisecondsSinceEpoch}'
+          : 'tx_loan_disbursed_$applicationId';
+      await _db.upsertTransactions([
+        {
+          'id': txId,
+          'userId': userId,
+          'title': 'Loan Disbursed',
+          'subtitle': applicationId.isEmpty
+              ? 'Loan approved and credited to account'
+              : 'Loan approved for $applicationId and credited to account',
+          'amountValue': amountValue,
+          'isCredit': 1,
+          'createdAt': nowIso,
+        },
+      ]);
+
+      return;
+    }
+
+    if (loanStatus == 'Pending Review') {
+      await _db.updateLoan(loan['id'].toString(), {
+        'status': 'Rejected',
+        'nextPaymentDate': 'Awaiting new application',
+        'repaymentProgress': 0,
+        'updatedAt': nowIso,
+      });
+    }
   }
 
   static Future<void> makeLoanRepaymentForCurrentUser({

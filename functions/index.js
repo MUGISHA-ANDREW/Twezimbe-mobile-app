@@ -66,6 +66,7 @@ exports.onLoanApplicationCreated = onDocumentCreated(
         userId: adminDoc.id,
         title: "New Loan Application",
         message: `${applicantName} submitted ${applicationId} for UGX ${amount}.`,
+        type: "loan_submission",
         read: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -114,6 +115,7 @@ exports.onLoanDecisionUpdated = onDocumentUpdated(
       message: afterStatus === "approved"
         ? "Your loan application was approved."
         : "Your loan application was rejected.",
+      type: "loan",
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -150,7 +152,7 @@ exports.onNotificationCreatedSendPush = onDocumentCreated(
         body: (data.message || "").toString(),
       },
       data: {
-        type: "in_app_notification",
+        type: (data.type || "in_app_notification").toString(),
         notificationId: (data.id || event.params.notificationId || "").toString(),
       },
     });

@@ -536,6 +536,7 @@ class AdminLocalRepository {
         'title': 'Loan Approved',
         'message':
             'Your loan application ($applicationId) was approved. Funds have been credited to your account.',
+        'type': 'loan',
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -656,6 +657,7 @@ class AdminLocalRepository {
       'title': 'Loan Approved',
       'message':
           'Your loan application ($effectiveApplicationId) was approved. Funds have been credited to your account.',
+      'type': 'loan',
       'read': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -689,6 +691,7 @@ class AdminLocalRepository {
         'title': 'Loan Rejected',
         'message':
             'Your loan application ($applicationId) was rejected. Reason: $cleanReason',
+        'type': 'loan',
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -757,6 +760,7 @@ class AdminLocalRepository {
       'title': 'Loan Rejected',
       'message':
           'Your loan application ($effectiveApplicationId) was rejected. Reason: $cleanReason',
+      'type': 'loan',
       'read': false,
       'createdAt': FieldValue.serverTimestamp(),
     });

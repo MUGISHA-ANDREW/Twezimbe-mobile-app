@@ -161,6 +161,7 @@ class FirestoreSyncService {
     required String userId,
     required String title,
     required String message,
+    String type = 'info',
   }) async {
     final doc = _notifications.doc();
     await doc.set({
@@ -168,6 +169,7 @@ class FirestoreSyncService {
       'userId': userId,
       'title': title,
       'message': message,
+      'type': type,
       'read': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -189,6 +191,7 @@ class FirestoreSyncService {
           title: 'New Loan Application',
           message:
               '$applicantName submitted $applicationId for UGX $amount. Review required.',
+          type: 'loan_submission',
         ),
       );
     }
@@ -208,6 +211,7 @@ class FirestoreSyncService {
       message: cleanStatus == 'approved'
           ? 'Your loan application was approved.'
           : 'Your loan application was rejected.',
+      type: 'loan',
     );
   }
 
