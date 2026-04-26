@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
@@ -239,7 +242,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                           amountValue: amountValue,
                           period: _selectedPeriod,
                           purpose: _selectedPurpose,
-                        );
+                        ).timeout(kAppOperationTimeout);
 
                         if (!context.mounted) {
                           return;
@@ -256,6 +259,16 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                           ),
                           (route) => false,
                         );
+                      } on TimeoutException {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Request timed out after 2 seconds. Please try again.',
+                              ),
+                            ),
+                          );
+                        }
                       } catch (e) {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

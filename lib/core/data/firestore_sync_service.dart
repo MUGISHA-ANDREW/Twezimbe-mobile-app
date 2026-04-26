@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 
 class FirestoreSyncService {
   FirestoreSyncService._();
@@ -7,6 +8,10 @@ class FirestoreSyncService {
   static final FirestoreSyncService instance = FirestoreSyncService._();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Future<T> _runWithTimeout<T>(Future<T> operation) {
+    return operation.timeout(kAppOperationTimeout);
+  }
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
@@ -25,7 +30,7 @@ class FirestoreSyncService {
     String? fcmToken,
   }) async {
     final docRef = _users.doc(user.uid);
-    final snapshot = await docRef.get();
+    final snapshot = await _runWithTimeout(docRef.get());
 
     final resolvedRole = (role == null || role.trim().isEmpty)
         ? 'client'
@@ -43,11 +48,11 @@ class FirestoreSyncService {
 
     if (!snapshot.exists) {
       payload['createdAt'] = FieldValue.serverTimestamp();
-      await docRef.set(payload);
+      await _runWithTimeout(docRef.set(payload));
       return;
     }
 
-    await docRef.set(payload, SetOptions(merge: true));
+    await _runWithTimeout(docRef.set(payload, SetOptions(merge: true)));
   }
 
   // ADD THIS: update FCM token in users collection.
@@ -57,11 +62,13 @@ class FirestoreSyncService {
   }) async {
     if (uid.trim().isEmpty || token.trim().isEmpty) return;
 
-    await _users.doc(uid).set({
-      'uid': uid,
-      'fcmToken': token.trim(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _runWithTimeout(
+      _users.doc(uid).set({
+        'uid': uid,
+        'fcmToken': token.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+    );
   }
 
   // ADD THIS: realtime users stream for admin screen.
@@ -92,22 +99,24 @@ class FirestoreSyncService {
     required String duration,
     required String purpose,
   }) async {
-    await _loanApplications.doc(applicationId).set({
-      'applicationId': applicationId,
-      'userId': userId,
-      'userName': userName,
-      'userEmail': userEmail,
-      'userPhone': userPhone,
-      'customerId': customerId,
-      'loanType': loanType,
-      'amount': amount,
-      'period': period,
-      'duration': duration,
-      'purpose': purpose,
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _runWithTimeout(
+      _loanApplications.doc(applicationId).set({
+        'applicationId': applicationId,
+        'userId': userId,
+        'userName': userName,
+        'userEmail': userEmail,
+        'userPhone': userPhone,
+        'customerId': customerId,
+        'loanType': loanType,
+        'amount': amount,
+        'period': period,
+        'duration': duration,
+        'purpose': purpose,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+    );
   }
 
   // ADD THIS: realtime loan applications stream for admin screen.
@@ -148,12 +157,14 @@ class FirestoreSyncService {
     required String status,
     required String adminId,
   }) async {
-    await _loanApplications.doc(applicationId).set({
-      'status': status.toLowerCase(),
-      'decisionAt': FieldValue.serverTimestamp(),
-      'adminId': adminId,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await _runWithTimeout(
+      _loanApplications.doc(applicationId).set({
+        'status': status.toLowerCase(),
+        'decisionAt': FieldValue.serverTimestamp(),
+        'adminId': adminId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+    );
   }
 
   // ADD THIS: create in-app notification document.
@@ -164,15 +175,17 @@ class FirestoreSyncService {
     String type = 'info',
   }) async {
     final doc = _notifications.doc();
-    await doc.set({
-      'id': doc.id,
-      'userId': userId,
-      'title': title,
-      'message': message,
-      'type': type,
-      'read': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await _runWithTimeout(
+      doc.set({
+        'id': doc.id,
+        'userId': userId,
+        'title': title,
+        'message': message,
+        'type': type,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      }),
+    );
   }
 
   // ADD THIS: notify all admins after a loan submission.
@@ -181,7 +194,9 @@ class FirestoreSyncService {
     required String applicantName,
     required int amount,
   }) async {
-    final admins = await _users.where('role', isEqualTo: 'admin').get();
+    final admins = await _runWithTimeout(
+      _users.where('role', isEqualTo: 'admin').get(),
+    );
     final futures = <Future<void>>[];
 
     for (final adminDoc in admins.docs) {
@@ -196,7 +211,7 @@ class FirestoreSyncService {
       );
     }
 
-    await Future.wait(futures);
+    await _runWithTimeout(Future.wait(futures));
   }
 
   // ADD THIS: notify a single user after loan decision.
@@ -233,28 +248,32 @@ class FirestoreSyncService {
 
   Future<void> markNotificationRead(String notificationId) async {
     if (notificationId.trim().isEmpty) return;
-    await _notifications.doc(notificationId).set({
-      'read': true,
-    }, SetOptions(merge: true));
+    await _runWithTimeout(
+      _notifications.doc(notificationId).set({
+        'read': true,
+      }, SetOptions(merge: true)),
+    );
   }
 
   Future<void> markAllNotificationsReadForUser(String userId) async {
     if (userId.trim().isEmpty) return;
 
-    final unread = await _notifications
-        .where('userId', isEqualTo: userId)
-        .where('read', isEqualTo: false)
-        .get();
+    final unread = await _runWithTimeout(
+      _notifications
+          .where('userId', isEqualTo: userId)
+          .where('read', isEqualTo: false)
+          .get(),
+    );
     final batch = _firestore.batch();
     for (final doc in unread.docs) {
       batch.set(doc.reference, {'read': true}, SetOptions(merge: true));
     }
-    await batch.commit();
+    await _runWithTimeout(batch.commit());
   }
 
   Future<String?> getRoleForUser(String uid) async {
     if (uid.trim().isEmpty) return null;
-    final snap = await _users.doc(uid).get();
+    final snap = await _runWithTimeout(_users.doc(uid).get());
     if (!snap.exists) return null;
     final role = _clean(snap.data()?['role']);
     return role?.toLowerCase();

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/data/database_helper.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_loan_application_model.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_notification_model.dart';
@@ -161,7 +162,7 @@ class AdminLocalRepository {
       final callable = FirebaseFunctions.instance.httpsCallable(
         'listAuthUsers',
       );
-      final response = await callable.call();
+      final response = await callable.call().timeout(kAppOperationTimeout);
 
       final data = response.data;
       if (data is! Map) {

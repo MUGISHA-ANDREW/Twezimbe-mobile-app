@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/domain/auth_input_validators.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
@@ -136,12 +139,20 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     setState(() => _isSending = true);
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      await FirebaseAuth.instance
+          .sendPasswordResetEmail(email: email)
+          .timeout(kAppOperationTimeout);
       if (!mounted) return;
       _showSuccessDialog(context);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       _showInlineMessage(_resetErrorMessage(e), isError: true);
+    } on TimeoutException {
+      if (!mounted) return;
+      _showInlineMessage(
+        'Request timed out after 2 seconds. Check your internet and try again.',
+        isError: true,
+      );
     } catch (_) {
       if (!mounted) return;
       _showInlineMessage(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -131,6 +132,11 @@ class _SignInPageState extends State<SignInPage> {
         'SignIn FirebaseAuthException code=${e.code} message=${e.message}',
       );
       _showMessage(_authErrorMessage(e), isError: true);
+    } on TimeoutException {
+      _showMessage(
+        'Request timed out after 2 seconds. Check your internet and try again.',
+        isError: true,
+      );
     } catch (e) {
       debugPrint('SignIn unknown exception: $e');
       _showMessage('Sign in failed. Please try again.', isError: true);
@@ -146,10 +152,9 @@ class _SignInPageState extends State<SignInPage> {
     required String password,
   }) async {
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password)
+          .timeout(kAppOperationTimeout);
     } on FirebaseAuthException catch (e) {
       final String trimmedPassword = password.trim();
       final bool canRetry =
@@ -157,10 +162,9 @@ class _SignInPageState extends State<SignInPage> {
           trimmedPassword != password;
 
       if (canRetry) {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: trimmedPassword,
-        );
+        await FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: trimmedPassword)
+            .timeout(kAppOperationTimeout);
         return;
       }
 

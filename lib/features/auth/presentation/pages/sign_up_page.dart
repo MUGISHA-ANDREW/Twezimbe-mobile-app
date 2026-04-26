@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -101,17 +104,20 @@ class _SignUpPageState extends State<SignUpPage> {
 
     try {
       final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+          .createUserWithEmailAndPassword(email: email, password: password)
+          .timeout(kAppOperationTimeout);
 
-      await credential.user?.updateDisplayName(username);
+      await credential.user
+          ?.updateDisplayName(username)
+          .timeout(kAppOperationTimeout);
       await AppDataRepository.ensureProfileForCurrentUser(
         fullName: username,
         email: email,
         phoneNumber: phoneNumber,
-      );
-      await credential.user?.reload();
-      await FirebaseAuth.instance.signOut();
-      await LocalUserSessionStore.clear();
+      ).timeout(kAppOperationTimeout);
+      await credential.user?.reload().timeout(kAppOperationTimeout);
+      await FirebaseAuth.instance.signOut().timeout(kAppOperationTimeout);
+      await LocalUserSessionStore.clear().timeout(kAppOperationTimeout);
 
       if (!mounted) return;
 
@@ -131,6 +137,11 @@ class _SignUpPageState extends State<SignUpPage> {
         'SignUp FirebaseAuthException code=${e.code} message=${e.message}',
       );
       _showMessage(_authErrorMessage(e), isError: true);
+    } on TimeoutException {
+      _showMessage(
+        'Request timed out after 2 seconds. Check your internet and try again.',
+        isError: true,
+      );
     } catch (e) {
       debugPrint('SignUp unknown exception: $e');
       _showMessage('Sign up failed. Please try again.', isError: true);
