@@ -534,26 +534,62 @@ class AppDataRepository {
       );
     }
 
-    return _poll<List<AppLoanApplicationData>>(() async {
-      final rows = await _db.getLoanApplications(user.uid);
-      return rows
+    return _firestore.streamLoanApplicationsForUser(user.uid).map((rows) {
+      final localRows = <Map<String, dynamic>>[];
+
+      final models = rows
           .take(limit)
           .map((data) {
-            final amountValue = _intFromDynamic(data['amountValue']);
+            final applicationId =
+                _nonEmpty(data['applicationId']) ?? _nonEmpty(data['id']) ?? '';
+            final amountValue = _intFromDynamic(
+              data['amountValue'] ?? data['amount'],
+            );
+            final period =
+                _nonEmpty(data['period']) ?? _nonEmpty(data['duration']) ?? '-';
+            final status = _normalizeLoanApplicationStatus(
+              _nonEmpty(data['status']) ?? 'Pending Review',
+            );
+            final createdAt = _asDateTime(data['createdAt']);
+            final updatedAt = _asDateTime(data['updatedAt']) ?? createdAt;
+
+            localRows.add({
+              'id': applicationId,
+              'applicationId': applicationId,
+              'userId': user.uid,
+              'userName': _nonEmpty(data['userName']) ?? '',
+              'userEmail': _nonEmpty(data['userEmail']) ?? '',
+              'userPhone': _nonEmpty(data['userPhone']) ?? '',
+              'customerId': _nonEmpty(data['customerId']) ?? '',
+              'loanType': _nonEmpty(data['loanType']) ?? 'Loan',
+              'amountValue': amountValue,
+              'period': period,
+              'purpose': _nonEmpty(data['purpose']) ?? '-',
+              'status': status,
+              'rejectionReason': _nonEmpty(data['rejectionReason']) ?? '',
+              'reviewedBy': _nonEmpty(data['adminId']) ?? '',
+              'reviewedAt': updatedAt?.toIso8601String() ?? '',
+              'createdAt': createdAt?.toIso8601String() ?? '',
+              'updatedAt': updatedAt?.toIso8601String() ?? '',
+            });
+
             return AppLoanApplicationData(
-              applicationId:
-                  _nonEmpty(data['applicationId']) ??
-                  _nonEmpty(data['id']) ??
-                  '',
+              applicationId: applicationId,
               loanType: _nonEmpty(data['loanType']) ?? 'Loan',
               amount: _formatUgx(amountValue),
-              period: _nonEmpty(data['period']) ?? '-',
+              period: period,
               purpose: _nonEmpty(data['purpose']) ?? '-',
-              status: _nonEmpty(data['status']) ?? 'Pending Review',
-              createdAt: _asDateTime(data['createdAt']),
+              status: status,
+              createdAt: createdAt,
             );
           })
           .toList(growable: false);
+
+      if (localRows.isNotEmpty) {
+        unawaited(_db.upsertLoanApplications(localRows));
+      }
+
+      return models;
     });
   }
 
@@ -629,7 +665,12 @@ class AppDataRepository {
       applicationId: applicationId,
       userId: user.uid,
       userName: applicantName,
+      userEmail: applicantEmail,
+      userPhone: applicantPhone,
+      customerId: customerId,
+      loanType: loanType.trim(),
       amount: amountValue,
+      period: period.trim(),
       duration: period.trim(),
       purpose: purpose.trim(),
     );
@@ -1603,6 +1644,14 @@ class AppDataRepository {
     final day = dueDate.day.toString().padLeft(2, '0');
     final month = dueDate.month.toString().padLeft(2, '0');
     return '$day/$month/${dueDate.year}';
+  }
+
+  static String _normalizeLoanApplicationStatus(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value == 'pending') return 'Pending Review';
+    if (value == 'approved') return 'Approved';
+    if (value == 'rejected') return 'Rejected';
+    return raw.trim().isEmpty ? 'Pending Review' : raw;
   }
 
   static String _relativeTimeLabel(DateTime dateTime) {

@@ -502,6 +502,24 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<int> getTotalIncomeFromTransactions() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT COALESCE(
+        SUM(
+          CASE
+            WHEN isCredit = 1 OR LOWER(title) LIKE '%repayment%'
+            THEN amountValue
+            ELSE 0
+          END
+        ),
+        0
+      ) as total
+      FROM transactions
+    ''');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   Future<List<Map<String, dynamic>>> getRecentUsersForAdmin({
     int limit = 5,
   }) async {

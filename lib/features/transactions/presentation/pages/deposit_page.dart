@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
 
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key});
@@ -17,6 +18,7 @@ class _DepositPageState extends State<DepositPage> {
   final TextEditingController _phoneController = TextEditingController();
   String _selectedQuickAmount = '';
   bool _isSubmitting = false;
+  bool _isProcessingDialogVisible = false;
 
   @override
   void dispose() {
@@ -85,6 +87,7 @@ class _DepositPageState extends State<DepositPage> {
     }
 
     setState(() => _isSubmitting = true);
+    _showProcessingDialog();
 
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
@@ -102,12 +105,32 @@ class _DepositPageState extends State<DepositPage> {
       if (!mounted) {
         return;
       }
+      _hideProcessingDialog();
       Navigator.pop(context, true);
     } finally {
       if (mounted) {
+        _hideProcessingDialog();
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _showProcessingDialog() {
+    if (!mounted || _isProcessingDialogVisible) {
+      return;
+    }
+    _isProcessingDialogVisible = true;
+    showProcessingPaymentDialog(context).whenComplete(() {
+      _isProcessingDialogVisible = false;
+    });
+  }
+
+  void _hideProcessingDialog() {
+    if (!mounted || !_isProcessingDialogVisible) {
+      return;
+    }
+    hideProcessingPaymentDialog(context);
+    _isProcessingDialogVisible = false;
   }
 
   @override
@@ -292,23 +315,7 @@ class _DepositPageState extends State<DepositPage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.successGreen,
               ),
-              child: _isSubmitting
-                  ? const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          height: 18,
-                          width: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        Text('Payment processing.........'),
-                      ],
-                    )
-                  : const Text('Deposit Now'),
+              child: const Text('Deposit Now'),
             ),
           ],
         ),

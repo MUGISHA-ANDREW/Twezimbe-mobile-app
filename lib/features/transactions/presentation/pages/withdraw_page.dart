@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
 
 class WithdrawPage extends StatefulWidget {
   const WithdrawPage({super.key});
@@ -16,6 +17,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   bool _isSubmitting = false;
+  bool _isProcessingDialogVisible = false;
 
   AppProfileData get _fallbackProfile => const AppProfileData(
     fullName: 'User',
@@ -99,6 +101,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
     }
 
     setState(() => _isSubmitting = true);
+    _showProcessingDialog();
 
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
@@ -116,12 +119,32 @@ class _WithdrawPageState extends State<WithdrawPage> {
       if (!mounted) {
         return;
       }
+      _hideProcessingDialog();
       Navigator.pop(context, true);
     } finally {
       if (mounted) {
+        _hideProcessingDialog();
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _showProcessingDialog() {
+    if (!mounted || _isProcessingDialogVisible) {
+      return;
+    }
+    _isProcessingDialogVisible = true;
+    showProcessingPaymentDialog(context).whenComplete(() {
+      _isProcessingDialogVisible = false;
+    });
+  }
+
+  void _hideProcessingDialog() {
+    if (!mounted || !_isProcessingDialogVisible) {
+      return;
+    }
+    hideProcessingPaymentDialog(context);
+    _isProcessingDialogVisible = false;
   }
 
   @override
@@ -322,23 +345,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
                   ),
-                  child: _isSubmitting
-                      ? const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(width: 10),
-                            Text('Payment processing.........'),
-                          ],
-                        )
-                      : const Text('Withdraw'),
+                  child: const Text('Withdraw'),
                 ),
               ],
             ),

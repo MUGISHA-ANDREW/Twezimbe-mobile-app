@@ -83,7 +83,12 @@ class FirestoreSyncService {
     required String applicationId,
     required String userId,
     required String userName,
+    required String userEmail,
+    required String userPhone,
+    required String customerId,
+    required String loanType,
     required int amount,
+    required String period,
     required String duration,
     required String purpose,
   }) async {
@@ -91,7 +96,12 @@ class FirestoreSyncService {
       'applicationId': applicationId,
       'userId': userId,
       'userName': userName,
+      'userEmail': userEmail,
+      'userPhone': userPhone,
+      'customerId': customerId,
+      'loanType': loanType,
       'amount': amount,
+      'period': period,
       'duration': duration,
       'purpose': purpose,
       'status': 'pending',
@@ -103,6 +113,23 @@ class FirestoreSyncService {
   // ADD THIS: realtime loan applications stream for admin screen.
   Stream<List<Map<String, dynamic>>> streamLoanApplications() {
     return _loanApplications
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) {
+          return snap.docs
+              .map((doc) {
+                final data = doc.data();
+                return <String, dynamic>{'id': doc.id, ...data};
+              })
+              .toList(growable: false);
+        });
+  }
+
+  Stream<List<Map<String, dynamic>>> streamLoanApplicationsForUser(
+    String userId,
+  ) {
+    return _loanApplications
+        .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) {

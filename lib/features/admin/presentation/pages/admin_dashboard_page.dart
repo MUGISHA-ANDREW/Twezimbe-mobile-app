@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -301,6 +303,8 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   final TextEditingController _updateTitleController = TextEditingController();
   final TextEditingController _updateMessageController =
       TextEditingController();
+  StreamSubscription<int>? _usersCountSubscription;
+  StreamSubscription<int>? _totalIncomeSubscription;
 
   bool _isLoading = false;
   bool _isSendingUpdate = false;
@@ -320,13 +324,38 @@ class _AdminHomeTabState extends State<AdminHomeTab> {
   void initState() {
     super.initState();
     _loadDashboard();
+    _startRealtimeMetricSubscriptions();
   }
 
   @override
   void dispose() {
+    _usersCountSubscription?.cancel();
+    _totalIncomeSubscription?.cancel();
     _updateTitleController.dispose();
     _updateMessageController.dispose();
     super.dispose();
+  }
+
+  void _startRealtimeMetricSubscriptions() {
+    _usersCountSubscription?.cancel();
+    _usersCountSubscription = _repository
+        .watchTotalUsersCountFromFirebase()
+        .listen((totalUsers) {
+          if (!mounted) return;
+          setState(() {
+            _metrics = <String, int>{..._metrics, 'totalUsers': totalUsers};
+          });
+        });
+
+    _totalIncomeSubscription?.cancel();
+    _totalIncomeSubscription = _repository
+        .watchTotalIncomeFromFirebase()
+        .listen((totalIncome) {
+          if (!mounted) return;
+          setState(() {
+            _metrics = <String, int>{..._metrics, 'totalRevenue': totalIncome};
+          });
+        });
   }
 
   Future<void> _loadDashboard() async {

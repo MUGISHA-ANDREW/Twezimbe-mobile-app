@@ -107,6 +107,31 @@ class AdminLocalRepository {
         });
   }
 
+  Stream<int> watchTotalUsersCountFromFirebase() {
+    return _firestore.collection('users').snapshots().map((snap) => snap.size);
+  }
+
+  Stream<int> watchTotalIncomeFromFirebase() {
+    return _firestore.collection('transactions').snapshots().map((snap) {
+      var total = 0;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final amount = _int(data['amountValue'] ?? data['amount']);
+        final type = _string(data['type']).toLowerCase();
+        final title = _string(data['title']).toLowerCase();
+        final isIncome =
+            type == 'deposit' ||
+            type == 'repayment' ||
+            title.contains('deposit') ||
+            title.contains('repayment');
+        if (isIncome && amount > 0) {
+          total += amount;
+        }
+      }
+      return total;
+    });
+  }
+
   Future<String> getSavedUsersStatusFilter() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_usersStatusFilterKey) ?? 'All';
@@ -372,7 +397,7 @@ class AdminLocalRepository {
     final totalUsers = await _db.getTotalUsersCount();
     final activeLoans = await _db.getActiveLoansCount();
     final defaulters = await getDefaultersCount();
-    final totalRevenue = await _db.getTotalUserBalances();
+    final totalRevenue = await _db.getTotalIncomeFromTransactions();
     return <String, int>{
       'totalUsers': totalUsers,
       'activeLoans': activeLoans,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/data/database_helper.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
+import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
 class MakePaymentPage extends StatefulWidget {
@@ -19,6 +20,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
   final TextEditingController _customAmountController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   bool _isProcessing = false;
+  bool _isProcessingDialogVisible = false;
 
   // Loan data
   String _loanType = 'Salary Loan';
@@ -400,6 +402,25 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
     );
   }
 
+  void _showProcessingDialog() {
+    if (!mounted || _isProcessingDialogVisible) {
+      return;
+    }
+    _isProcessingDialogVisible = true;
+
+    showProcessingPaymentDialog(context).whenComplete(() {
+      _isProcessingDialogVisible = false;
+    });
+  }
+
+  void _hideProcessingDialog() {
+    if (!mounted || !_isProcessingDialogVisible) {
+      return;
+    }
+    hideProcessingPaymentDialog(context);
+    _isProcessingDialogVisible = false;
+  }
+
   Future<void> _processPayment() async {
     if (_remainingBalance <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -424,6 +445,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
     }
 
     setState(() => _isProcessing = true);
+    _showProcessingDialog();
 
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -510,6 +532,8 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
 
       if (!mounted) return;
 
+      _hideProcessingDialog();
+
       // Navigate to success page
       Navigator.push(
         context,
@@ -524,11 +548,13 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
       );
     } catch (e) {
       if (!mounted) return;
+      _hideProcessingDialog();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Payment failed: $e')));
     } finally {
       if (mounted) {
+        _hideProcessingDialog();
         setState(() => _isProcessing = false);
       }
     }
