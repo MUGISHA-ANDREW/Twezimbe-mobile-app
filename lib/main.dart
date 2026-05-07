@@ -66,6 +66,7 @@ class AuthGatePage extends StatefulWidget {
 
   @override
   State<AuthGatePage> createState() => _AuthGatePageState();
+  
 }
 
 class _AuthGatePageState extends State<AuthGatePage> {
