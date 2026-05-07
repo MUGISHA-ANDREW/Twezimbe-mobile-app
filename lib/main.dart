@@ -47,7 +47,6 @@ Future<void> _initializeDatabaseFactory() async {
   }
 }
 
-
 class TwezimbeApp extends StatelessWidget {
   const TwezimbeApp({super.key});
 
