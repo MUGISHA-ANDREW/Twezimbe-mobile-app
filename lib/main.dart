@@ -69,7 +69,6 @@ class AuthGatePage extends StatefulWidget {
   
 }
 
-
 class _AuthGatePageState extends State<AuthGatePage> {
   bool? _isAuthenticated;
   bool _isBootstrapAdmin = false;
