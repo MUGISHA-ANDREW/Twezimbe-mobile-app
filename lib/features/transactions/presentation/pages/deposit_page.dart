@@ -51,22 +51,18 @@ class _DepositPageState extends State<DepositPage> {
     return 'DEP$y$m$d${now.hour}${now.minute}${now.second}$millis';
   }
 
-  Future<void> _persistDepositInBackground({
+  Future<void> _persistDeposit({
     required int amountValue,
     required String reference,
     required String maskedPhone,
   }) async {
-    try {
-      // This persists the transaction and also creates an in-app notification.
-      await AppDataRepository.addTransactionForCurrentUser(
-        title: 'Deposit via $_selectedMethod',
-        subtitle: '$maskedPhone • Ref $reference',
-        amountValue: amountValue,
-        isCredit: true,
-      );
-    } catch (_) {
-      // Keep UX instant even if backend write is delayed/failed.
-    }
+    // Persist the transaction and also create an in-app notification.
+    await AppDataRepository.addTransactionForCurrentUser(
+      title: 'Deposit via $_selectedMethod',
+      subtitle: '$maskedPhone • Ref $reference',
+      amountValue: amountValue,
+      isCredit: true,
+    );
   }
 
   Future<void> _submitDeposit() async {
@@ -92,21 +88,25 @@ class _DepositPageState extends State<DepositPage> {
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
 
-    unawaited(
-      _persistDepositInBackground(
+    try {
+      await _persistDeposit(
         amountValue: amountValue,
         reference: reference,
         maskedPhone: maskedPhone,
-      ),
-    );
-
-    try {
+      );
+      if (!mounted) {
+        return;
+      }
       await Future<void>.delayed(const Duration(seconds: 2));
       if (!mounted) {
         return;
       }
-      _hideProcessingDialog();
       Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Deposit failed. Please try again.')),
+      );
     } finally {
       if (mounted) {
         _hideProcessingDialog();

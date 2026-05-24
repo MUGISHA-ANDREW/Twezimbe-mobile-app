@@ -1,1 +1,1 @@
-const Duration kAppOperationTimeout = Duration(seconds: 2);
+const Duration kAppOperationTimeout = Duration(seconds: 15);

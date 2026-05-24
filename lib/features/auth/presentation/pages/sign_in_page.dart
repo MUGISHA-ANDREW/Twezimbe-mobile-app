@@ -134,7 +134,7 @@ class _SignInPageState extends State<SignInPage> {
       _showMessage(_authErrorMessage(e), isError: true);
     } on TimeoutException {
       _showMessage(
-        'Request timed out after 2 seconds. Check your internet and try again.',
+        'Request timed out. Please check your internet connection and try again.',
         isError: true,
       );
     } catch (e) {

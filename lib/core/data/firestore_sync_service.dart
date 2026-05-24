@@ -19,6 +19,10 @@ class FirestoreSyncService {
       _firestore.collection('loan_applications');
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _firestore.collection('notifications');
+  CollectionReference<Map<String, dynamic>> get _transactions =>
+      _firestore.collection('transactions');
+  CollectionReference<Map<String, dynamic>> get _loans =>
+      _firestore.collection('loans');
 
   // ADD THIS: sync auth user profile into Firestore users collection.
   Future<void> ensureUserDocument({
@@ -38,16 +42,21 @@ class FirestoreSyncService {
 
     final payload = <String, dynamic>{
       'uid': user.uid,
-      'name': _clean(name) ?? _clean(user.displayName) ?? '',
+      'fullName': _clean(name) ?? _clean(user.displayName) ?? '',
       'email': (_clean(email) ?? _clean(user.email) ?? '').toLowerCase(),
-      'phone': _clean(phone) ?? _clean(user.phoneNumber) ?? '',
+      'phoneNumber': _clean(phone) ?? _clean(user.phoneNumber) ?? '',
       'role': resolvedRole,
       'fcmToken': _clean(fcmToken) ?? '',
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
+    if (user.photoURL != null) {
+      payload['photoUrl'] = user.photoURL;
+    }
+
     if (!snapshot.exists) {
       payload['createdAt'] = FieldValue.serverTimestamp();
+      payload['balanceValue'] = 0;
       await _runWithTimeout(docRef.set(payload));
       return;
     }
@@ -277,6 +286,164 @@ class FirestoreSyncService {
     if (!snap.exists) return null;
     final role = _clean(snap.data()?['role']);
     return role?.toLowerCase();
+  }
+
+  Stream<Map<String, dynamic>?> streamUser(String uid) {
+    return _users.doc(uid).snapshots().map((snap) => snap.data());
+  }
+
+  Future<void> updateUserFields(String uid, Map<String, dynamic> fields) async {
+    if (uid.trim().isEmpty) return;
+    await _runWithTimeout(
+      _users.doc(uid).set({
+        ...fields,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+    );
+  }
+
+  Stream<List<Map<String, dynamic>>> streamTransactionsForUser(String userId) {
+    return _transactions
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) {
+          return snap.docs
+              .map((doc) => <String, dynamic>{'id': doc.id, ...doc.data()})
+              .toList(growable: false);
+        });
+  }
+
+  Stream<Map<String, dynamic>?> streamActiveLoanForUser(String userId) {
+    return _loans
+        .where('userId', isEqualTo: userId)
+        .orderBy('updatedAt', descending: true)
+        .limit(1)
+        .snapshots()
+        .map((snap) => snap.docs.isNotEmpty ? snap.docs.first.data() : null);
+  }
+
+  Future<void> updateLoanInFirestore({
+    required String userId,
+    required String loanId,
+    required Map<String, dynamic> data,
+  }) async {
+    final docId = 'loan_$userId';
+    await _runWithTimeout(
+      _loans.doc(docId).set({
+        ...data,
+        'userId': userId,
+        'loanId': loanId,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)),
+    );
+  }
+
+  Future<void> recordTransaction({
+    required String userId,
+    required String title,
+    required String subtitle,
+    required int amount,
+    required bool isCredit,
+  }) async {
+    final userDoc = _users.doc(userId);
+    final txDoc = _transactions.doc();
+
+    await _runWithTimeout(
+      _firestore.runTransaction((transaction) async {
+        final userSnapshot = await transaction.get(userDoc);
+
+        final currentBalance = userSnapshot.exists
+            ? (userSnapshot.data()?['balanceValue'] ?? 0)
+            : 0;
+        final newBalance = isCredit
+            ? currentBalance + amount
+            : (currentBalance - amount).clamp(0, 1000000000);
+
+        transaction.set(userDoc, {
+          'balanceValue': newBalance,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        transaction.set(txDoc, {
+          'id': txDoc.id,
+          'userId': userId,
+          'title': title,
+          'subtitle': subtitle,
+          'amountValue': amount,
+          'isCredit': isCredit,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }),
+    );
+  }
+
+  Future<void> recordLoanRepayment({
+    required String userId,
+    required String loanId,
+    required int amount,
+  }) async {
+    final userDoc = _users.doc(userId);
+    final loanDoc = _loans.doc('loan_$userId');
+    final txDoc = _transactions.doc();
+
+    await _runWithTimeout(
+      _firestore.runTransaction((transaction) async {
+        final userSnapshot = await transaction.get(userDoc);
+        final loanSnapshot = await transaction.get(loanDoc);
+
+        if (!userSnapshot.exists || !loanSnapshot.exists) {
+          throw Exception("User or Loan record not found!");
+        }
+
+        final currentBalance = userSnapshot.data()?['balanceValue'] ?? 0;
+        final currentRemaining =
+            (loanSnapshot.data()?['remainingBalanceValue'] as num?)?.toInt() ??
+            0;
+        final amountBorrowed =
+            (loanSnapshot.data()?['amountValue'] as num?)?.toInt() ??
+            currentRemaining;
+
+        final amountToApply = amount > currentRemaining
+            ? currentRemaining
+            : amount;
+        final newRemaining = currentRemaining - amountToApply;
+        final newBalance = (currentBalance - amountToApply).clamp(
+          0,
+          1000000000,
+        );
+
+        final safeBorrowed = amountBorrowed <= 0
+            ? amountToApply
+            : amountBorrowed;
+        final paidSoFar = safeBorrowed - newRemaining;
+        final progress = ((paidSoFar / safeBorrowed) * 100).round().clamp(
+          0,
+          100,
+        );
+
+        transaction.update(userDoc, {
+          'balanceValue': newBalance,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.update(loanDoc, {
+          'remainingBalanceValue': newRemaining,
+          'repaymentProgress': progress,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.set(txDoc, {
+          'id': txDoc.id,
+          'userId': userId,
+          'title': 'Loan Repayment',
+          'subtitle': 'Payment for $loanId',
+          'amountValue': amountToApply,
+          'isCredit': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }),
+    );
   }
 
   String? _clean(dynamic value) {

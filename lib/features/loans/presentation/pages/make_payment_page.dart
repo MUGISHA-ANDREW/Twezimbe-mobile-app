@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:twezimbeapp/core/data/database_helper.dart';
+import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
@@ -453,82 +454,11 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
         throw StateError('No authenticated user found.');
       }
 
-      final paidAmount = _paymentAmount > _remainingBalance
-          ? _remainingBalance
-          : _paymentAmount;
+      final amountToApply =
+          _paymentAmount; // Simplified, repository handles capping
 
-      final loan = await _db.getActiveLoan(user.uid);
-      if (loan == null) {
-        throw StateError('No active loan found.');
-      }
-
-      final status = (loan['status']?.toString().trim() ?? 'None');
-      if (status != 'Active' && status != 'Approved') {
-        throw StateError('Loan is not available for repayment.');
-      }
-
-      final currentRemaining =
-          (loan['remainingBalanceValue'] as num?)?.toInt() ?? 0;
-      if (currentRemaining <= 0) {
-        throw StateError('Loan is already fully paid.');
-      }
-
-      final amountToApply = _paymentAmount > currentRemaining
-          ? currentRemaining
-          : _paymentAmount;
-      final remainingAfterPayment = currentRemaining - amountToApply;
-
-      final amountBorrowed =
-          (loan['amountValue'] as num?)?.toInt() ?? currentRemaining;
-      final safeBorrowed = amountBorrowed <= 0
-          ? currentRemaining
-          : amountBorrowed;
-      final paidSoFar = safeBorrowed - remainingAfterPayment;
-      final progress = ((paidSoFar / safeBorrowed) * 100).round().clamp(0, 100);
-
-      final userRow = await _db.getUser(user.uid);
-      final currentBalance = (userRow?['balanceValue'] as num?)?.toInt() ?? 0;
-      final nextBalance = (currentBalance - amountToApply).clamp(0, 999999999);
-      final nowIso = DateTime.now().toIso8601String();
-
-      await _db.updateUser(user.uid, {
-        'balanceValue': nextBalance,
-        'updatedAt': nowIso,
-      });
-
-      await _db.updateLoan(loan['id'].toString(), {
-        'remainingBalanceValue': remainingAfterPayment,
-        'repaymentProgress': progress,
-        'status': remainingAfterPayment <= 0 ? 'Paid Off' : 'Active',
-        'nextPaymentDate': remainingAfterPayment <= 0
-            ? 'N/A'
-            : _nextPaymentDateLabel(),
-        'updatedAt': nowIso,
-      });
-
-      await _db.insertTransaction({
-        'id': 'tx_${DateTime.now().millisecondsSinceEpoch}',
-        'userId': user.uid,
-        'title': 'Loan Repayment',
-        'subtitle': 'Payment via $_selectedMethod',
-        'amountValue': amountToApply,
-        'isCredit': 0,
-        'createdAt': nowIso,
-      });
-
-      await _db.insertNotification({
-        'id': 'notif_${DateTime.now().millisecondsSinceEpoch}',
-        'userId': user.uid,
-        'title': remainingAfterPayment <= 0
-            ? 'Loan Paid Off'
-            : 'Repayment Received',
-        'message': remainingAfterPayment <= 0
-            ? 'Congratulations! You have fully paid your loan.'
-            : 'We have received your repayment. Outstanding balance is ${_formatUgx(remainingAfterPayment)}.',
-        'type': 'loan',
-        'isRead': 0,
-        'createdAt': nowIso,
-      });
+      // Use the Repository for atomic Firestore + Local DB sync
+      await AppDataRepository.repayLoan(amount: amountToApply, loanId: _loanId);
 
       if (!mounted) return;
 
@@ -540,7 +470,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
         MaterialPageRoute(
           builder: (context) => TransactionSuccessPage(
             type: 'Repayment',
-            amount: _formatUgx(paidAmount),
+            amount: _formatUgx(amountToApply),
             reference: 'RPY${DateTime.now().millisecondsSinceEpoch}',
             recipient: '$_loanType #$_loanId',
           ),
@@ -571,12 +501,5 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
       }
     }
     return 'UGX ${buffer.toString()}';
-  }
-
-  String _nextPaymentDateLabel() {
-    final dueDate = DateTime.now().add(const Duration(days: 30));
-    final day = dueDate.day.toString().padLeft(2, '0');
-    final month = dueDate.month.toString().padLeft(2, '0');
-    return '$day/$month/${dueDate.year}';
   }
 }

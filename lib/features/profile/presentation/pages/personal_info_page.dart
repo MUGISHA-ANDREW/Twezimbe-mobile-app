@@ -81,9 +81,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
         SettableMetadata(contentType: _contentTypeFor(extension)),
       );
       final photoUrl = await storageRef.getDownloadURL();
-      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(
-        photoUrl,
-      ).timeout(const Duration(seconds: 2));
+      await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
 
       // Clean up old photos
       final oldPhotoUrls = <String>{
@@ -100,10 +98,6 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       );
 
       _showMessage('Profile photo updated and saved!');
-    } on TimeoutException {
-      _showMessage(
-        'Photo uploaded, but profile save exceeded 2 seconds. Please try again.',
-      );
     } on FirebaseException catch (error) {
       debugPrint(
         'Personal info profile photo upload failed [${error.code}]: ${error.message}',

@@ -150,7 +150,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     } on TimeoutException {
       if (!mounted) return;
       _showInlineMessage(
-        'Request timed out after 2 seconds. Check your internet and try again.',
+        'Request timed out. Please check your internet connection and try again.',
         isError: true,
       );
     } catch (_) {

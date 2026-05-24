@@ -65,30 +65,35 @@ class _WithdrawPageState extends State<WithdrawPage> {
     return 'WTH$y$m$d${now.hour}${now.minute}${now.second}$millis';
   }
 
-  Future<void> _persistWithdrawalInBackground({
+  Future<void> _persistWithdrawal({
     required int amountValue,
     required String reference,
     required String maskedPhone,
   }) async {
-    try {
-      // This persists transaction details and creates an in-app notification.
-      await AppDataRepository.addTransactionForCurrentUser(
-        title: 'Withdrawal to $_selectedMethod',
-        subtitle: '$maskedPhone • Ref $reference',
-        amountValue: amountValue,
-        isCredit: false,
-      );
-    } catch (_) {
-      // Keep UX instant even if backend write is delayed/failed.
-    }
+    // Persist transaction details and create an in-app notification.
+    await AppDataRepository.addTransactionForCurrentUser(
+      title: 'Withdrawal to $_selectedMethod',
+      subtitle: '$maskedPhone • Ref $reference',
+      amountValue: amountValue,
+      isCredit: false,
+    );
   }
 
-  Future<void> _submitWithdrawal() async {
+  Future<void> _submitWithdrawal(int currentBalanceValue) async {
     final int amountValue = _parseAmount(_amountController.text);
     if (amountValue <= 0) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Enter a valid amount.')));
+      return;
+    }
+
+    if (amountValue > currentBalanceValue) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Insufficient balance for this withdrawal.'),
+        ),
+      );
       return;
     }
 
@@ -106,21 +111,25 @@ class _WithdrawPageState extends State<WithdrawPage> {
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
 
-    unawaited(
-      _persistWithdrawalInBackground(
+    try {
+      await _persistWithdrawal(
         amountValue: amountValue,
         reference: reference,
         maskedPhone: maskedPhone,
-      ),
-    );
-
-    try {
+      );
+      if (!mounted) {
+        return;
+      }
       await Future<void>.delayed(const Duration(seconds: 2));
       if (!mounted) {
         return;
       }
-      _hideProcessingDialog();
       Navigator.pop(context, true);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Withdrawal failed. Please try again.')),
+      );
     } finally {
       if (mounted) {
         _hideProcessingDialog();
@@ -341,7 +350,15 @@ class _WithdrawPageState extends State<WithdrawPage> {
                 const SizedBox(height: 40),
 
                 ElevatedButton(
-                  onPressed: _isSubmitting ? null : _submitWithdrawal,
+                  onPressed: _isSubmitting
+                      ? null
+                      : () {
+                          final rawBalance = profile.availableBalance
+                              .replaceAll(RegExp(r'[^0-9]'), '');
+                          final currentBalanceValue =
+                              int.tryParse(rawBalance) ?? 0;
+                          _submitWithdrawal(currentBalanceValue);
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
                   ),

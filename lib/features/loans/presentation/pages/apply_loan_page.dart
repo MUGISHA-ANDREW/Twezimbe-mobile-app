@@ -264,7 +264,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
-                                'Request timed out after 2 seconds. Please try again.',
+                                'Request timed out. Please check your internet connection and try again.',
                               ),
                             ),
                           );
