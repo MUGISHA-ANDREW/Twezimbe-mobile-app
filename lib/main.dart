@@ -29,7 +29,6 @@ Future<void> main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -67,18 +66,59 @@ class AuthGatePage extends StatefulWidget {
 
   @override
   State<AuthGatePage> createState() => _AuthGatePageState();
-  
 }
 
 class _AuthGatePageState extends State<AuthGatePage> {
   bool? _isAuthenticated;
   bool _isBootstrapAdmin = false;
   bool _isLoading = true;
+  StreamSubscription<User?>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    _listenToAuthChanges();
     _initializeStartup();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToAuthChanges() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted) return;
+      if (user == null) {
+        setState(() {
+          _isAuthenticated = false;
+          _isBootstrapAdmin = false;
+        });
+        return;
+      }
+
+      _handleAuthenticatedUser(user);
+      if (mounted) {
+        setState(() => _isAuthenticated = true);
+      }
+    });
+  }
+
+  void _handleAuthenticatedUser(User user) {
+    _isBootstrapAdmin = _isBootstrapAdminEmail(user.email);
+    unawaited(
+      AppDataRepository.ensureProfileForCurrentUser(
+        email: user.email,
+      ).catchError((_) {}),
+    );
+    unawaited(LocalUserSessionStore.saveUser(user).catchError((_) {}));
+    unawaited(
+      PushNotificationService.saveTokenLocally(user.uid).catchError((_) {}),
+    );
+    unawaited(
+      AppDataRepository.checkAndSendPaymentDueNotification().catchError((_) {}),
+    );
   }
 
   Future<void> _initializeStartup() async {
@@ -103,23 +143,7 @@ class _AuthGatePageState extends State<AuthGatePage> {
   Future<bool> _resolveInitialAuthState() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      _isBootstrapAdmin = _isBootstrapAdminEmail(currentUser.email);
-      unawaited(
-        AppDataRepository.ensureProfileForCurrentUser(
-          email: currentUser.email,
-        ).catchError((_) {}),
-      );
-      unawaited(LocalUserSessionStore.saveUser(currentUser).catchError((_) {}));
-      unawaited(
-        PushNotificationService.saveTokenLocally(
-          currentUser.uid,
-        ).catchError((_) {}),
-      );
-      unawaited(
-        AppDataRepository.checkAndSendPaymentDueNotification().catchError(
-          (_) {},
-        ),
-      );
+      _handleAuthenticatedUser(currentUser);
       if (mounted) setState(() => _isAuthenticated = true);
       return true;
     }

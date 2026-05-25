@@ -65,6 +65,29 @@ class _WithdrawPageState extends State<WithdrawPage> {
     return 'WTH$y$m$d${now.hour}${now.minute}${now.second}$millis';
   }
 
+  String _formatUgx(int amount) {
+    final digits = amount.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final idxFromEnd = digits.length - i;
+      buffer.write(digits[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+    return 'UGX ${buffer.toString()}';
+  }
+
+  AppTransactionData _buildOptimisticTransaction(int amountValue) {
+    return AppTransactionData(
+      title: 'Withdrawal to $_selectedMethod',
+      subtitle: 'Just now',
+      amount: '- ${_formatUgx(amountValue)}',
+      isCredit: false,
+      createdAt: DateTime.now(),
+    );
+  }
+
   Future<void> _persistWithdrawal({
     required int amountValue,
     required String reference,
@@ -111,6 +134,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
 
+    bool shouldPop = false;
     try {
       await _persistWithdrawal(
         amountValue: amountValue,
@@ -124,7 +148,7 @@ class _WithdrawPageState extends State<WithdrawPage> {
       if (!mounted) {
         return;
       }
-      Navigator.pop(context, true);
+      shouldPop = true;
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -135,6 +159,9 @@ class _WithdrawPageState extends State<WithdrawPage> {
         _hideProcessingDialog();
         setState(() => _isSubmitting = false);
       }
+    }
+    if (mounted && shouldPop) {
+      Navigator.pop(context, _buildOptimisticTransaction(amountValue));
     }
   }
 
