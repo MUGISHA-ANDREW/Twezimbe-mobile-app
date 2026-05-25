@@ -290,7 +290,6 @@ class _SignInPageState extends State<SignInPage> {
                                   'assets/branding/launcher_icon.png',
                                 ),
                                 fit: BoxFit.contain,
-                                color: Colors.white,
                               ),
                             ),
                             const SizedBox(height: 16),
