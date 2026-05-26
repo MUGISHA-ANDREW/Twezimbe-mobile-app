@@ -327,27 +327,29 @@ class AppDataRepository {
     }
 
     // Keep Firestore users collection in sync without blocking app auth flows.
-    try {
-      await _firestore.updateUserFields(user.uid, {
-        'fullName': _nonEmpty(payload['fullName']),
-        'email': _nonEmpty(payload['email']),
-        'phoneNumber': _nonEmpty(payload['phoneNumber']),
-        'role': _boolFromDynamic(payload['isAdmin']) ? 'admin' : 'client',
-        'photoUrl': _nonEmpty(payload['photoUrl']),
-        'dateOfBirth': _nonEmpty(payload['dateOfBirth']),
-        'nationalId': _nonEmpty(payload['nationalId']),
-        'address': _nonEmpty(payload['address']),
-        'customerId': _nonEmpty(payload['customerId']),
-        'kycStatus': _nonEmpty(payload['kycStatus']),
-        'accountType': _nonEmpty(payload['accountType']),
-        'balanceValue': _intFromDynamic(payload['balanceValue']),
-      });
-    } catch (error) {
-      developer.log(
-        'updateUserFields failed: $error',
-        name: 'AppDataRepository.ensureProfileForCurrentUser',
-      );
-    }
+    unawaited(
+      _firestore
+          .updateUserFields(user.uid, {
+            'fullName': _nonEmpty(payload['fullName']),
+            'email': _nonEmpty(payload['email']),
+            'phoneNumber': _nonEmpty(payload['phoneNumber']),
+            'role': _boolFromDynamic(payload['isAdmin']) ? 'admin' : 'client',
+            'photoUrl': _nonEmpty(payload['photoUrl']),
+            'dateOfBirth': _nonEmpty(payload['dateOfBirth']),
+            'nationalId': _nonEmpty(payload['nationalId']),
+            'address': _nonEmpty(payload['address']),
+            'customerId': _nonEmpty(payload['customerId']),
+            'kycStatus': _nonEmpty(payload['kycStatus']),
+            'accountType': _nonEmpty(payload['accountType']),
+            'balanceValue': _intFromDynamic(payload['balanceValue']),
+          })
+          .catchError((error) {
+            developer.log(
+              'updateUserFields failed: $error',
+              name: 'AppDataRepository.ensureProfileForCurrentUser',
+            );
+          }),
+    );
   }
 
   static Stream<AppProfileData> watchProfileForCurrentUser() {
@@ -920,22 +922,21 @@ class AppDataRepository {
       'createdAt': nowIso,
     });
 
-    unawaited(
-      _firestore
-          .recordTransaction(
-            userId: user.uid,
-            title: title,
-            subtitle: subtitle,
-            amount: amountValue,
-            isCredit: isCredit,
-          )
-          .catchError((error) {
-            developer.log(
-              'recordTransaction failed: $error',
-              name: 'AppDataRepository.addTransactionForCurrentUser',
-            );
-          }),
-    );
+    try {
+      // Persist to Firestore as the source of truth.
+      await _firestore.recordTransaction(
+        userId: user.uid,
+        title: title,
+        subtitle: subtitle,
+        amount: amountValue,
+        isCredit: isCredit,
+      );
+    } catch (error) {
+      developer.log(
+        'recordTransaction failed: $error',
+        name: 'AppDataRepository.addTransactionForCurrentUser',
+      );
+    }
 
     final flow = isCredit ? 'deposit' : 'withdrawal';
     unawaited(

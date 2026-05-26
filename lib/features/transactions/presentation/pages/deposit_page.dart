@@ -52,6 +52,29 @@ class _DepositPageState extends State<DepositPage> {
     return 'DEP$y$m$d${now.hour}${now.minute}${now.second}$millis';
   }
 
+  String _formatUgx(int amount) {
+    final digits = amount.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final idxFromEnd = digits.length - i;
+      buffer.write(digits[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+    return 'UGX ${buffer.toString()}';
+  }
+
+  AppTransactionData _buildOptimisticTransaction(int amountValue) {
+    return AppTransactionData(
+      title: 'Deposit via $_selectedMethod',
+      subtitle: 'Just now',
+      amount: '+ ${_formatUgx(amountValue)}',
+      isCredit: true,
+      createdAt: DateTime.now(),
+    );
+  }
+
   Future<void> _persistDeposit({
     required int amountValue,
     required String reference,
@@ -89,6 +112,7 @@ class _DepositPageState extends State<DepositPage> {
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
 
+    bool shouldPop = false;
     try {
       await _persistDeposit(
         amountValue: amountValue,
@@ -102,18 +126,7 @@ class _DepositPageState extends State<DepositPage> {
       if (!mounted) {
         return;
       }
-      _hideProcessingDialog();
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TransactionSuccessPage(
-            type: 'Deposit',
-            amount: _formatUgx(amountValue),
-            reference: reference,
-            recipient: 'Twezimbe Account',
-          ),
-        ),
-      );
+      Navigator.pop(context, true);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,6 +137,9 @@ class _DepositPageState extends State<DepositPage> {
         _hideProcessingDialog();
         setState(() => _isSubmitting = false);
       }
+    }
+    if (mounted && shouldPop) {
+      Navigator.pop(context, _buildOptimisticTransaction(amountValue));
     }
   }
 

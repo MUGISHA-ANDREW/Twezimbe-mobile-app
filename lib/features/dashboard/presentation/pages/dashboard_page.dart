@@ -22,6 +22,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   bool _isBalanceVisible = false;
   Timer? _refreshTimer;
+  AppTransactionData? _optimisticRecentTransaction;
 
   @override
   void initState() {
@@ -100,7 +101,8 @@ class _DashboardPageState extends State<DashboardPage> {
   List<AppTransactionData> _mergedRecentTransactions(
     List<AppTransactionData> streamedTransactions,
   ) {
-    final optimistic = widget.optimisticRecentTransaction;
+    final optimistic =
+        _optimisticRecentTransaction ?? widget.optimisticRecentTransaction;
     if (optimistic == null) return streamedTransactions;
 
     final exists = streamedTransactions.any(
@@ -635,13 +637,18 @@ class _DashboardPageState extends State<DashboardPage> {
                 label: 'Deposit',
                 color: AppColors.successGreen,
                 onTap: () async {
-                  await Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const DepositPage(),
                     ),
                   );
-                  if (mounted) setState(() {});
+                  if (!mounted) return;
+                  if (result is AppTransactionData) {
+                    setState(() => _optimisticRecentTransaction = result);
+                  } else {
+                    setState(() {});
+                  }
                 },
               ),
             ),
@@ -652,13 +659,18 @@ class _DashboardPageState extends State<DashboardPage> {
                 label: 'Withdraw',
                 color: AppColors.errorRed,
                 onTap: () async {
-                  await Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const WithdrawPage(),
                     ),
                   );
-                  if (mounted) setState(() {});
+                  if (!mounted) return;
+                  if (result is AppTransactionData) {
+                    setState(() => _optimisticRecentTransaction = result);
+                  } else {
+                    setState(() {});
+                  }
                 },
               ),
             ),
