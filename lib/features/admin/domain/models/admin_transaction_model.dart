@@ -40,12 +40,12 @@ class AdminTransactionModel {
 
     return AdminTransactionModel(
       id: valueAsString(data['id']),
-      userId: valueAsString(data['userId']),
+      userId: valueAsString(data['user_id']),
       title: valueAsString(data['title'], fallback: 'Transaction'),
       subtitle: valueAsString(data['subtitle']),
-      amountValue: valueAsInt(data['amountValue']),
-      isCredit: valueAsInt(data['isCredit']) == 1,
-      createdAt: parseDate(data['createdAt']),
+      amountValue: valueAsInt(data['amount_value']),
+      isCredit: valueAsInt(data['is_credit']) == 1,
+      createdAt: parseDate(data['created_at']),
     );
   }
 }

@@ -40,12 +40,12 @@ class AdminNotificationModel {
 
     return AdminNotificationModel(
       id: valueAsString(data['id']),
-      userId: valueAsString(data['userId']),
+      userId: valueAsString(data['user_id']),
       title: valueAsString(data['title'], fallback: 'Notification'),
       message: valueAsString(data['message']),
       type: valueAsString(data['type'], fallback: 'info'),
-      isRead: valueAsInt(data['isRead']) == 1,
-      createdAt: parseDate(data['createdAt']),
+      isRead: valueAsInt(data['is_read']) == 1,
+      createdAt: parseDate(data['created_at']),
     );
   }
 }

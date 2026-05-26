@@ -4,8 +4,16 @@ import 'dart:developer' as developer;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:twezimbeapp/core/data/change_bus.dart';
 import 'package:twezimbeapp/core/data/database_helper.dart';
-import 'package:twezimbeapp/core/data/firestore_sync_service.dart';
+import 'package:twezimbeapp/core/data/db_constants.dart';
+import 'package:twezimbeapp/core/data/repository_registry.dart';
+import 'package:twezimbeapp/core/data/models/ledger_entry_model.dart';
+import 'package:twezimbeapp/core/data/models/loan_application_model.dart';
+import 'package:twezimbeapp/core/data/models/loan_model.dart';
+import 'package:twezimbeapp/core/data/models/loan_repayment_model.dart';
+import 'package:twezimbeapp/core/data/models/deposit_model.dart';
+import 'package:twezimbeapp/core/data/models/withdrawal_model.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
 
 class AppProfileData {
@@ -192,7 +200,10 @@ class AppDataRepository {
   AppDataRepository._();
 
   static final DatabaseHelper _db = DatabaseHelper();
-  static final FirestoreSyncService _firestore = FirestoreSyncService.instance;
+  static final DatabaseChangeBus _bus = DatabaseChangeBus.instance;
+  static final _loanRepository = RepositoryRegistry.loanRepository;
+  static final _depositRepository = RepositoryRegistry.depositRepository;
+  static final _withdrawalRepository = RepositoryRegistry.withdrawalRepository;
   static const Duration _pollInterval = Duration(milliseconds: 900);
 
   static const String _chatMessagesPrefix = 'chat_messages_';
@@ -326,30 +337,11 @@ class AppDataRepository {
       await _db.updateUser(user.uid, payload);
     }
 
-    // Keep Firestore users collection in sync without blocking app auth flows.
-    unawaited(
-      _firestore
-          .updateUserFields(user.uid, {
-            'fullName': _nonEmpty(payload['fullName']),
-            'email': _nonEmpty(payload['email']),
-            'phoneNumber': _nonEmpty(payload['phoneNumber']),
-            'role': _boolFromDynamic(payload['isAdmin']) ? 'admin' : 'client',
-            'photoUrl': _nonEmpty(payload['photoUrl']),
-            'dateOfBirth': _nonEmpty(payload['dateOfBirth']),
-            'nationalId': _nonEmpty(payload['nationalId']),
-            'address': _nonEmpty(payload['address']),
-            'customerId': _nonEmpty(payload['customerId']),
-            'kycStatus': _nonEmpty(payload['kycStatus']),
-            'accountType': _nonEmpty(payload['accountType']),
-            'balanceValue': _intFromDynamic(payload['balanceValue']),
-          })
-          .catchError((error) {
-            developer.log(
-              'updateUserFields failed: $error',
-              name: 'AppDataRepository.ensureProfileForCurrentUser',
-            );
-          }),
+    await _ensureDefaultAccountForUser(
+      user.uid,
+      _nonEmpty(payload['accountType']) ?? 'Savings Account',
     );
+    _bus.notify(DbTables.users);
   }
 
   static Stream<AppProfileData> watchProfileForCurrentUser() {
@@ -361,8 +353,6 @@ class AppDataRepository {
     unawaited(ensureProfileForCurrentUser().catchError((_) {}));
 
     final controller = StreamController<AppProfileData>();
-    StreamSubscription? firestoreSub;
-    Timer? pollTimer;
 
     Future<void> emitLocalProfile() async {
       final row = await _db.getUser(user.uid);
@@ -388,66 +378,16 @@ class AppDataRepository {
       controller.add(_profileFromLocalRow(row, user));
     }
 
-    void startLocalPolling() {
-      pollTimer ??= Timer.periodic(_pollInterval, (_) {
+    StreamSubscription<String>? sub;
+    controller.onListen = () {
+      unawaited(emitLocalProfile());
+      sub = _bus.stream.where((table) => table == DbTables.users).listen((_) {
         unawaited(emitLocalProfile());
       });
-    }
-
-    unawaited(emitLocalProfile());
-
-    firestoreSub = _firestore
-        .streamUser(user.uid)
-        .listen(
-          (data) {
-            if (data == null) {
-              unawaited(emitLocalProfile());
-              return;
-            }
-
-            final balanceValue = _intFromDynamic(data['balanceValue']);
-            final isAdmin =
-                _isAdminEmail(user.email) ||
-                (_nonEmpty(data['role'])?.toLowerCase() == 'admin');
-
-            controller.add(
-              AppProfileData(
-                fullName:
-                    _nonEmpty(data['fullName']) ??
-                    _nonEmpty(data['name']) ??
-                    _displayNameFor(user),
-                email: _nonEmpty(data['email']) ?? (user.email ?? ''),
-                phoneNumber:
-                    _nonEmpty(data['phoneNumber']) ??
-                    _nonEmpty(data['phone']) ??
-                    (user.phoneNumber ?? 'Not set'),
-                dateOfBirth: _nonEmpty(data['dateOfBirth']) ?? 'Not set',
-                nationalId: _nonEmpty(data['nationalId']) ?? 'Not set',
-                address: _nonEmpty(data['address']) ?? 'Not set',
-                photoUrl:
-                    _nonEmpty(data['photoUrl']) ?? _nonEmpty(data['photo']),
-                customerId:
-                    _nonEmpty(data['customerId']) ?? _customerIdFor(user),
-                kycStatus: _nonEmpty(data['kycStatus']) ?? 'Pending',
-                accountType:
-                    _nonEmpty(data['accountType']) ?? 'Savings Account',
-                availableBalance: _formatUgx(balanceValue),
-                isAdmin: isAdmin,
-              ),
-            );
-          },
-          onError: (error) {
-            developer.log(
-              'Firestore profile stream failed: $error',
-              name: 'AppDataRepository.watchProfileForCurrentUser',
-            );
-            startLocalPolling();
-          },
-        );
+    };
 
     controller.onCancel = () async {
-      await firestoreSub?.cancel();
-      pollTimer?.cancel();
+      await sub?.cancel();
     };
 
     return controller.stream;
@@ -474,15 +414,7 @@ class AppDataRepository {
       'address': address.trim(),
       'updatedAt': nowIso,
     });
-
-    // Sync to Firestore source of truth.
-    await _firestore.updateUserFields(user.uid, {
-      'fullName': fullName.trim(),
-      'phoneNumber': phoneNumber.trim(),
-      'dateOfBirth': dateOfBirth.trim(),
-      'nationalId': nationalId.trim(),
-      'address': address.trim(),
-    });
+    _bus.notify(DbTables.users);
   }
 
   static Future<void> updateProfilePhotoUrlForCurrentUser(
@@ -495,9 +427,7 @@ class AppDataRepository {
 
     final nowIso = DateTime.now().toIso8601String();
     await _db.updateUser(user.uid, {'photoUrl': photoUrl, 'updatedAt': nowIso});
-
-    // Sync to Firestore source of truth.
-    await _firestore.updateUserFields(user.uid, {'photoUrl': photoUrl});
+    _bus.notify(DbTables.users);
 
     try {
       await user.updatePhotoURL(photoUrl);
@@ -535,8 +465,8 @@ class AppDataRepository {
 
     unawaited(ensureLoanForCurrentUser().catchError((_) {}));
 
-    return _firestore.streamActiveLoanForUser(user.uid).map((data) {
-      if (data == null) {
+    return _loanRepository.watchActiveLoan(user.uid).map((loan) {
+      if (loan == null) {
         return const AppLoanData(
           type: 'No Active Loan',
           loanId: 'N/A',
@@ -547,18 +477,15 @@ class AppDataRepository {
         );
       }
 
-      final remainingBalanceValue = _intFromDynamic(
-        data['remainingBalanceValue'],
-      );
-      final repaymentProgress = _intFromDynamic(data['repaymentProgress']);
-
       return AppLoanData(
-        type: _nonEmpty(data['type']) ?? 'Salary Loan',
-        loanId: _nonEmpty(data['loanId']) ?? _loanIdFor(user),
-        status: _nonEmpty(data['status']) ?? 'Active',
-        remainingBalance: _formatUgx(remainingBalanceValue),
-        nextPaymentDate: _nonEmpty(data['nextPaymentDate']) ?? 'TBD',
-        repaymentProgress: '$repaymentProgress% Paid',
+        type: loan.type.isNotEmpty ? loan.type : 'Salary Loan',
+        loanId: loan.loanId.isNotEmpty ? loan.loanId : _loanIdFor(user),
+        status: loan.status.isNotEmpty ? loan.status : DbStatus.active,
+        remainingBalance: _formatUgx(loan.remainingBalanceValue),
+        nextPaymentDate: loan.nextPaymentDate.isNotEmpty
+            ? loan.nextPaymentDate
+            : 'TBD',
+        repaymentProgress: '${loan.repaymentProgress}% Paid',
       );
     });
   }
@@ -578,7 +505,7 @@ class AppDataRepository {
       'userId': user.uid,
       'loanId': _loanIdFor(user),
       'type': 'Salary Loan',
-      'status': 'None',
+      'status': DbStatus.none,
       'amountValue': 0,
       'remainingBalanceValue': 0,
       'period': '',
@@ -599,74 +526,29 @@ class AppDataRepository {
       );
     }
 
-    return _firestore.streamLoanApplicationsForUser(user.uid).map((rows) {
-      unawaited(
-        _syncLoanDecisionIntoLocalAccount(
-          userId: user.uid,
-          rows: rows,
-        ).catchError((error) {
-          developer.log(
-            'Loan decision sync failed: $error',
-            name: 'AppDataRepository.watchLoanApplicationsForCurrentUser',
-          );
-        }),
-      );
-
-      final localRows = <Map<String, dynamic>>[];
-
-      final models = rows
+    return _loanRepository.watchLoanApplications(user.uid, limit: limit).map((
+      rows,
+    ) {
+      return rows
           .take(limit)
-          .map((data) {
-            final applicationId =
-                _nonEmpty(data['applicationId']) ?? _nonEmpty(data['id']) ?? '';
-            final amountValue = _intFromDynamic(
-              data['amountValue'] ?? data['amount'],
-            );
-            final period =
-                _nonEmpty(data['period']) ?? _nonEmpty(data['duration']) ?? '-';
-            final status = _normalizeLoanApplicationStatus(
-              _nonEmpty(data['status']) ?? 'Pending Review',
-            );
-            final createdAt = _asDateTime(data['createdAt']);
-            final updatedAt = _asDateTime(data['updatedAt']) ?? createdAt;
-
-            localRows.add({
-              'id': applicationId,
-              'applicationId': applicationId,
-              'userId': user.uid,
-              'userName': _nonEmpty(data['userName']) ?? '',
-              'userEmail': _nonEmpty(data['userEmail']) ?? '',
-              'userPhone': _nonEmpty(data['userPhone']) ?? '',
-              'customerId': _nonEmpty(data['customerId']) ?? '',
-              'loanType': _nonEmpty(data['loanType']) ?? 'Loan',
-              'amountValue': amountValue,
-              'period': period,
-              'purpose': _nonEmpty(data['purpose']) ?? '-',
-              'status': status,
-              'rejectionReason': _nonEmpty(data['rejectionReason']) ?? '',
-              'reviewedBy': _nonEmpty(data['adminId']) ?? '',
-              'reviewedAt': updatedAt?.toIso8601String() ?? '',
-              'createdAt': createdAt?.toIso8601String() ?? '',
-              'updatedAt': updatedAt?.toIso8601String() ?? '',
-            });
-
+          .map((application) {
+            final status = _normalizeLoanApplicationStatus(application.status);
+            final createdAt = _asDateTime(application.createdAt);
             return AppLoanApplicationData(
-              applicationId: applicationId,
-              loanType: _nonEmpty(data['loanType']) ?? 'Loan',
-              amount: _formatUgx(amountValue),
-              period: period,
-              purpose: _nonEmpty(data['purpose']) ?? '-',
+              applicationId: application.applicationId,
+              loanType: application.loanType.isNotEmpty
+                  ? application.loanType
+                  : 'Loan',
+              amount: _formatUgx(application.amountValue),
+              period: application.period.isNotEmpty ? application.period : '-',
+              purpose: application.purpose.isNotEmpty
+                  ? application.purpose
+                  : '-',
               status: status,
               createdAt: createdAt,
             );
           })
           .toList(growable: false);
-
-      if (localRows.isNotEmpty) {
-        unawaited(_db.upsertLoanApplications(localRows));
-      }
-
-      return models;
     });
   }
 
@@ -696,10 +578,10 @@ class AppDataRepository {
     await ensureLoanForCurrentUser();
 
     final existingApplications = await _db.getLoanApplications(user.uid);
-    final hasPending = existingApplications.any(
-      (row) =>
-          (_nonEmpty(row['status']) ?? 'Pending Review') == 'Pending Review',
-    );
+    final hasPending = existingApplications.any((row) {
+      final status = _nonEmpty(row['status']) ?? '';
+      return status == DbStatus.pending || status == 'Pending Review';
+    });
     if (hasPending) {
       throw const LoanApplicationException(
         'You already have a pending loan application. Please wait for review.',
@@ -717,28 +599,8 @@ class AppDataRepository {
     final applicationId = _applicationIdFor(user.uid);
     final nowIso = DateTime.now().toIso8601String();
 
-    await _db.insertLoanApplication({
-      'id': applicationId,
-      'applicationId': applicationId,
-      'userId': user.uid,
-      'userName': applicantName,
-      'userEmail': applicantEmail,
-      'userPhone': applicantPhone,
-      'customerId': customerId,
-      'loanType': loanType.trim(),
-      'amountValue': amountValue,
-      'period': period.trim(),
-      'purpose': purpose.trim(),
-      'status': 'Pending Review',
-      'rejectionReason': '',
-      'reviewedBy': '',
-      'reviewedAt': nowIso,
-      'createdAt': nowIso,
-      'updatedAt': nowIso,
-    });
-
-    // ADD THIS: write loan application to Firestore for admin realtime management.
-    await _firestore.saveLoanApplication(
+    final application = LoanApplicationModel(
+      id: applicationId,
       applicationId: applicationId,
       userId: user.uid,
       userName: applicantName,
@@ -746,46 +608,39 @@ class AppDataRepository {
       userPhone: applicantPhone,
       customerId: customerId,
       loanType: loanType.trim(),
-      amount: amountValue,
+      amountValue: amountValue,
       period: period.trim(),
-      duration: period.trim(),
       purpose: purpose.trim(),
+      status: DbStatus.pending,
+      rejectionReason: '',
+      reviewedBy: '',
+      reviewedAt: nowIso,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      version: 0,
+      syncStatus: DbSyncStatus.pendingSync,
     );
+    await _loanRepository.upsertLoanApplication(application);
 
     final currentLoan = await _db.getLatestLoanForUser(user.uid);
-    final loanPayload = {
-      'type': loanType.trim(),
-      'status': 'Pending Review',
-      'amountValue': amountValue,
-      'remainingBalanceValue': amountValue,
-      'period': period.trim(),
-      'purpose': purpose.trim(),
-      'nextPaymentDate': 'Awaiting approval',
-      'repaymentProgress': 0,
-    };
-
-    if (currentLoan == null) {
-      await _db.insertLoan({
-        'id': 'loan_${user.uid}',
-        'userId': user.uid,
-        'loanId': _loanIdFor(user),
-        ...loanPayload,
-        'createdAt': nowIso,
-        'updatedAt': nowIso,
-      });
-    } else {
-      await _db.updateLoan(currentLoan['id'].toString(), {
-        ...loanPayload,
-        'updatedAt': nowIso,
-      });
-    }
-
-    // Sync active loan summary to Firestore.
-    await _firestore.updateLoanInFirestore(
+    final loanPayload = LoanModel(
+      id: currentLoan?['id']?.toString() ?? 'loan_${user.uid}',
       userId: user.uid,
       loanId: _loanIdFor(user),
-      data: loanPayload,
+      type: loanType.trim(),
+      status: DbStatus.pending,
+      amountValue: amountValue,
+      remainingBalanceValue: amountValue,
+      period: period.trim(),
+      purpose: purpose.trim(),
+      nextPaymentDate: 'Awaiting approval',
+      repaymentProgress: 0,
+      createdAt: currentLoan?['createdAt']?.toString() ?? nowIso,
+      updatedAt: nowIso,
+      version: _intFromDynamic(currentLoan?['version']),
+      syncStatus: DbSyncStatus.pendingSync,
     );
+    await _loanRepository.upsertLoan(loanPayload);
 
     await addNotificationForUser(
       userId: user.uid,
@@ -815,8 +670,6 @@ class AppDataRepository {
     }
 
     final controller = StreamController<List<AppTransactionData>>();
-    StreamSubscription? firestoreSub;
-    Timer? pollTimer;
 
     Future<void> emitLocalTransactions() async {
       final rows = await _db.getTransactions(user.uid, limit: limit);
@@ -827,50 +680,16 @@ class AppDataRepository {
       );
     }
 
-    void startLocalPolling() {
-      pollTimer ??= Timer.periodic(_pollInterval, (_) {
-        unawaited(emitLocalTransactions());
-      });
-    }
-
-    unawaited(emitLocalTransactions());
-
-    firestoreSub = _firestore
-        .streamTransactionsForUser(user.uid)
-        .listen(
-          (rows) {
-            final items = rows
-                .take(limit)
-                .map((data) {
-                  final amountValue = _intFromDynamic(data['amountValue']);
-                  final isCredit = _boolFromDynamic(data['isCredit']);
-                  final sign = isCredit ? '+' : '-';
-                  final createdAt = _asDateTimeFromFirestore(data['createdAt']);
-                  return AppTransactionData(
-                    title: _nonEmpty(data['title']) ?? 'Transaction',
-                    subtitle: createdAt != null
-                        ? _relativeTimeLabel(createdAt)
-                        : 'Recently',
-                    amount: '$sign ${_formatUgx(amountValue)}',
-                    isCredit: isCredit,
-                    createdAt: createdAt,
-                  );
-                })
-                .toList(growable: false);
-            controller.add(items);
-          },
-          onError: (error) {
-            developer.log(
-              'Firestore transaction stream failed: $error',
-              name: 'AppDataRepository.watchRecentTransactionsForCurrentUser',
-            );
-            startLocalPolling();
-          },
-        );
+    StreamSubscription<String>? sub;
+    controller.onListen = () {
+      unawaited(emitLocalTransactions());
+      sub = _bus.stream
+          .where((table) => table == DbTables.transactions)
+          .listen((_) => unawaited(emitLocalTransactions()));
+    };
 
     controller.onCancel = () async {
-      await firestoreSub?.cancel();
-      pollTimer?.cancel();
+      await sub?.cancel();
     };
 
     return controller.stream;
@@ -901,41 +720,122 @@ class AppDataRepository {
       'updatedAt': nowIso,
     });
 
-    unawaited(
-      _firestore
-          .updateUserFields(user.uid, {'balanceValue': newBalance})
-          .catchError((error) {
-            developer.log(
-              'updateUserFields failed: $error',
-              name: 'AppDataRepository.addTransactionForCurrentUser',
-            );
-          }),
+    _bus.notify(DbTables.users);
+
+    final accountType =
+        _nonEmpty(localUser?['accountType']) ?? 'Savings Account';
+    await _updateAccountBalance(
+      userId: user.uid,
+      accountType: accountType,
+      balanceValue: newBalance,
     );
 
+    final txId = 'tx_${DateTime.now().microsecondsSinceEpoch}';
     await _db.insertTransaction({
-      'id': 'tx_${DateTime.now().microsecondsSinceEpoch}',
+      'id': txId,
       'userId': user.uid,
       'title': title,
       'subtitle': subtitle,
       'amountValue': amountValue,
       'isCredit': isCredit ? 1 : 0,
       'createdAt': nowIso,
+      'updatedAt': nowIso,
     });
+    _bus.notify(DbTables.transactions);
 
-    try {
-      // Persist to Firestore as the source of truth.
-      await _firestore.recordTransaction(
-        userId: user.uid,
-        title: title,
-        subtitle: subtitle,
-        amount: amountValue,
-        isCredit: isCredit,
+    final accountId = await _getOrCreateAccountId(user.uid, accountType);
+    if (isCredit) {
+      final depositId = 'dep_${DateTime.now().microsecondsSinceEpoch}';
+      await _depositRepository.insertDeposit(
+        DepositModel(
+          id: depositId,
+          userId: user.uid,
+          accountId: accountId,
+          amountValue: amountValue,
+          method: DbDefaults.depositMethod,
+          status: DbStatus.completed,
+          reference: txId,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          version: 0,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
       );
-    } catch (error) {
-      developer.log(
-        'recordTransaction failed: $error',
-        name: 'AppDataRepository.addTransactionForCurrentUser',
+      await _depositRepository.insertLedgerEntries([
+        LedgerEntryModel(
+          id: 'led_${depositId}_cr',
+          userId: user.uid,
+          accountId: accountId,
+          amountValue: amountValue,
+          entryType: DbEntryType.credit,
+          referenceType: DbReferenceType.deposit,
+          referenceId: depositId,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          version: 0,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
+        LedgerEntryModel(
+          id: 'led_${depositId}_dr',
+          userId: user.uid,
+          accountId: null,
+          amountValue: amountValue,
+          entryType: DbEntryType.debit,
+          referenceType: DbReferenceType.deposit,
+          referenceId: depositId,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          version: 0,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
+      ]);
+    } else {
+      final withdrawalId = 'wd_${DateTime.now().microsecondsSinceEpoch}';
+      await _withdrawalRepository.insertWithdrawal(
+        WithdrawalModel(
+          id: withdrawalId,
+          userId: user.uid,
+          accountId: accountId,
+          amountValue: amountValue,
+          method: DbDefaults.withdrawalMethod,
+          status: DbStatus.completed,
+          reference: txId,
+          requestedAt: nowIso,
+          processedAt: nowIso,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          version: 0,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
       );
+      await _withdrawalRepository.insertLedgerEntries([
+        LedgerEntryModel(
+          id: 'led_${withdrawalId}_dr',
+          userId: user.uid,
+          accountId: accountId,
+          amountValue: amountValue,
+          entryType: DbEntryType.debit,
+          referenceType: DbReferenceType.withdrawal,
+          referenceId: withdrawalId,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          version: 0,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
+        LedgerEntryModel(
+          id: 'led_${withdrawalId}_cr',
+          userId: user.uid,
+          accountId: null,
+          amountValue: amountValue,
+          entryType: DbEntryType.credit,
+          referenceType: DbReferenceType.withdrawal,
+          referenceId: withdrawalId,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          version: 0,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
+      ]);
     }
 
     final flow = isCredit ? 'deposit' : 'withdrawal';
@@ -964,22 +864,39 @@ class AppDataRepository {
       );
     }
 
-    // MODIFY THIS: use Firestore realtime notifications collection.
-    return _firestore.streamNotificationsForUser(user.uid).map((rows) {
-      return rows
-          .take(limit)
-          .map((data) {
-            return AppNotificationData(
-              id: _nonEmpty(data['id']) ?? '',
-              title: _nonEmpty(data['title']) ?? 'Notification',
-              message: _nonEmpty(data['message']) ?? '',
-              type: _nonEmpty(data['type']) ?? 'info',
-              createdAt: _asDateTimeFromFirestore(data['createdAt']),
-              isRead: _boolFromDynamic(data['read']),
-            );
-          })
-          .toList(growable: false);
-    });
+    final controller = StreamController<List<AppNotificationData>>();
+
+    Future<void> emitLocalNotifications() async {
+      final rows = await _db.getNotifications(user.uid, limit: limit);
+      controller.add(
+        rows
+            .map((row) {
+              return AppNotificationData(
+                id: _nonEmpty(row['id']) ?? '',
+                title: _nonEmpty(row['title']) ?? 'Notification',
+                message: _nonEmpty(row['message']) ?? '',
+                type: _nonEmpty(row['type']) ?? 'info',
+                createdAt: _asDateTime(row['createdAt']),
+                isRead: _boolFromDynamic(row['isRead']),
+              );
+            })
+            .toList(growable: false),
+      );
+    }
+
+    StreamSubscription<String>? sub;
+    controller.onListen = () {
+      unawaited(emitLocalNotifications());
+      sub = _bus.stream
+          .where((table) => table == DbTables.notifications)
+          .listen((_) => unawaited(emitLocalNotifications()));
+    };
+
+    controller.onCancel = () async {
+      await sub?.cancel();
+    };
+
+    return controller.stream;
   }
 
   static Future<void> addNotificationForCurrentUser({
@@ -1015,8 +932,7 @@ class AppDataRepository {
     if (user == null) return;
 
     await _db.markNotificationRead(notificationId);
-    // ADD THIS: mark Firestore notification as read.
-    await _firestore.markNotificationRead(notificationId);
+    _bus.notify(DbTables.notifications);
   }
 
   static Future<void> markAllNotificationsAsReadForCurrentUser() async {
@@ -1024,8 +940,7 @@ class AppDataRepository {
     if (user == null) return;
 
     await _db.markAllNotificationsRead(user.uid);
-    // ADD THIS: bulk mark Firestore notifications for current user.
-    await _firestore.markAllNotificationsReadForUser(user.uid);
+    _bus.notify(DbTables.notifications);
   }
 
   static AppProfileData _profileFromLocalRow(
@@ -1073,12 +988,6 @@ class AppDataRepository {
 
     if (_isAdminEmail(user.email)) return true;
 
-    // ADD THIS: check Firestore role first.
-    final firestoreRole = await _firestore.getRoleForUser(user.uid);
-    if (firestoreRole == 'admin') {
-      return true;
-    }
-
     final userData = await _db.getUser(user.uid);
     return _boolFromDynamic(userData?['isAdmin']);
   }
@@ -1088,6 +997,7 @@ class AppDataRepository {
       'isAdmin': isAdmin ? 1 : 0,
       'updatedAt': DateTime.now().toIso8601String(),
     });
+    _bus.notify(DbTables.users);
   }
 
   static Stream<List<AppProfileData>> watchAllUsers() {
@@ -1130,53 +1040,58 @@ class AppDataRepository {
     String? loanDocumentId,
   }) async {
     final appId = _nonEmpty(loanDocumentId) ?? applicationId;
-    final app = await _db.getLoanApplication(appId);
+    final app = await _loanRepository.getLoanApplication(appId);
     if (app == null) {
       throw StateError('Loan application not found');
     }
 
-    final loanAmount = _intFromDynamic(app['amountValue']);
+    final loanAmount = app.amountValue;
     final reviewer = FirebaseAuth.instance.currentUser?.email ?? 'admin';
     final nowIso = DateTime.now().toIso8601String();
 
-    await _db.updateLoanApplication(appId, {
-      'status': 'Approved',
-      'reviewedBy': reviewer,
-      'reviewedAt': nowIso,
-      'updatedAt': nowIso,
-    });
+    await _loanRepository.updateLoanApplication(
+      LoanApplicationModel(
+        id: app.id,
+        applicationId: app.applicationId,
+        userId: app.userId,
+        userName: app.userName,
+        userEmail: app.userEmail,
+        userPhone: app.userPhone,
+        customerId: app.customerId,
+        loanType: app.loanType,
+        amountValue: app.amountValue,
+        period: app.period,
+        purpose: app.purpose,
+        status: DbStatus.approved,
+        rejectionReason: '',
+        reviewedBy: reviewer,
+        reviewedAt: nowIso,
+        createdAt: app.createdAt,
+        updatedAt: nowIso,
+        version: app.version,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+    );
 
-    final currentLoan = await _db.getLatestLoanForUser(userId);
-    if (currentLoan == null) {
-      await _db.insertLoan({
-        'id': 'loan_$userId',
-        'userId': userId,
-        'loanId': _nonEmpty(app['loanId']) ?? _loanIdFor(null),
-        'type': _nonEmpty(app['loanType']) ?? 'Loan',
-        'status': 'Active',
-        'amountValue': loanAmount,
-        'remainingBalanceValue': loanAmount,
-        'period': _nonEmpty(app['period']) ?? '',
-        'purpose': _nonEmpty(app['purpose']) ?? '',
-        'nextPaymentDate': _nextPaymentDateLabel(),
-        'repaymentProgress': 0,
-        'createdAt': nowIso,
-        'updatedAt': nowIso,
-      });
-    } else {
-      await _db.updateLoan(currentLoan['id'].toString(), {
-        'loanId': _nonEmpty(app['loanId']) ?? _loanIdFor(null),
-        'type': _nonEmpty(app['loanType']) ?? 'Loan',
-        'status': 'Active',
-        'amountValue': loanAmount,
-        'remainingBalanceValue': loanAmount,
-        'period': _nonEmpty(app['period']) ?? '',
-        'purpose': _nonEmpty(app['purpose']) ?? '',
-        'nextPaymentDate': _nextPaymentDateLabel(),
-        'repaymentProgress': 0,
-        'updatedAt': nowIso,
-      });
-    }
+    final currentLoan = await _loanRepository.getLatestLoan(userId);
+    final loanPayload = LoanModel(
+      id: currentLoan?.id ?? 'loan_$userId',
+      userId: userId,
+      loanId: _loanIdFor(null),
+      type: app.loanType.isNotEmpty ? app.loanType : 'Loan',
+      status: DbStatus.active,
+      amountValue: loanAmount,
+      remainingBalanceValue: loanAmount,
+      period: app.period,
+      purpose: app.purpose,
+      nextPaymentDate: _nextPaymentDateLabel(),
+      repaymentProgress: 0,
+      createdAt: currentLoan?.createdAt ?? nowIso,
+      updatedAt: nowIso,
+      version: currentLoan?.version ?? 0,
+      syncStatus: DbSyncStatus.pendingSync,
+    );
+    await _loanRepository.upsertLoan(loanPayload);
 
     final userData = await _db.getUser(userId);
     final currentBalance = _intFromDynamic(userData?['balanceValue']);
@@ -1184,16 +1099,58 @@ class AppDataRepository {
       'balanceValue': currentBalance + loanAmount,
       'updatedAt': nowIso,
     });
+    _bus.notify(DbTables.users);
 
+    final accountType =
+        _nonEmpty(userData?['accountType']) ?? 'Savings Account';
+    await _updateAccountBalance(
+      userId: userId,
+      accountType: accountType,
+      balanceValue: currentBalance + loanAmount,
+    );
+
+    final txId = 'tx_${DateTime.now().millisecondsSinceEpoch}';
     await _db.insertTransaction({
-      'id': 'tx_${DateTime.now().millisecondsSinceEpoch}',
+      'id': txId,
       'userId': userId,
       'title': 'Loan Disbursed',
       'subtitle': 'Loan approved and credited to account',
       'amountValue': loanAmount,
       'isCredit': 1,
       'createdAt': nowIso,
+      'updatedAt': nowIso,
     });
+    _bus.notify(DbTables.transactions);
+
+    final accountId = await _getOrCreateAccountId(userId, accountType);
+    await _loanRepository.insertLedgerEntries([
+      LedgerEntryModel(
+        id: 'led_loan_${appId}_cr',
+        userId: userId,
+        accountId: accountId,
+        amountValue: loanAmount,
+        entryType: DbEntryType.credit,
+        referenceType: DbReferenceType.loanDisbursement,
+        referenceId: appId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 0,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+      LedgerEntryModel(
+        id: 'led_loan_${appId}_dr',
+        userId: userId,
+        accountId: null,
+        amountValue: loanAmount,
+        entryType: DbEntryType.debit,
+        referenceType: DbReferenceType.loanDisbursement,
+        referenceId: appId,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 0,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+    ]);
 
     await addNotificationForUser(
       userId: userId,
@@ -1202,28 +1159,6 @@ class AppDataRepository {
           'Your loan of ${_formatUgx(loanAmount)} has been approved and credited to your account!',
       type: 'loan',
     );
-
-    // ADD THIS: update Firestore loan status + decision metadata.
-    await _firestore.updateLoanInFirestore(
-      userId: userId,
-      loanId: _nonEmpty(app['loanId']) ?? _loanIdFor(null),
-      data: {
-        'status': 'Active',
-        'amountValue': loanAmount,
-        'remainingBalanceValue': loanAmount,
-        'nextPaymentDate': _nextPaymentDateLabel(),
-        'repaymentProgress': 0,
-      },
-    );
-
-    await _firestore.updateLoanDecision(
-      applicationId: appId,
-      status: 'approved',
-      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'admin',
-    );
-
-    // ADD THIS: create user notification in Firestore for loan decision.
-    await _firestore.notifyLoanDecisionUser(userId: userId, status: 'approved');
   }
 
   static Future<void> rejectLoanApplication(
@@ -1233,7 +1168,7 @@ class AppDataRepository {
     String? loanDocumentId,
   }) async {
     final appId = _nonEmpty(loanDocumentId) ?? applicationId;
-    final app = await _db.getLoanApplication(appId);
+    final app = await _loanRepository.getLoanApplication(appId);
     if (app == null) {
       throw StateError('Loan application not found');
     }
@@ -1244,21 +1179,51 @@ class AppDataRepository {
         : reason.trim();
     final nowIso = DateTime.now().toIso8601String();
 
-    await _db.updateLoanApplication(appId, {
-      'status': 'Rejected',
-      'rejectionReason': rejectionReason,
-      'reviewedBy': reviewer,
-      'reviewedAt': nowIso,
-      'updatedAt': nowIso,
-    });
+    await _loanRepository.updateLoanApplication(
+      LoanApplicationModel(
+        id: app.id,
+        applicationId: app.applicationId,
+        userId: app.userId,
+        userName: app.userName,
+        userEmail: app.userEmail,
+        userPhone: app.userPhone,
+        customerId: app.customerId,
+        loanType: app.loanType,
+        amountValue: app.amountValue,
+        period: app.period,
+        purpose: app.purpose,
+        status: DbStatus.rejected,
+        rejectionReason: rejectionReason,
+        reviewedBy: reviewer,
+        reviewedAt: nowIso,
+        createdAt: app.createdAt,
+        updatedAt: nowIso,
+        version: app.version,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+    );
 
-    final loan = await _db.getLatestLoanForUser(userId);
+    final loan = await _loanRepository.getLatestLoan(userId);
     if (loan != null) {
-      await _db.updateLoan(loan['id'].toString(), {
-        'status': 'Rejected',
-        'nextPaymentDate': 'Awaiting new application',
-        'updatedAt': nowIso,
-      });
+      await _loanRepository.upsertLoan(
+        LoanModel(
+          id: loan.id,
+          userId: loan.userId,
+          loanId: loan.loanId,
+          type: loan.type,
+          status: DbStatus.rejected,
+          amountValue: loan.amountValue,
+          remainingBalanceValue: loan.remainingBalanceValue,
+          period: loan.period,
+          purpose: loan.purpose,
+          nextPaymentDate: 'Awaiting new application',
+          repaymentProgress: loan.repaymentProgress,
+          createdAt: loan.createdAt,
+          updatedAt: nowIso,
+          version: loan.version,
+          syncStatus: DbSyncStatus.pendingSync,
+        ),
+      );
     }
 
     await addNotificationForUser(
@@ -1268,48 +1233,15 @@ class AppDataRepository {
           'Your loan application has been rejected. Reason: $rejectionReason',
       type: 'loan',
     );
-
-    // ADD THIS: update Firestore loan status + decision metadata.
-    await _firestore.updateLoanInFirestore(
-      userId: userId,
-      loanId: loan?['loanId'] ?? 'N/A',
-      data: {
-        'status': 'Rejected',
-        'nextPaymentDate': 'Awaiting new application',
-      },
-    );
-
-    await _firestore.updateLoanDecision(
-      applicationId: appId,
-      status: 'rejected',
-      adminId: FirebaseAuth.instance.currentUser?.uid ?? 'admin',
-    );
-
-    // ADD THIS: create user notification in Firestore for loan decision.
-    await _firestore.notifyLoanDecisionUser(userId: userId, status: 'rejected');
   }
 
   static Future<void> repayLoan({
     required int amount,
     required String loanId,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw StateError('No authenticated user found.');
-    }
-
-    // Atomic repayment in Firestore.
-    await _firestore.recordLoanRepayment(
-      userId: user.uid,
-      loanId: loanId,
-      amount: amount,
-    );
-
-    await addNotificationForUser(
-      userId: user.uid,
-      title: 'Payment Successful',
-      message: 'Your loan repayment of ${_formatUgx(amount)} was successful.',
-      type: 'loan',
+    await makeLoanRepaymentForCurrentUser(
+      amountValue: amount,
+      method: DbDefaults.repaymentMethod,
     );
   }
 
@@ -1328,130 +1260,9 @@ class AppDataRepository {
       'type': type,
       'isRead': 0,
       'createdAt': nowIso,
+      'updatedAt': nowIso,
     });
-
-    // ADD THIS: mirror notifications to Firestore collection.
-    await _firestore.createNotification(
-      userId: userId,
-      title: title,
-      message: message,
-      type: type,
-    );
-  }
-
-  static Future<void> _syncLoanDecisionIntoLocalAccount({
-    required String userId,
-    required List<Map<String, dynamic>> rows,
-  }) async {
-    if (rows.isEmpty) {
-      return;
-    }
-
-    final latest = rows.first;
-    final status = _normalizeLoanApplicationStatus(
-      _nonEmpty(latest['status']) ?? 'Pending Review',
-    );
-
-    if (status != 'Approved' && status != 'Rejected') {
-      return;
-    }
-
-    final loan = await _db.getLatestLoanForUser(userId);
-    if (loan == null) {
-      return;
-    }
-
-    final loanStatus = _normalizeLoanApplicationStatus(
-      _nonEmpty(loan['status']) ?? 'Pending Review',
-    );
-    final nowIso = DateTime.now().toIso8601String();
-
-    if (status == 'Approved') {
-      // Only apply once when a pending local loan transitions to approved.
-      if (loanStatus != 'Pending Review' && loanStatus != 'None') {
-        return;
-      }
-
-      final amountValue = _intFromDynamic(
-        latest['amountValue'] ?? latest['amount'],
-      );
-      final loanType = _nonEmpty(latest['loanType']) ?? _nonEmpty(loan['type']);
-      final period =
-          _nonEmpty(latest['period']) ?? _nonEmpty(latest['duration']);
-      final purpose =
-          _nonEmpty(latest['purpose']) ?? _nonEmpty(loan['purpose']);
-      final applicationId =
-          _nonEmpty(latest['applicationId']) ?? _nonEmpty(latest['id']) ?? '';
-
-      // Update Local DB for offline access
-      await _db.updateLoan(loan['id'].toString(), {
-        'type': loanType,
-        'status': 'Active',
-        'amountValue': amountValue,
-        'remainingBalanceValue': amountValue,
-        'period': period,
-        'purpose': purpose,
-        'nextPaymentDate': _nextPaymentDateLabel(),
-        'repaymentProgress': 0,
-        'updatedAt': nowIso,
-      });
-
-      // Update Firestore loan doc so global stream updates instantly
-      await _firestore.updateLoanInFirestore(
-        userId: userId,
-        loanId: applicationId,
-        data: {
-          'type': loanType,
-          'status': 'Active',
-          'amountValue': amountValue,
-          'remainingBalanceValue': amountValue,
-          'period': period,
-          'purpose': purpose,
-          'nextPaymentDate': _nextPaymentDateLabel(),
-          'repaymentProgress': 0,
-        },
-      );
-
-      final user = await _db.getUser(userId);
-      final currentBalance = _intFromDynamic(user?['balanceValue']);
-      final newBalance = currentBalance + amountValue;
-
-      await _db.updateUser(userId, {
-        'balanceValue': newBalance,
-        'updatedAt': nowIso,
-      });
-
-      // Sync balance to Firestore as well
-      await _firestore.updateUserFields(userId, {'balanceValue': newBalance});
-
-      final txId = applicationId.isEmpty
-          ? 'tx_loan_disbursed_${DateTime.now().millisecondsSinceEpoch}'
-          : 'tx_loan_disbursed_$applicationId';
-      await _db.upsertTransactions([
-        {
-          'id': txId,
-          'userId': userId,
-          'title': 'Loan Disbursed',
-          'subtitle': applicationId.isEmpty
-              ? 'Loan approved and credited to account'
-              : 'Loan approved for $applicationId and credited to account',
-          'amountValue': amountValue,
-          'isCredit': 1,
-          'createdAt': nowIso,
-        },
-      ]);
-
-      return;
-    }
-
-    if (loanStatus == 'Pending Review') {
-      await _db.updateLoan(loan['id'].toString(), {
-        'status': 'Rejected',
-        'nextPaymentDate': 'Awaiting new application',
-        'repaymentProgress': 0,
-        'updatedAt': nowIso,
-      });
-    }
+    _bus.notify(DbTables.notifications);
   }
 
   static Future<void> makeLoanRepaymentForCurrentUser({
@@ -1474,7 +1285,7 @@ class AppDataRepository {
     }
 
     final status = _nonEmpty(loan['status']) ?? 'None';
-    if (status != 'Active' && status != 'Approved') {
+    if (status != DbStatus.active && status != DbStatus.approved) {
       throw StateError('Loan is not available for repayment.');
     }
 
@@ -1504,16 +1315,25 @@ class AppDataRepository {
       'balanceValue': nextBalance,
       'updatedAt': nowIso,
     });
+    _bus.notify(DbTables.users);
+
+    final accountType = _nonEmpty(userRow?['accountType']) ?? 'Savings Account';
+    await _updateAccountBalance(
+      userId: user.uid,
+      accountType: accountType,
+      balanceValue: nextBalance,
+    );
 
     await _db.updateLoan(loan['id'].toString(), {
       'remainingBalanceValue': remainingAfterPayment,
       'repaymentProgress': progress,
-      'status': remainingAfterPayment <= 0 ? 'Paid Off' : 'Active',
+      'status': remainingAfterPayment <= 0 ? DbStatus.paidOff : DbStatus.active,
       'nextPaymentDate': remainingAfterPayment <= 0
           ? 'N/A'
           : _nextPaymentDateLabel(),
       'updatedAt': nowIso,
     });
+    _bus.notify(DbTables.loans);
 
     await _db.insertTransaction({
       'id': 'tx_${DateTime.now().millisecondsSinceEpoch}',
@@ -1523,7 +1343,54 @@ class AppDataRepository {
       'amountValue': amountToApply,
       'isCredit': 0,
       'createdAt': nowIso,
+      'updatedAt': nowIso,
     });
+    _bus.notify(DbTables.transactions);
+
+    final accountId = await _getOrCreateAccountId(user.uid, accountType);
+    await _loanRepository.insertLoanRepayment(
+      LoanRepaymentModel(
+        id: 'rep_${DateTime.now().millisecondsSinceEpoch}',
+        loanId: loan['id'].toString(),
+        userId: user.uid,
+        amountValue: amountToApply,
+        method: method,
+        status: DbStatus.completed,
+        paidAt: nowIso,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 0,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+    );
+    await _loanRepository.insertLedgerEntries([
+      LedgerEntryModel(
+        id: 'led_repay_${DateTime.now().millisecondsSinceEpoch}_dr',
+        userId: user.uid,
+        accountId: accountId,
+        amountValue: amountToApply,
+        entryType: DbEntryType.debit,
+        referenceType: DbReferenceType.loanRepayment,
+        referenceId: loan['id'].toString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 0,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+      LedgerEntryModel(
+        id: 'led_repay_${DateTime.now().millisecondsSinceEpoch}_cr',
+        userId: user.uid,
+        accountId: null,
+        amountValue: amountToApply,
+        entryType: DbEntryType.credit,
+        referenceType: DbReferenceType.loanRepayment,
+        referenceId: loan['id'].toString(),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        version: 0,
+        syncStatus: DbSyncStatus.pendingSync,
+      ),
+    ]);
 
     if (remainingAfterPayment <= 0) {
       await addNotificationForCurrentUser(
@@ -1865,7 +1732,7 @@ class AppDataRepository {
       if (loan == null) return;
 
       final status = _nonEmpty(loan['status']) ?? '';
-      if (status != 'Active') return;
+      if (status != DbStatus.active) return;
 
       final remainingBalance = _intFromDynamic(loan['remainingBalanceValue']);
       if (remainingBalance <= 0) return;
@@ -1910,6 +1777,67 @@ class AppDataRepository {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('$_chatMessagesPrefix$userId');
     return _decodeList(raw);
+  }
+
+  static Future<void> _ensureDefaultAccountForUser(
+    String userId,
+    String accountType,
+  ) async {
+    await _getOrCreateAccountId(userId, accountType);
+  }
+
+  static Future<void> _updateAccountBalance({
+    required String userId,
+    required String accountType,
+    required int balanceValue,
+  }) async {
+    await _db.runInTransaction((txn) async {
+      await txn.update(
+        DbTables.accounts,
+        {
+          DbColumns.balanceValue: balanceValue,
+          DbColumns.updatedAt: DateTime.now().toIso8601String(),
+        },
+        where: '${DbColumns.userId} = ? AND ${DbColumns.accountType} = ?',
+        whereArgs: [userId, accountType],
+      );
+    });
+    _bus.notify(DbTables.accounts);
+  }
+
+  static Future<String> _getOrCreateAccountId(
+    String userId,
+    String accountType,
+  ) async {
+    return _db.runInTransaction<String>((txn) async {
+      final rows = await txn.query(
+        DbTables.accounts,
+        where: '${DbColumns.userId} = ? AND ${DbColumns.accountType} = ?',
+        whereArgs: [userId, accountType],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return rows.first[DbColumns.id].toString();
+      }
+
+      final nowIso = DateTime.now().toIso8601String();
+      final accountId = 'acct_$userId';
+      await txn.insert(DbTables.accounts, {
+        DbColumns.id: accountId,
+        DbColumns.userId: userId,
+        DbColumns.accountType: accountType,
+        DbColumns.balanceValue: 0,
+        DbColumns.status: DbDefaults.accountStatus,
+        'currency': DbDefaults.currency,
+        DbColumns.createdAt: nowIso,
+        DbColumns.updatedAt: nowIso,
+        DbColumns.isDeleted: 0,
+        DbColumns.syncStatus: DbSyncStatus.pendingSync,
+        DbColumns.version: 0,
+      });
+      _bus.notify(DbTables.accounts);
+      return accountId;
+    });
   }
 
   static Future<void> _saveMessages(
@@ -2003,9 +1931,13 @@ class AppDataRepository {
 
   static String _normalizeLoanApplicationStatus(String raw) {
     final value = raw.trim().toLowerCase();
-    if (value == 'pending') return 'Pending Review';
+    if (value == 'pending' || value == 'pending review')
+      return 'Pending Review';
     if (value == 'approved') return 'Approved';
     if (value == 'rejected') return 'Rejected';
+    if (value == 'active') return 'Active';
+    if (value == 'paid off') return 'Paid Off';
+    if (value == 'none') return 'None';
     return raw.trim().isEmpty ? 'Pending Review' : raw;
   }
 
@@ -2064,27 +1996,6 @@ class AppDataRepository {
   static DateTime? _asDateTime(dynamic value) {
     if (value is DateTime) return value;
     if (value is String) return DateTime.tryParse(value);
-    return null;
-  }
-
-  static DateTime? _asDateTimeFromFirestore(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    if (value is String) return DateTime.tryParse(value);
-    if (value is Map<String, dynamic>) {
-      final seconds = _intFromDynamic(value['_seconds']);
-      if (seconds > 0) {
-        return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
-      }
-    }
-    if (value.runtimeType.toString() == 'Timestamp') {
-      try {
-        final dynamic ts = value;
-        return ts.toDate() as DateTime?;
-      } catch (_) {
-        return null;
-      }
-    }
     return null;
   }
 

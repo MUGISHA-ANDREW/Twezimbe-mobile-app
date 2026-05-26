@@ -54,27 +54,27 @@ class AdminUserModel {
       return 0;
     }
 
-    final photoUrl = valueAsString(data['photoUrl']);
+    final photoUrl = valueAsString(data['photo_url']);
 
     return AdminUserModel(
       id: valueAsString(data['id']),
-      fullName: valueAsString(data['fullName'], fallback: 'Unknown'),
+      fullName: valueAsString(data['full_name'], fallback: 'Unknown'),
       email: valueAsString(data['email']),
-      phoneNumber: valueAsString(data['phoneNumber']),
-      customerId: valueAsString(data['customerId']),
-      kycStatus: valueAsString(data['kycStatus'], fallback: 'Pending'),
+      phoneNumber: valueAsString(data['phone_number']),
+      customerId: valueAsString(data['customer_id']),
+      kycStatus: valueAsString(data['kyc_status'], fallback: 'Pending'),
       accountType: valueAsString(
-        data['accountType'],
+        data['account_type'],
         fallback: 'Savings Account',
       ),
       photoUrl: photoUrl.isEmpty ? null : photoUrl,
-      isAdmin: valueAsInt(data['isAdmin']) == 1,
-      balanceValue: valueAsInt(data['balanceValue']),
-      dateOfBirth: valueAsString(data['dateOfBirth']),
-      nationalId: valueAsString(data['nationalId']),
+      isAdmin: valueAsInt(data['is_admin']) == 1,
+      balanceValue: valueAsInt(data['balance_value']),
+      dateOfBirth: valueAsString(data['date_of_birth']),
+      nationalId: valueAsString(data['national_id']),
       address: valueAsString(data['address']),
-      createdAt: parseDate(data['createdAt']),
-      updatedAt: parseDate(data['updatedAt']),
+      createdAt: parseDate(data['created_at']),
+      updatedAt: parseDate(data['updated_at']),
     );
   }
 
