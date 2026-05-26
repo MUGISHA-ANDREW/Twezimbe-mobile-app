@@ -51,19 +51,6 @@ class _DepositPageState extends State<DepositPage> {
     return 'DEP$y$m$d${now.hour}${now.minute}${now.second}$millis';
   }
 
-  String _formatUgx(int amount) {
-    final digits = amount.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      final idxFromEnd = digits.length - i;
-      buffer.write(digits[i]);
-      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
-        buffer.write(',');
-      }
-    }
-    return 'UGX ${buffer.toString()}';
-  }
-
   Future<void> _persistDeposit({
     required int amountValue,
     required String reference,
