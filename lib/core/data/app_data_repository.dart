@@ -899,6 +899,17 @@ class AppDataRepository {
       'updatedAt': nowIso,
     });
 
+    unawaited(
+      _firestore
+          .updateUserFields(user.uid, {'balanceValue': newBalance})
+          .catchError((error) {
+            developer.log(
+              'updateUserFields failed: $error',
+              name: 'AppDataRepository.addTransactionForCurrentUser',
+            );
+          }),
+    );
+
     await _db.insertTransaction({
       'id': 'tx_${DateTime.now().microsecondsSinceEpoch}',
       'userId': user.uid,
@@ -909,36 +920,37 @@ class AppDataRepository {
       'createdAt': nowIso,
     });
 
-    try {
-      // Persist to Firestore as the source of truth.
-      await _firestore.recordTransaction(
-        userId: user.uid,
-        title: title,
-        subtitle: subtitle,
-        amount: amountValue,
-        isCredit: isCredit,
-      );
-    } catch (error) {
-      developer.log(
-        'recordTransaction failed: $error',
-        name: 'AppDataRepository.addTransactionForCurrentUser',
-      );
-    }
+    unawaited(
+      _firestore
+          .recordTransaction(
+            userId: user.uid,
+            title: title,
+            subtitle: subtitle,
+            amount: amountValue,
+            isCredit: isCredit,
+          )
+          .catchError((error) {
+            developer.log(
+              'recordTransaction failed: $error',
+              name: 'AppDataRepository.addTransactionForCurrentUser',
+            );
+          }),
+    );
 
     final flow = isCredit ? 'deposit' : 'withdrawal';
-    try {
-      await addNotificationForCurrentUser(
+    unawaited(
+      addNotificationForCurrentUser(
         title: isCredit ? 'Deposit Successful' : 'Withdrawal Successful',
         message:
             'Your $flow of ${_formatUgx(amountValue)} was completed successfully.',
         type: isCredit ? 'deposit' : 'withdrawal',
-      );
-    } catch (error) {
-      developer.log(
-        'addNotificationForCurrentUser failed: $error',
-        name: 'AppDataRepository.addTransactionForCurrentUser',
-      );
-    }
+      ).catchError((error) {
+        developer.log(
+          'addNotificationForCurrentUser failed: $error',
+          name: 'AppDataRepository.addTransactionForCurrentUser',
+        );
+      }),
+    );
   }
 
   static Stream<List<AppNotificationData>> watchNotificationsForCurrentUser({

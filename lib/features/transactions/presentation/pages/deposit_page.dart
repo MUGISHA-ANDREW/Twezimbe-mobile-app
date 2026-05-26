@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
+import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key});
@@ -101,7 +102,18 @@ class _DepositPageState extends State<DepositPage> {
       if (!mounted) {
         return;
       }
-      Navigator.pop(context, true);
+      _hideProcessingDialog();
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TransactionSuccessPage(
+            type: 'Deposit',
+            amount: _formatUgx(amountValue),
+            reference: reference,
+            recipient: 'Twezimbe Account',
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -131,6 +143,19 @@ class _DepositPageState extends State<DepositPage> {
     }
     hideProcessingPaymentDialog(context);
     _isProcessingDialogVisible = false;
+  }
+
+  String _formatUgx(int amount) {
+    final digits = amount.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final idxFromEnd = digits.length - i;
+      buffer.write(digits[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
+        buffer.write(',');
+      }
+    }
+    return 'UGX ${buffer.toString()}';
   }
 
   @override
