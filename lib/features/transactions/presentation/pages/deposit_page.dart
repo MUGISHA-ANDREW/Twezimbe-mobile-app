@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
-import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
 class DepositPage extends StatefulWidget {
   const DepositPage({super.key});
@@ -65,16 +64,6 @@ class _DepositPageState extends State<DepositPage> {
     return 'UGX ${buffer.toString()}';
   }
 
-  AppTransactionData _buildOptimisticTransaction(int amountValue) {
-    return AppTransactionData(
-      title: 'Deposit via $_selectedMethod',
-      subtitle: 'Just now',
-      amount: '+ ${_formatUgx(amountValue)}',
-      isCredit: true,
-      createdAt: DateTime.now(),
-    );
-  }
-
   Future<void> _persistDeposit({
     required int amountValue,
     required String reference,
@@ -112,7 +101,6 @@ class _DepositPageState extends State<DepositPage> {
     final String reference = _transactionReference();
     final String maskedPhone = _maskedPhone(rawPhone);
 
-    bool shouldPop = false;
     try {
       await _persistDeposit(
         amountValue: amountValue,
@@ -138,9 +126,6 @@ class _DepositPageState extends State<DepositPage> {
         setState(() => _isSubmitting = false);
       }
     }
-    if (mounted && shouldPop) {
-      Navigator.pop(context, _buildOptimisticTransaction(amountValue));
-    }
   }
 
   void _showProcessingDialog() {
@@ -159,19 +144,6 @@ class _DepositPageState extends State<DepositPage> {
     }
     hideProcessingPaymentDialog(context);
     _isProcessingDialogVisible = false;
-  }
-
-  String _formatUgx(int amount) {
-    final digits = amount.toString();
-    final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      final idxFromEnd = digits.length - i;
-      buffer.write(digits[i]);
-      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) {
-        buffer.write(',');
-      }
-    }
-    return 'UGX ${buffer.toString()}';
   }
 
   @override
