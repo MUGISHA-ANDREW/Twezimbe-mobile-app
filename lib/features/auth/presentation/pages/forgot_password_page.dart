@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/domain/auth_input_validators.dart';
@@ -15,7 +15,6 @@ class ForgotPasswordPage extends StatefulWidget {
 }
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
-  int _currentStep = 0; // 0 = enter account, 1 = OTP, 2 = new password
   final TextEditingController _emailController = TextEditingController();
   bool _isSending = false;
 
@@ -34,93 +33,64 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Progress indicator
-            Row(
-              children: List.generate(3, (i) {
-                return Expanded(
-                  child: Container(
-                    height: 4,
-                    margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
-                    decoration: BoxDecoration(
-                      color: i <= _currentStep
-                          ? AppColors.primaryBlue
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                );
-              }),
-            ),
             const SizedBox(height: 40),
-
-            if (_currentStep == 0) _buildStep1(),
-            if (_currentStep == 1) _buildStep2(),
-            if (_currentStep == 2) _buildStep3(),
+            Icon(
+              Icons.lock_reset,
+              size: 64,
+              color: AppColors.primaryBlue.withValues(alpha: 0.7),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Forgot Password?',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Enter your registered email address and we will send a password reset link.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              'Email Address',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => _sendPasswordResetEmail(),
+              decoration: InputDecoration(
+                hintText: 'e.g. user@example.com',
+                hintStyle: TextStyle(color: Colors.grey.shade400),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: _isSending ? null : _sendPasswordResetEmail,
+              child: _isSending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Send Reset Link'),
+            ),
           ],
         ),
       ),
-    );
-  }
-
-  // Step 1: Enter Account Number or Phone
-  Widget _buildStep1() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Icon(
-          Icons.lock_reset,
-          size: 64,
-          color: AppColors.primaryBlue.withValues(alpha: 0.7),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Forgot Password?',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Enter your registered email address and we will send a password reset link.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 32),
-        const Text(
-          'Email Address',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: _emailController,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            hintText: 'e.g. user@example.com',
-            hintStyle: TextStyle(color: Colors.grey.shade400),
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: _isSending ? null : _sendPasswordResetEmail,
-          child: _isSending
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Send Reset Link'),
-        ),
-      ],
     );
   }
 
@@ -131,7 +101,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       _emailController.text,
     );
     if (validationError != null) {
-      _showInlineMessage(validationError, isError: true);
+      _showMessage(validationError, isError: true);
       return;
     }
 
@@ -139,23 +109,23 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     setState(() => _isSending = true);
     try {
-      await FirebaseAuth.instance
-          .sendPasswordResetEmail(email: email)
+      await Supabase.instance.client.auth
+          .resetPasswordForEmail(email)
           .timeout(kAppOperationTimeout);
       if (!mounted) return;
       _showSuccessDialog(context);
-    } on FirebaseAuthException catch (e) {
+    } on AuthException catch (e) {
       if (!mounted) return;
-      _showInlineMessage(_resetErrorMessage(e), isError: true);
+      _showMessage(_resetErrorMessage(e), isError: true);
     } on TimeoutException {
       if (!mounted) return;
-      _showInlineMessage(
+      _showMessage(
         'Request timed out. Please check your internet connection and try again.',
         isError: true,
       );
     } catch (_) {
       if (!mounted) return;
-      _showInlineMessage(
+      _showMessage(
         'Unable to send reset link right now. Please try again.',
         isError: true,
       );
@@ -166,20 +136,21 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     }
   }
 
-  String _resetErrorMessage(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'The email address is invalid.';
-      case 'too-many-requests':
-        return 'Too many attempts. Try again later.';
-      case 'network-request-failed':
-        return 'No internet connection. Check your network.';
-      default:
-        return 'Could not send reset link. Please try again.';
+  String _resetErrorMessage(AuthException e) {
+    final message = e.message.toLowerCase();
+    if (message.contains('invalid') && message.contains('email')) {
+      return 'The email address is invalid.';
     }
+    if (message.contains('too many') || message.contains('rate limit')) {
+      return 'Too many attempts. Try again later.';
+    }
+    if (message.contains('network')) {
+      return 'No internet connection. Check your network.';
+    }
+    return 'Could not send reset link. Please try again.';
   }
 
-  void _showInlineMessage(String message, {bool isError = false}) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -191,162 +162,6 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               : AppColors.successGreen,
         ),
       );
-  }
-
-  // Step 2: OTP entry
-  Widget _buildStep2() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Icon(
-          Icons.sms,
-          size: 64,
-          color: AppColors.primaryOrange.withValues(alpha: 0.7),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Enter Verification Code',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'We sent a 6-digit OTP to your registered phone number ending in ****000.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 32),
-        // OTP input boxes
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: List.generate(6, (i) {
-            return SizedBox(
-              width: 48,
-              child: TextFormField(
-                maxLength: 1,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-                decoration: InputDecoration(
-                  counterText: '',
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: AppColors.primaryBlue,
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 24),
-        Center(
-          child: TextButton(
-            onPressed: () {},
-            child: const Text(
-              'Resend Code',
-              style: TextStyle(
-                color: AppColors.primaryBlue,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: () => setState(() => _currentStep = 2),
-          child: const Text('Verify'),
-        ),
-      ],
-    );
-  }
-
-  // Step 3: New password
-  Widget _buildStep3() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Icon(
-          Icons.verified_user,
-          size: 64,
-          color: AppColors.successGreen.withValues(alpha: 0.7),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Create New Password',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Your new password must be different from previously used passwords.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 32),
-        const Text(
-          'New Password',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          obscureText: true,
-          decoration: InputDecoration(
-            hintText: 'Enter new password',
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Confirm Password',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          obscureText: true,
-          decoration: InputDecoration(
-            hintText: 'Confirm new password',
-            filled: true,
-            fillColor: Colors.grey.shade50,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: () {
-            _showSuccessDialog(context);
-          },
-          child: const Text('Reset Password'),
-        ),
-      ],
-    );
   }
 
   void _showSuccessDialog(BuildContext context) {
@@ -373,13 +188,13 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Password Reset Successful!',
+              'Reset Link Sent!',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'You can now sign in with your new password.',
+              'Check your email inbox and click the password reset link to continue.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey.shade600),
             ),
@@ -394,7 +209,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                     (route) => false,
                   );
                 },
-                child: const Text('Sign In'),
+                child: const Text('Back to Sign In'),
               ),
             ),
           ],

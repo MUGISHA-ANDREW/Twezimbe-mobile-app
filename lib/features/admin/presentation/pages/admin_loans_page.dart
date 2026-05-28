@@ -90,7 +90,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<AdminLoanApplicationModel>>(
-      stream: _repository.watchLoanApplicationsFromFirestore(),
+      stream: _repository.watchLoanApplications(),
       builder: (context, snapshot) {
         final allApplications =
             snapshot.data ?? const <AdminLoanApplicationModel>[];

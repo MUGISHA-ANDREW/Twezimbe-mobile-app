@@ -25,13 +25,14 @@ class AdminTransactionModel {
       return null;
     }
 
-    String valueAsString(dynamic value, {String fallback = ''}) {
+    String str(dynamic value, {String fallback = ''}) {
       if (value == null) return fallback;
       final text = value.toString().trim();
       return text.isEmpty ? fallback : text;
     }
 
-    int valueAsInt(dynamic value) {
+    int asInt(dynamic value) {
+      if (value is bool) return value ? 1 : 0;
       if (value is int) return value;
       if (value is num) return value.toInt();
       if (value is String) return int.tryParse(value.trim()) ?? 0;
@@ -39,13 +40,13 @@ class AdminTransactionModel {
     }
 
     return AdminTransactionModel(
-      id: valueAsString(data['id']),
-      userId: valueAsString(data['user_id']),
-      title: valueAsString(data['title'], fallback: 'Transaction'),
-      subtitle: valueAsString(data['subtitle']),
-      amountValue: valueAsInt(data['amount_value']),
-      isCredit: valueAsInt(data['is_credit']) == 1,
-      createdAt: parseDate(data['created_at']),
+      id: str(data['id']),
+      userId: str(data['user_id'] ?? data['userId']),
+      title: str(data['title'], fallback: 'Transaction'),
+      subtitle: str(data['subtitle']),
+      amountValue: asInt(data['amount_value'] ?? data['amountValue']),
+      isCredit: asInt(data['is_credit'] ?? data['isCredit']) == 1,
+      createdAt: parseDate(data['created_at'] ?? data['createdAt']),
     );
   }
 }

@@ -25,13 +25,14 @@ class AdminNotificationModel {
       return null;
     }
 
-    String valueAsString(dynamic value, {String fallback = ''}) {
+    String str(dynamic value, {String fallback = ''}) {
       if (value == null) return fallback;
       final text = value.toString().trim();
       return text.isEmpty ? fallback : text;
     }
 
-    int valueAsInt(dynamic value) {
+    int asInt(dynamic value) {
+      if (value is bool) return value ? 1 : 0;
       if (value is int) return value;
       if (value is num) return value.toInt();
       if (value is String) return int.tryParse(value.trim()) ?? 0;
@@ -39,13 +40,13 @@ class AdminNotificationModel {
     }
 
     return AdminNotificationModel(
-      id: valueAsString(data['id']),
-      userId: valueAsString(data['user_id']),
-      title: valueAsString(data['title'], fallback: 'Notification'),
-      message: valueAsString(data['message']),
-      type: valueAsString(data['type'], fallback: 'info'),
-      isRead: valueAsInt(data['is_read']) == 1,
-      createdAt: parseDate(data['created_at']),
+      id: str(data['id']),
+      userId: str(data['user_id'] ?? data['userId']),
+      title: str(data['title'], fallback: 'Notification'),
+      message: str(data['message']),
+      type: str(data['type'], fallback: 'info'),
+      isRead: asInt(data['is_read'] ?? data['isRead']) == 1,
+      createdAt: parseDate(data['created_at'] ?? data['createdAt']),
     );
   }
 }

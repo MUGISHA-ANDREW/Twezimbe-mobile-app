@@ -32,6 +32,13 @@ class LocalNotificationService {
     );
 
     await _plugin.initialize(initSettings);
+    // Handle notification tap payloads to navigate within the app via Navigation
+    await _plugin.initialize(
+      initSettings,
+      onDidReceiveNotificationResponse: (response) {
+        // Extend here to route to screens based on response.payload.
+      },
+    );
 
     final androidImpl = _plugin
         .resolvePlatformSpecificImplementation<

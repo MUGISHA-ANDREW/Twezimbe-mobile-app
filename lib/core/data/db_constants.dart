@@ -15,6 +15,7 @@ class DbTables {
   static const String adminRequests = 'admin_requests';
   static const String pendingSyncQueue = 'pending_sync_queue';
   static const String loanProducts = 'loan_products';
+  static const String transactionRequests = 'transaction_requests';
 }
 
 class DbColumns {
@@ -62,6 +63,8 @@ class DbColumns {
   static const String entryType = 'entry_type';
   static const String referenceType = 'reference_type';
   static const String referenceId = 'reference_id';
+  static const String requestType = 'request_type';
+  static const String requestStatus = 'request_status';
   static const String operation = 'operation';
   static const String payloadJson = 'payload_json';
   static const String createdAt = 'created_at';
@@ -125,4 +128,12 @@ class DbDefaults {
   static const String depositMethod = 'Manual';
   static const String withdrawalMethod = 'Manual';
   static const String repaymentMethod = 'Mobile Money';
+}
+
+class DbRequestStatus {
+  const DbRequestStatus._();
+
+  static const String pending = 'pending';
+  static const String completed = 'completed';
+  static const String failed = 'failed';
 }

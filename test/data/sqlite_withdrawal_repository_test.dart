@@ -17,10 +17,38 @@ void main() {
       databaseFactory: databaseFactoryFfi,
       dbPath: inMemoryDatabasePath,
     );
-    await helper.database;
+    final db = await helper.database;
     final repo = SqliteWithdrawalRepository(databaseHelper: helper);
 
     final nowIso = DateTime.now().toIso8601String();
+    await db.insert(DbTables.users, {
+      DbColumns.id: 'user_1',
+      DbColumns.fullName: 'Test User',
+      DbColumns.email: 'user@test.local',
+      DbColumns.phoneNumber: '0700000000',
+      DbColumns.kycStatus: 'Pending',
+      DbColumns.accountType: 'Savings Account',
+      DbColumns.balanceValue: 0,
+      DbColumns.isAdmin: 0,
+      DbColumns.createdAt: nowIso,
+      DbColumns.updatedAt: nowIso,
+      DbColumns.isDeleted: 0,
+      DbColumns.syncStatus: DbSyncStatus.pendingSync,
+      DbColumns.version: 0,
+    });
+    await db.insert(DbTables.accounts, {
+      DbColumns.id: 'acct_1',
+      DbColumns.userId: 'user_1',
+      DbColumns.accountType: 'Savings Account',
+      DbColumns.balanceValue: 0,
+      DbColumns.status: DbDefaults.accountStatus,
+      'currency': DbDefaults.currency,
+      DbColumns.createdAt: nowIso,
+      DbColumns.updatedAt: nowIso,
+      DbColumns.isDeleted: 0,
+      DbColumns.syncStatus: DbSyncStatus.pendingSync,
+      DbColumns.version: 0,
+    });
     final withdrawal = WithdrawalModel(
       id: 'wd_1',
       userId: 'user_1',

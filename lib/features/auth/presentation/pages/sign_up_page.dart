@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:twezimbeapp/core/constants/app_timeouts.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
@@ -103,20 +103,19 @@ class _SignUpPageState extends State<SignUpPage> {
     setState(() => _isLoading = true);
 
     try {
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password)
-          .timeout(kAppOperationTimeout);
+      await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': username, 'phone_number': phoneNumber},
+      );
 
-      await credential.user
-          ?.updateDisplayName(username)
-          .timeout(kAppOperationTimeout);
       await AppDataRepository.ensureProfileForCurrentUser(
         fullName: username,
         email: email,
         phoneNumber: phoneNumber,
       ).timeout(kAppOperationTimeout);
-      await credential.user?.reload().timeout(kAppOperationTimeout);
-      await FirebaseAuth.instance.signOut().timeout(kAppOperationTimeout);
+
+      await Supabase.instance.client.auth.signOut();
       await LocalUserSessionStore.clear().timeout(kAppOperationTimeout);
 
       if (!mounted) return;
@@ -132,10 +131,8 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
         (route) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      debugPrint(
-        'SignUp FirebaseAuthException code=${e.code} message=${e.message}',
-      );
+    } on AuthException catch (e) {
+      debugPrint('SignUp AuthException: ${e.message}');
       _showMessage(_authErrorMessage(e), isError: true);
     } on TimeoutException {
       _showMessage(
@@ -181,21 +178,21 @@ class _SignUpPageState extends State<SignUpPage> {
       );
   }
 
-  String _authErrorMessage(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'email-already-in-use':
-        return 'This email is already registered.';
-      case 'invalid-email':
-        return 'The email address is invalid.';
-      case 'weak-password':
-        return 'Password is too weak. Use at least 6 characters.';
-      case 'operation-not-allowed':
-        return 'Email/Password sign-in is not enabled.';
-      case 'network-request-failed':
-        return 'No internet connection. Check your network.';
-      default:
-        return 'Could not create account. Please try again.';
+  String _authErrorMessage(AuthException e) {
+    final message = e.message.toLowerCase();
+    if (message.contains('already') && message.contains('registered')) {
+      return 'This email is already registered.';
     }
+    if (message.contains('invalid') && message.contains('email')) {
+      return 'The email address is invalid.';
+    }
+    if (message.contains('weak') || message.contains('password')) {
+      return 'Password is too weak. Use at least 6 characters.';
+    }
+    if (message.contains('network')) {
+      return 'No internet connection. Check your network.';
+    }
+    return 'Could not create account. Please try again.';
   }
 
   @override

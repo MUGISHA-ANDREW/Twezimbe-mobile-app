@@ -1,12 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:twezimbeapp/core/constants/app_timeouts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
-import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
 import 'package:twezimbeapp/features/auth/domain/auth_input_validators.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_dashboard_page.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
@@ -73,7 +71,6 @@ class _SignInPageState extends State<SignInPage> {
   }
 
   Future<void> _signIn() async {
-    // Hide keyboard
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) {
@@ -86,9 +83,11 @@ class _SignInPageState extends State<SignInPage> {
     setState(() => _isLoading = true);
 
     try {
-      await _signInWithRetry(email: email, password: password);
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
 
-      // Do not block successful auth on profile sync issues.
       try {
         await AppDataRepository.ensureProfileForCurrentUser(email: email);
       } catch (error) {
@@ -105,17 +104,8 @@ class _SignInPageState extends State<SignInPage> {
       }
       _syncProfileInBackground(email: email);
 
-      // Save FCM token for push notifications
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        unawaited(
-          PushNotificationService.saveTokenLocally(user.uid).catchError((_) {}),
-        );
-      }
-
       if (!mounted) return;
 
-      // Smooth transition to main app
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -127,10 +117,8 @@ class _SignInPageState extends State<SignInPage> {
           transitionDuration: const Duration(milliseconds: 400),
         ),
       );
-    } on FirebaseAuthException catch (e) {
-      debugPrint(
-        'SignIn FirebaseAuthException code=${e.code} message=${e.message}',
-      );
+    } on AuthException catch (e) {
+      debugPrint('SignIn AuthException: ${e.message}');
       _showMessage(_authErrorMessage(e), isError: true);
     } on TimeoutException {
       _showMessage(
@@ -144,31 +132,6 @@ class _SignInPageState extends State<SignInPage> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-
-  Future<void> _signInWithRetry({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password)
-          .timeout(kAppOperationTimeout);
-    } on FirebaseAuthException catch (e) {
-      final String trimmedPassword = password.trim();
-      final bool canRetry =
-          (e.code == 'wrong-password' || e.code == 'invalid-credential') &&
-          trimmedPassword != password;
-
-      if (canRetry) {
-        await FirebaseAuth.instance
-            .signInWithEmailAndPassword(email: email, password: trimmedPassword)
-            .timeout(kAppOperationTimeout);
-        return;
-      }
-
-      rethrow;
     }
   }
 
@@ -201,27 +164,27 @@ class _SignInPageState extends State<SignInPage> {
       );
   }
 
-  String _authErrorMessage(FirebaseAuthException e) {
-    switch (e.code) {
-      case 'invalid-email':
-        return 'The email address is invalid.';
-      case 'user-not-found':
-        return 'No account found for this email.';
-      case 'wrong-password':
-      case 'invalid-credential':
-      case 'invalid-login-credentials':
-        return 'Incorrect email or password.';
-      case 'too-many-requests':
-        return 'Too many attempts. Try again later.';
-      case 'operation-not-allowed':
-        return 'Email/Password sign-in is not enabled.';
-      case 'user-disabled':
-        return 'This account has been disabled.';
-      case 'network-request-failed':
-        return 'No internet connection. Check your network.';
-      default:
-        return 'Authentication failed. Please try again.';
+  String _authErrorMessage(AuthException e) {
+    final message = e.message.toLowerCase();
+    if (message.contains('invalid') && message.contains('email')) {
+      return 'The email address is invalid.';
     }
+    if (message.contains('user') && message.contains('not found')) {
+      return 'No account found for this email.';
+    }
+    if (message.contains('password') || message.contains('credential')) {
+      return 'Incorrect email or password.';
+    }
+    if (message.contains('too many')) {
+      return 'Too many attempts. Try again later.';
+    }
+    if (message.contains('disabled')) {
+      return 'This account has been disabled.';
+    }
+    if (message.contains('network')) {
+      return 'No internet connection. Check your network.';
+    }
+    return 'Authentication failed. Please try again.';
   }
 
   void _syncProfileInBackground({required String email}) {

@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:image_picker/image_picker.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
@@ -20,7 +20,8 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
 
   AppProfileData _fallbackProfileFor(User? user) {
     final email = user?.email ?? '';
-    final displayName = user?.displayName?.trim();
+    final meta = user?.userMetadata;
+    final displayName = (meta?['full_name'] ?? meta?['display_name'])?.toString().trim();
     final fallbackName = (displayName != null && displayName.isNotEmpty)
         ? displayName
         : (email.isNotEmpty ? email.split('@').first : 'User');
@@ -28,11 +29,11 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     return AppProfileData(
       fullName: fallbackName,
       email: email,
-      phoneNumber: user?.phoneNumber ?? 'Not set',
+      phoneNumber: user?.phone ?? 'Not set',
       dateOfBirth: 'Not set',
       nationalId: 'Not set',
       address: 'Not set',
-      photoUrl: user?.photoURL,
+      photoUrl: user?.userMetadata?['photo_url'],
       customerId: email.isNotEmpty
           ? 'CUST-${email.split('@').first.toUpperCase()}'
           : 'CUST-00000',
@@ -44,13 +45,13 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
   }
 
   Future<void> _uploadProfilePhoto() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       _showMessage('You must be signed in to upload a photo.');
       return;
     }
 
-    final String? oldAuthPhotoUrl = user.photoURL;
+    final String? oldAuthPhotoUrl = user.userMetadata?['photo_url'];
     String? oldStoredPhotoUrl;
     try {
       oldStoredPhotoUrl =
@@ -70,17 +71,20 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       setState(() => _isUploadingPhoto = true);
       final bytes = await selected.readAsBytes();
       final extension = _normalizedExtension(selected.name);
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('profile_photos')
-          .child(user.uid)
-          .child('avatar_${DateTime.now().millisecondsSinceEpoch}.$extension');
+      final storagePath =
+          '${user.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
-      await storageRef.putData(
+      await Supabase.instance.client.storage.from('profile-photos').uploadBinary(
+        storagePath,
         bytes,
-        SettableMetadata(contentType: _contentTypeFor(extension)),
+        fileOptions: FileOptions(
+          contentType: _contentTypeFor(extension),
+          upsert: false,
+        ),
       );
-      final photoUrl = await storageRef.getDownloadURL();
+      final photoUrl = Supabase.instance.client.storage
+          .from('profile-photos')
+          .getPublicUrl(storagePath);
       await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
 
       // Clean up old photos
@@ -92,17 +96,12 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       unawaited(
         _cleanupOldManagedPhotos(
           photoUrls: oldPhotoUrls,
-          userId: user.uid,
+          userId: user.id,
           currentPhotoUrl: photoUrl,
         ),
       );
 
       _showMessage('Profile photo updated and saved!');
-    } on FirebaseException catch (error) {
-      debugPrint(
-        'Personal info profile photo upload failed [${error.code}]: ${error.message}',
-      );
-      _showMessage(_firebaseUploadErrorMessage(error));
     } catch (error, stackTrace) {
       debugPrint(
         'Personal info profile photo upload failed: $error\n$stackTrace',
@@ -121,15 +120,23 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     required String currentPhotoUrl,
   }) async {
     for (final oldPhotoUrl in photoUrls) {
-      if (_isManagedProfilePhotoUrl(oldPhotoUrl, userId) &&
-          oldPhotoUrl != currentPhotoUrl) {
+      if (oldPhotoUrl == currentPhotoUrl) continue;
+      final path = _extractStoragePath(oldPhotoUrl, 'profile-photos');
+      if (path != null && path.contains(userId)) {
         try {
-          await FirebaseStorage.instance.refFromURL(oldPhotoUrl).delete();
-        } catch (_) {
-          // Ignore cleanup failures (e.g., missing old object).
-        }
+          await Supabase.instance.client.storage
+              .from('profile-photos')
+              .remove([path]);
+        } catch (_) {}
       }
     }
+  }
+
+  String? _extractStoragePath(String url, String bucket) {
+    final marker = '/storage/v1/object/public/$bucket/';
+    final idx = url.indexOf(marker);
+    if (idx < 0) return null;
+    return url.substring(idx + marker.length);
   }
 
   String _normalizedExtension(String fileName) {
@@ -166,43 +173,6 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     }
   }
 
-  String _firebaseUploadErrorMessage(FirebaseException error) {
-    switch (error.code) {
-      case 'unauthorized':
-      case 'permission-denied':
-        return 'Upload blocked by storage access rules. Please update project rules and try again.';
-      case 'canceled':
-        return 'Upload was canceled.';
-      case 'object-not-found':
-        return 'Storage path not found. Please try again.';
-      case 'network-request-failed':
-      case 'unavailable':
-        return 'Network issue while uploading. Check your connection and try again.';
-      default:
-        final details = error.message?.trim();
-        if (details != null && details.isNotEmpty) {
-          return 'Upload failed: $details';
-        }
-        return 'Failed to upload profile photo.';
-    }
-  }
-
-  bool _isManagedProfilePhotoUrl(String url, String userId) {
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      return false;
-    }
-
-    final hasStorageHost =
-        uri.host.contains('firebasestorage.googleapis.com') ||
-        uri.host.contains('firebasestorage.app');
-    if (!hasStorageHost) {
-      return false;
-    }
-
-    final decodedPath = Uri.decodeComponent(uri.path);
-    return decodedPath.contains('/profile_photos/$userId/');
-  }
 
   Future<void> _openEditDialog(AppProfileData profile) async {
     final fullNameController = TextEditingController(text: profile.fullName);
@@ -312,7 +282,7 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Personal Information'),

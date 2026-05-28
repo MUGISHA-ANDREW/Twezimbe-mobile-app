@@ -21,16 +21,30 @@ void main() {
     final mockHelper = MockDatabaseHelper();
     final mockTxn = MockTransaction();
 
-    when(() => mockTxn.insert(any(), any())).thenAnswer((_) async => 1);
+    when(
+      () => mockTxn.insert(
+        any(),
+        any(),
+        conflictAlgorithm: any(named: 'conflictAlgorithm'),
+      ),
+    ).thenAnswer((_) async => 1);
 
-    when(() => mockHelper.runInTransaction<dynamic>(any())).thenAnswer((
-      invocation,
-    ) async {
+    Future<T> handleTransaction<T>(Invocation invocation) async {
       final action =
           invocation.positionalArguments.first
-              as Future<dynamic> Function(sqflite.Transaction);
+              as Future<T> Function(sqflite.Transaction);
       return action(mockTxn);
-    });
+    }
+
+    when(
+      () => mockHelper.runInTransaction<void>(any()),
+    ).thenAnswer(handleTransaction<void>);
+    when(
+      () => mockHelper.runInTransaction<Null>(any()),
+    ).thenAnswer(handleTransaction<Null>);
+    when(
+      () => mockHelper.runInTransaction<dynamic>(any()),
+    ).thenAnswer(handleTransaction<dynamic>);
 
     final repo = SqliteDepositRepository(databaseHelper: mockHelper);
 
@@ -50,6 +64,6 @@ void main() {
       ),
     );
 
-    verify(() => mockHelper.runInTransaction<dynamic>(any())).called(1);
+    verify(() => mockHelper.runInTransaction<Null>(any())).called(1);
   });
 }

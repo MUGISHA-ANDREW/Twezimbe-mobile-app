@@ -27,7 +27,7 @@ class DatabaseHelper {
     );
   }
 
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
 
   final sqflite.DatabaseFactory _databaseFactory;
   final String? _dbPathOverride;
@@ -118,6 +118,9 @@ class DatabaseHelper {
         for (final statement in _schemaStatements()) {
           await db.execute(statement);
         }
+        break;
+      case 3:
+        await _addTransactionRequestTables(db);
         break;
       default:
         break;
@@ -376,6 +379,19 @@ class DatabaseHelper {
         ${DbColumns.version} INTEGER NOT NULL DEFAULT 0
       )
       ''',
+      '''
+      CREATE TABLE ${DbTables.transactionRequests} (
+        ${DbColumns.id} TEXT PRIMARY KEY,
+        ${DbColumns.userId} TEXT NOT NULL,
+        ${DbColumns.requestType} TEXT NOT NULL,
+        ${DbColumns.amountValue} INTEGER NOT NULL DEFAULT 0 CHECK (${DbColumns.amountValue} >= 0),
+        ${DbColumns.referenceId} TEXT,
+        ${DbColumns.requestStatus} TEXT NOT NULL DEFAULT '${DbRequestStatus.pending}' CHECK (${DbColumns.requestStatus} IN ('${DbRequestStatus.pending}', '${DbRequestStatus.completed}', '${DbRequestStatus.failed}')),
+        ${DbColumns.createdAt} TEXT NOT NULL,
+        ${DbColumns.updatedAt} TEXT NOT NULL,
+        FOREIGN KEY (${DbColumns.userId}) REFERENCES ${DbTables.users}(${DbColumns.id})
+      )
+      ''',
       'CREATE INDEX idx_users_email ON ${DbTables.users}(${DbColumns.email})',
       'CREATE INDEX idx_accounts_user ON ${DbTables.accounts}(${DbColumns.userId})',
       'CREATE INDEX idx_loans_user_status ON ${DbTables.loans}(${DbColumns.userId}, ${DbColumns.status})',
@@ -390,11 +406,14 @@ class DatabaseHelper {
       'CREATE INDEX idx_transactions_user_created ON ${DbTables.transactions}(${DbColumns.userId}, ${DbColumns.createdAt} DESC)',
       'CREATE INDEX idx_notifications_user_created ON ${DbTables.notifications}(${DbColumns.userId}, ${DbColumns.createdAt} DESC)',
       'CREATE INDEX idx_ledger_user_created ON ${DbTables.ledgerEntries}(${DbColumns.userId}, ${DbColumns.createdAt} DESC)',
+      'CREATE INDEX idx_request_user_created ON ${DbTables.transactionRequests}(${DbColumns.userId}, ${DbColumns.createdAt} DESC)',
+      'CREATE INDEX idx_request_type_status ON ${DbTables.transactionRequests}(${DbColumns.requestType}, ${DbColumns.requestStatus})',
     ];
   }
 
   Future<void> _dropAllTables(sqflite.Database db) async {
     const tables = <String>[
+      DbTables.transactionRequests,
       DbTables.loanProducts,
       DbTables.pendingSyncQueue,
       DbTables.adminRequests,
@@ -414,6 +433,29 @@ class DatabaseHelper {
     for (final table in tables) {
       await db.execute('DROP TABLE IF EXISTS $table');
     }
+  }
+
+  Future<void> _addTransactionRequestTables(sqflite.Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ${DbTables.transactionRequests} (
+        ${DbColumns.id} TEXT PRIMARY KEY,
+        ${DbColumns.userId} TEXT NOT NULL,
+        ${DbColumns.requestType} TEXT NOT NULL,
+        ${DbColumns.amountValue} INTEGER NOT NULL DEFAULT 0 CHECK (${DbColumns.amountValue} >= 0),
+        ${DbColumns.referenceId} TEXT,
+        ${DbColumns.requestStatus} TEXT NOT NULL DEFAULT '${DbRequestStatus.pending}' CHECK (${DbColumns.requestStatus} IN ('${DbRequestStatus.pending}', '${DbRequestStatus.completed}', '${DbRequestStatus.failed}')),
+        ${DbColumns.createdAt} TEXT NOT NULL,
+        ${DbColumns.updatedAt} TEXT NOT NULL,
+        FOREIGN KEY (${DbColumns.userId}) REFERENCES ${DbTables.users}(${DbColumns.id})
+      )
+    ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_request_user_created ON ${DbTables.transactionRequests}(${DbColumns.userId}, ${DbColumns.createdAt} DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_request_type_status ON ${DbTables.transactionRequests}(${DbColumns.requestType}, ${DbColumns.requestStatus})',
+    );
   }
 
   Map<String, dynamic> _toDb(

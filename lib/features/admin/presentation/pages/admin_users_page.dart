@@ -162,7 +162,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
               ],
             ),
             child: StreamBuilder<List<AdminUserModel>>(
-              stream: _repository.watchUsersFromFirestore(),
+              stream: _repository.watchUsers(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(

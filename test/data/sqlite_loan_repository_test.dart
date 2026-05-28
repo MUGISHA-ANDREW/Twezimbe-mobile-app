@@ -17,10 +17,25 @@ void main() {
       databaseFactory: databaseFactoryFfi,
       dbPath: inMemoryDatabasePath,
     );
-    await helper.database;
+    final db = await helper.database;
     final repo = SqliteLoanRepository(databaseHelper: helper);
 
     final nowIso = DateTime.now().toIso8601String();
+    await db.insert(DbTables.users, {
+      DbColumns.id: 'user_1',
+      DbColumns.fullName: 'Test User',
+      DbColumns.email: 'user@test.local',
+      DbColumns.phoneNumber: '0700000000',
+      DbColumns.kycStatus: 'Pending',
+      DbColumns.accountType: 'Savings Account',
+      DbColumns.balanceValue: 0,
+      DbColumns.isAdmin: 0,
+      DbColumns.createdAt: nowIso,
+      DbColumns.updatedAt: nowIso,
+      DbColumns.isDeleted: 0,
+      DbColumns.syncStatus: DbSyncStatus.pendingSync,
+      DbColumns.version: 0,
+    });
     final application = LoanApplicationModel(
       id: 'app_1',
       applicationId: 'app_1',
