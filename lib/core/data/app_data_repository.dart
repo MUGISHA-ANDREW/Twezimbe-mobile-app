@@ -202,7 +202,8 @@ class AppDataRepository {
   AppDataRepository._();
 
   static final DatabaseChangeBus _bus = DatabaseChangeBus.instance;
-  static LoanRepository get _loanRepository => RepositoryRegistry.loanRepository;
+  static LoanRepository get _loanRepository =>
+      RepositoryRegistry.loanRepository;
   static DepositRepository get _depositRepository =>
       RepositoryRegistry.depositRepository;
   static WithdrawalRepository get _withdrawalRepository =>
@@ -321,24 +322,54 @@ class AppDataRepository {
   /// Converts camelCase user payload to snake_case for Supabase.
   static Map<String, dynamic> _userToSb(Map<String, dynamic> app) {
     final result = <String, dynamic>{};
-    if (app.containsKey('id')) { result['id'] = app['id']; }
-    if (app.containsKey('fullName')) { result['full_name'] = app['fullName']; }
-    if (app.containsKey('email')) { result['email'] = app['email']; }
-    if (app.containsKey('phoneNumber')) { result['phone_number'] = app['phoneNumber']; }
-    if (app.containsKey('dateOfBirth')) { result['date_of_birth'] = app['dateOfBirth']; }
-    if (app.containsKey('nationalId')) { result['national_id'] = app['nationalId']; }
-    if (app.containsKey('address')) { result['address'] = app['address']; }
-    if (app.containsKey('photoUrl')) { result['photo_url'] = app['photoUrl']; }
-    if (app.containsKey('customerId')) { result['customer_id'] = app['customerId']; }
-    if (app.containsKey('kycStatus')) { result['kyc_status'] = app['kycStatus']; }
-    if (app.containsKey('accountType')) { result['account_type'] = app['accountType']; }
-    if (app.containsKey('balanceValue')) { result['balance_value'] = app['balanceValue']; }
+    if (app.containsKey('id')) {
+      result['id'] = app['id'];
+    }
+    if (app.containsKey('fullName')) {
+      result['full_name'] = app['fullName'];
+    }
+    if (app.containsKey('email')) {
+      result['email'] = app['email'];
+    }
+    if (app.containsKey('phoneNumber')) {
+      result['phone_number'] = app['phoneNumber'];
+    }
+    if (app.containsKey('dateOfBirth')) {
+      result['date_of_birth'] = app['dateOfBirth'];
+    }
+    if (app.containsKey('nationalId')) {
+      result['national_id'] = app['nationalId'];
+    }
+    if (app.containsKey('address')) {
+      result['address'] = app['address'];
+    }
+    if (app.containsKey('photoUrl')) {
+      result['photo_url'] = app['photoUrl'];
+    }
+    if (app.containsKey('customerId')) {
+      result['customer_id'] = app['customerId'];
+    }
+    if (app.containsKey('kycStatus')) {
+      result['kyc_status'] = app['kycStatus'];
+    }
+    if (app.containsKey('accountType')) {
+      result['account_type'] = app['accountType'];
+    }
+    if (app.containsKey('balanceValue')) {
+      result['balance_value'] = app['balanceValue'];
+    }
     if (app.containsKey('isAdmin')) {
       result['is_admin'] = app['isAdmin'] == 1 || app['isAdmin'] == true;
     }
-    if (app.containsKey('fcmToken')) { result['fcm_token'] = app['fcmToken']; }
-    if (app.containsKey('createdAt')) { result['created_at'] = app['createdAt']; }
-    if (app.containsKey('updatedAt')) { result['updated_at'] = app['updatedAt']; }
+    if (app.containsKey('fcmToken')) {
+      result['fcm_token'] = app['fcmToken'];
+    }
+    if (app.containsKey('createdAt')) {
+      result['created_at'] = app['createdAt'];
+    }
+    if (app.containsKey('updatedAt')) {
+      result['updated_at'] = app['updatedAt'];
+    }
     return result;
   }
 
@@ -357,8 +388,7 @@ class AppDataRepository {
       'period': row['period'] ?? '',
       'purpose': row['purpose'] ?? '',
       'nextPaymentDate': row['next_payment_date'] ?? '',
-      'repaymentProgress':
-          (row['repayment_progress'] as num?)?.toInt() ?? 0,
+      'repaymentProgress': (row['repayment_progress'] as num?)?.toInt() ?? 0,
       'createdAt': row['created_at'] ?? '',
       'updatedAt': row['updated_at'] ?? '',
       'version': (row['version'] as num?)?.toInt() ?? 0,
@@ -410,8 +440,11 @@ class AppDataRepository {
 
     Map<String, dynamic>? existing;
     try {
-      final row =
-          await _sb.from('users').select().eq('id', user.id).maybeSingle();
+      final row = await _sb
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
       existing = _userFromSb(row);
     } catch (_) {}
 
@@ -440,8 +473,7 @@ class AppDataRepository {
           _nonEmpty(existing?['photoUrl']) ??
           _nonEmpty(user.userMetadata?['photo_url']) ??
           '',
-      'customerId':
-          _nonEmpty(existing?['customerId']) ?? _customerIdFor(user),
+      'customerId': _nonEmpty(existing?['customerId']) ?? _customerIdFor(user),
       'kycStatus': _nonEmpty(existing?['kycStatus']) ?? 'Pending',
       'accountType': _nonEmpty(existing?['accountType']) ?? 'Savings Account',
       'balanceValue': _intFromDynamic(existing?['balanceValue']),
@@ -461,8 +493,10 @@ class AppDataRepository {
         await _sb.from('users').update(_userToSb(payload)).eq('id', user.id);
       }
     } catch (e) {
-      developer.log('ensureProfileForCurrentUser error: $e',
-          name: 'AppDataRepository');
+      developer.log(
+        'ensureProfileForCurrentUser error: $e',
+        name: 'AppDataRepository',
+      );
     }
 
     await _ensureDefaultAccountForUser(
@@ -525,14 +559,17 @@ class AppDataRepository {
 
     final nowIso = DateTime.now().toIso8601String();
     try {
-      await _sb.from('users').update({
-        'full_name': fullName.trim(),
-        'phone_number': phoneNumber.trim(),
-        'date_of_birth': dateOfBirth.trim(),
-        'national_id': nationalId.trim(),
-        'address': address.trim(),
-        'updated_at': nowIso,
-      }).eq('id', user.id);
+      await _sb
+          .from('users')
+          .update({
+            'full_name': fullName.trim(),
+            'phone_number': phoneNumber.trim(),
+            'date_of_birth': dateOfBirth.trim(),
+            'national_id': nationalId.trim(),
+            'address': address.trim(),
+            'updated_at': nowIso,
+          })
+          .eq('id', user.id);
     } catch (e) {
       throw StateError('Failed to update profile: $e');
     }
@@ -547,10 +584,10 @@ class AppDataRepository {
 
     final nowIso = DateTime.now().toIso8601String();
     try {
-      await _sb.from('users').update({
-        'photo_url': photoUrl,
-        'updated_at': nowIso,
-      }).eq('id', user.id);
+      await _sb
+          .from('users')
+          .update({'photo_url': photoUrl, 'updated_at': nowIso})
+          .eq('id', user.id);
       _bus.notify(DbTables.users);
 
       await Supabase.instance.client.auth.updateUser(
@@ -606,8 +643,9 @@ class AppDataRepository {
         loanId: loan.loanId.isNotEmpty ? loan.loanId : _loanIdFor(user),
         status: loan.status.isNotEmpty ? loan.status : DbStatus.active,
         remainingBalance: _formatUgx(loan.remainingBalanceValue),
-        nextPaymentDate:
-            loan.nextPaymentDate.isNotEmpty ? loan.nextPaymentDate : 'TBD',
+        nextPaymentDate: loan.nextPaymentDate.isNotEmpty
+            ? loan.nextPaymentDate
+            : 'TBD',
         repaymentProgress: '${loan.repaymentProgress}% Paid',
       );
     });
@@ -665,10 +703,10 @@ class AppDataRepository {
                   ? application.loanType
                   : 'Loan',
               amount: _formatUgx(application.amountValue),
-              period:
-                  application.period.isNotEmpty ? application.period : '-',
-              purpose:
-                  application.purpose.isNotEmpty ? application.purpose : '-',
+              period: application.period.isNotEmpty ? application.period : '-',
+              purpose: application.purpose.isNotEmpty
+                  ? application.purpose
+                  : '-',
               status: status,
               createdAt: createdAt,
             );
@@ -731,8 +769,7 @@ class AppDataRepository {
 
     final applicantName =
         _nonEmpty(userData?['fullName']) ?? _displayNameFor(user);
-    final applicantEmail =
-        _nonEmpty(userData?['email']) ?? (user.email ?? '');
+    final applicantEmail = _nonEmpty(userData?['email']) ?? (user.email ?? '');
     final applicantPhone =
         _nonEmpty(userData?['phoneNumber']) ?? (user.phone ?? '');
     final customerId = _nonEmpty(userData?['customerId']) ?? '';
@@ -863,8 +900,11 @@ class AppDataRepository {
     // Read current user balance
     Map<String, dynamic>? userSbRow;
     try {
-      userSbRow =
-          await _sb.from('users').select().eq('id', user.id).maybeSingle();
+      userSbRow = await _sb
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
     } catch (_) {}
     final localUser = _userFromSb(userSbRow);
     final currentBalance = _intFromDynamic(localUser?['balanceValue']);
@@ -874,10 +914,10 @@ class AppDataRepository {
 
     // Update user balance
     try {
-      await _sb.from('users').update({
-        'balance_value': newBalance,
-        'updated_at': nowIso,
-      }).eq('id', user.id);
+      await _sb
+          .from('users')
+          .update({'balance_value': newBalance, 'updated_at': nowIso})
+          .eq('id', user.id);
       _bus.notify(DbTables.users);
     } catch (_) {}
 
@@ -1041,17 +1081,19 @@ class AppDataRepository {
             .order('created_at', ascending: false)
             .limit(limit);
         controller.add(
-          rows.map((row) {
-            final appRow = _notifFromSb(row);
-            return AppNotificationData(
-              id: _nonEmpty(appRow['id']) ?? '',
-              title: _nonEmpty(appRow['title']) ?? 'Notification',
-              message: _nonEmpty(appRow['message']) ?? '',
-              type: _nonEmpty(appRow['type']) ?? 'info',
-              createdAt: _asDateTime(appRow['createdAt']),
-              isRead: _boolFromDynamic(appRow['isRead']),
-            );
-          }).toList(growable: false),
+          rows
+              .map((row) {
+                final appRow = _notifFromSb(row);
+                return AppNotificationData(
+                  id: _nonEmpty(appRow['id']) ?? '',
+                  title: _nonEmpty(appRow['title']) ?? 'Notification',
+                  message: _nonEmpty(appRow['message']) ?? '',
+                  type: _nonEmpty(appRow['type']) ?? 'info',
+                  createdAt: _asDateTime(appRow['createdAt']),
+                  isRead: _boolFromDynamic(appRow['isRead']),
+                );
+              })
+              .toList(growable: false),
         );
       } catch (_) {
         controller.add([]);
@@ -1100,10 +1142,13 @@ class AppDataRepository {
   ) async {
     if (notificationId.isEmpty) return;
     try {
-      await _sb.from('notifications').update({
-        'is_read': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', notificationId);
+      await _sb
+          .from('notifications')
+          .update({
+            'is_read': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', notificationId);
       _bus.notify(DbTables.notifications);
     } catch (_) {}
   }
@@ -1113,10 +1158,14 @@ class AppDataRepository {
     if (user == null) return;
 
     try {
-      await _sb.from('notifications').update({
-        'is_read': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('user_id', user.id).eq('is_read', false);
+      await _sb
+          .from('notifications')
+          .update({
+            'is_read': true,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', user.id)
+          .eq('is_read', false);
       _bus.notify(DbTables.notifications);
     } catch (_) {}
   }
@@ -1217,39 +1266,43 @@ class AppDataRepository {
     final currentRemaining = _intFromDynamic(loan['remainingBalanceValue']);
     if (currentRemaining <= 0) throw StateError('Loan is already fully paid.');
 
-    final amountToApply =
-        amountValue > currentRemaining ? currentRemaining : amountValue;
+    final amountToApply = amountValue > currentRemaining
+        ? currentRemaining
+        : amountValue;
     final remainingAfterPayment = currentRemaining - amountToApply;
 
-    final safeBorrowed =
-        amountBorrowed <= 0 ? currentRemaining : amountBorrowed;
+    final safeBorrowed = amountBorrowed <= 0
+        ? currentRemaining
+        : amountBorrowed;
     final paidSoFar = safeBorrowed - remainingAfterPayment;
-    final progress =
-        ((paidSoFar / safeBorrowed) * 100).round().clamp(0, 100);
+    final progress = ((paidSoFar / safeBorrowed) * 100).round().clamp(0, 100);
 
     // Read user balance
     Map<String, dynamic>? userSbRow;
     try {
-      userSbRow =
-          await _sb.from('users').select().eq('id', user.id).maybeSingle();
+      userSbRow = await _sb
+          .from('users')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
     } catch (_) {}
     final userRow = _userFromSb(userSbRow);
     final currentBalance = _intFromDynamic(userRow?['balanceValue']);
-    final nextBalance =
-        (currentBalance - amountToApply).clamp(0, 999999999).toInt();
+    final nextBalance = (currentBalance - amountToApply)
+        .clamp(0, 999999999)
+        .toInt();
     final nowIso = DateTime.now().toIso8601String();
 
     // Update user balance
     try {
-      await _sb.from('users').update({
-        'balance_value': nextBalance,
-        'updated_at': nowIso,
-      }).eq('id', user.id);
+      await _sb
+          .from('users')
+          .update({'balance_value': nextBalance, 'updated_at': nowIso})
+          .eq('id', user.id);
       _bus.notify(DbTables.users);
     } catch (_) {}
 
-    final accountType =
-        _nonEmpty(userRow?['accountType']) ?? 'Savings Account';
+    final accountType = _nonEmpty(userRow?['accountType']) ?? 'Savings Account';
     await _updateAccountBalance(
       userId: user.id,
       accountType: accountType,
@@ -1259,15 +1312,20 @@ class AppDataRepository {
     // Update loan
     final loanUuid = loan['id'].toString();
     try {
-      await _sb.from('loans').update({
-        'remaining_balance_value': remainingAfterPayment,
-        'repayment_progress': progress,
-        'status':
-            remainingAfterPayment <= 0 ? DbStatus.paidOff : DbStatus.active,
-        'next_payment_date':
-            remainingAfterPayment <= 0 ? 'N/A' : _nextPaymentDateLabel(),
-        'updated_at': nowIso,
-      }).eq('id', loanUuid);
+      await _sb
+          .from('loans')
+          .update({
+            'remaining_balance_value': remainingAfterPayment,
+            'repayment_progress': progress,
+            'status': remainingAfterPayment <= 0
+                ? DbStatus.paidOff
+                : DbStatus.active,
+            'next_payment_date': remainingAfterPayment <= 0
+                ? 'N/A'
+                : _nextPaymentDateLabel(),
+            'updated_at': nowIso,
+          })
+          .eq('id', loanUuid);
       _bus.notify(DbTables.loans);
     } catch (_) {}
 
@@ -1371,10 +1429,13 @@ class AppDataRepository {
 
   static Future<void> setUserAdminRole(String userId, bool isAdmin) async {
     try {
-      await _sb.from('users').update({
-        'is_admin': isAdmin,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', userId);
+      await _sb
+          .from('users')
+          .update({
+            'is_admin': isAdmin,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', userId);
       _bus.notify(DbTables.users);
     } catch (_) {}
   }
@@ -1386,23 +1447,28 @@ class AppDataRepository {
             .from('users')
             .select()
             .order('created_at', ascending: false);
-        return rows.map((row) {
-          final data = _userFromSb(row)!;
-          return AppProfileData(
-            fullName: _nonEmpty(data['fullName']) ?? 'Unknown',
-            email: _nonEmpty(data['email']) ?? '',
-            phoneNumber: _nonEmpty(data['phoneNumber']) ?? 'Not set',
-            dateOfBirth: _nonEmpty(data['dateOfBirth']) ?? 'Not set',
-            nationalId: _nonEmpty(data['nationalId']) ?? 'Not set',
-            address: _nonEmpty(data['address']) ?? 'Not set',
-            photoUrl: _nonEmpty(data['photoUrl']),
-            customerId: _nonEmpty(data['customerId']) ?? '',
-            kycStatus: _nonEmpty(data['kycStatus']) ?? 'Pending',
-            accountType: _nonEmpty(data['accountType']) ?? 'Savings Account',
-            availableBalance: _formatUgx(_intFromDynamic(data['balanceValue'])),
-            isAdmin: _boolFromDynamic(data['isAdmin']),
-          );
-        }).toList(growable: false);
+        return rows
+            .map((row) {
+              final data = _userFromSb(row)!;
+              return AppProfileData(
+                fullName: _nonEmpty(data['fullName']) ?? 'Unknown',
+                email: _nonEmpty(data['email']) ?? '',
+                phoneNumber: _nonEmpty(data['phoneNumber']) ?? 'Not set',
+                dateOfBirth: _nonEmpty(data['dateOfBirth']) ?? 'Not set',
+                nationalId: _nonEmpty(data['nationalId']) ?? 'Not set',
+                address: _nonEmpty(data['address']) ?? 'Not set',
+                photoUrl: _nonEmpty(data['photoUrl']),
+                customerId: _nonEmpty(data['customerId']) ?? '',
+                kycStatus: _nonEmpty(data['kycStatus']) ?? 'Pending',
+                accountType:
+                    _nonEmpty(data['accountType']) ?? 'Savings Account',
+                availableBalance: _formatUgx(
+                  _intFromDynamic(data['balanceValue']),
+                ),
+                isAdmin: _boolFromDynamic(data['isAdmin']),
+              );
+            })
+            .toList(growable: false);
       } catch (_) {
         return [];
       }
@@ -1494,16 +1560,15 @@ class AppDataRepository {
           .select('balance_value, account_type')
           .eq('id', userId)
           .maybeSingle();
-      final currentBalance =
-          (userRow?['balance_value'] as num?)?.toInt() ?? 0;
+      final currentBalance = (userRow?['balance_value'] as num?)?.toInt() ?? 0;
       final accountType =
           _nonEmpty(userRow?['account_type']?.toString()) ?? 'Savings Account';
       final newBalance = currentBalance + loanAmount;
 
-      await _sb.from('users').update({
-        'balance_value': newBalance,
-        'updated_at': nowIso,
-      }).eq('id', userId);
+      await _sb
+          .from('users')
+          .update({'balance_value': newBalance, 'updated_at': nowIso})
+          .eq('id', userId);
       _bus.notify(DbTables.users);
 
       await _updateAccountBalance(
@@ -1727,16 +1792,13 @@ class AppDataRepository {
     if (user == null) throw StateError('No authenticated user found.');
 
     final messages = await _loadMessages(user.id);
-    final index =
-        messages.indexWhere((m) => _nonEmpty(m['id']) == messageId);
+    final index = messages.indexWhere((m) => _nonEmpty(m['id']) == messageId);
     if (index < 0) return;
     messages[index]['text'] = text;
     await _saveMessages(user.id, messages);
   }
 
-  static Future<void> deleteChatMessageForCurrentUser(
-    String messageId,
-  ) async {
+  static Future<void> deleteChatMessageForCurrentUser(String messageId) async {
     final user = _currentUser;
     if (user == null) throw StateError('No authenticated user found.');
 
@@ -1772,9 +1834,7 @@ class AppDataRepository {
 
     final conversations = await _loadConversations(user.id);
     final beforeCount = conversations.length;
-    conversations.removeWhere(
-      (c) => _nonEmpty(c['id']) != keepConversationId,
-    );
+    conversations.removeWhere((c) => _nonEmpty(c['id']) != keepConversationId);
     await _saveConversations(user.id, conversations);
 
     final messages = await _loadMessages(user.id);
@@ -1831,9 +1891,7 @@ class AppDataRepository {
       final messages = await _loadMessages(user.id);
       final filtered =
           messages
-              .where(
-                (m) => _nonEmpty(m['conversationId']) == conversationId,
-              )
+              .where((m) => _nonEmpty(m['conversationId']) == conversationId)
               .toList(growable: false)
             ..sort((a, b) {
               final da =
@@ -1919,8 +1977,7 @@ class AppDataRepository {
     );
   }
 
-  static Stream<AppSecuritySettingsData>
-  watchSecuritySettingsForCurrentUser() {
+  static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {
     final user = _currentUser;
     if (user == null) {
       return const Stream<AppSecuritySettingsData>.empty();
@@ -1981,15 +2038,12 @@ class AppDataRepository {
       if (loanModel.status != DbStatus.active) return;
       if (loanModel.remainingBalanceValue <= 0) return;
 
-      final dueDate = _parseFlexibleDate(
-        _nonEmpty(loanModel.nextPaymentDate),
-      );
+      final dueDate = _parseFlexibleDate(_nonEmpty(loanModel.nextPaymentDate));
       if (dueDate == null) return;
 
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
-      final normalizedDue =
-          DateTime(dueDate.year, dueDate.month, dueDate.day);
+      final normalizedDue = DateTime(dueDate.year, dueDate.month, dueDate.day);
       final daysUntilDue = normalizedDue.difference(today).inDays;
 
       if (daysUntilDue >= 0 && daysUntilDue <= 2) {
@@ -2035,10 +2089,14 @@ class AppDataRepository {
     required int balanceValue,
   }) async {
     try {
-      await _sb.from('accounts').update({
-        'balance_value': balanceValue,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('user_id', userId).eq('account_type', accountType);
+      await _sb
+          .from('accounts')
+          .update({
+            'balance_value': balanceValue,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', userId)
+          .eq('account_type', accountType);
       _bus.notify(DbTables.accounts);
     } catch (_) {}
   }
@@ -2092,9 +2150,7 @@ class AppDataRepository {
   // Chat helpers (SharedPreferences)
   // ---------------------------------------------------------------------------
 
-  static Future<List<Map<String, dynamic>>> _loadMessages(
-    String userId,
-  ) async {
+  static Future<List<Map<String, dynamic>>> _loadMessages(String userId) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('$_chatMessagesPrefix$userId');
     return _decodeList(raw);
@@ -2121,10 +2177,7 @@ class AppDataRepository {
     List<Map<String, dynamic>> rows,
   ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      '$_chatConversationsPrefix$userId',
-      jsonEncode(rows),
-    );
+    await prefs.setString('$_chatConversationsPrefix$userId', jsonEncode(rows));
   }
 
   // ---------------------------------------------------------------------------
@@ -2159,12 +2212,12 @@ class AppDataRepository {
     return AppProfileData(
       fullName: _nonEmpty(row['fullName']) ?? _displayNameFor(user),
       email: _nonEmpty(row['email']) ?? (user.email ?? ''),
-      phoneNumber:
-          _nonEmpty(row['phoneNumber']) ?? (user.phone ?? 'Not set'),
+      phoneNumber: _nonEmpty(row['phoneNumber']) ?? (user.phone ?? 'Not set'),
       dateOfBirth: _nonEmpty(row['dateOfBirth']) ?? 'Not set',
       nationalId: _nonEmpty(row['nationalId']) ?? 'Not set',
       address: _nonEmpty(row['address']) ?? 'Not set',
-      photoUrl: _nonEmpty(row['photoUrl']) ??
+      photoUrl:
+          _nonEmpty(row['photoUrl']) ??
           _nonEmpty(user.userMetadata?['photo_url']),
       customerId: _nonEmpty(row['customerId']) ?? _customerIdFor(user),
       kycStatus: _nonEmpty(row['kycStatus']) ?? 'Pending',
@@ -2174,9 +2227,7 @@ class AppDataRepository {
     );
   }
 
-  static AppTransactionData _transactionFromLocalRow(
-    Map<String, dynamic> row,
-  ) {
+  static AppTransactionData _transactionFromLocalRow(Map<String, dynamic> row) {
     final amountValue = _intFromDynamic(row['amountValue']);
     final isCredit = _boolFromDynamic(row['isCredit']);
     final sign = isCredit ? '+' : '-';
@@ -2216,8 +2267,9 @@ class AppDataRepository {
 
   static String _displayNameFor(User? user) {
     final meta = user?.userMetadata;
-    final name =
-        (meta?['full_name'] ?? meta?['display_name'])?.toString().trim();
+    final name = (meta?['full_name'] ?? meta?['display_name'])
+        ?.toString()
+        .trim();
     if (name != null && name.isNotEmpty) return name;
     final email = user?.email?.trim();
     if (email != null && email.isNotEmpty) return email.split('@').first;
@@ -2226,8 +2278,7 @@ class AppDataRepository {
 
   static String _customerIdFor(User? user) {
     final source = user?.id ?? user?.email ?? '00001';
-    final normalized =
-        source.codeUnits.fold<int>(0, (a, b) => a + b) % 99999;
+    final normalized = source.codeUnits.fold<int>(0, (a, b) => a + b) % 99999;
     final padded = normalized.toString().padLeft(5, '0');
     return 'CUS$padded';
   }

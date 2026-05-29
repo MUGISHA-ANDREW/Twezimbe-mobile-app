@@ -25,7 +25,9 @@ class _ProfilePageState extends State<ProfilePage> {
   AppProfileData _fallbackProfileFor(User? user) {
     final email = user?.email ?? '';
     final meta = user?.userMetadata;
-    final displayName = (meta?['full_name'] ?? meta?['display_name'])?.toString().trim();
+    final displayName = (meta?['full_name'] ?? meta?['display_name'])
+        ?.toString()
+        .trim();
     final fallbackName = (displayName != null && displayName.isNotEmpty)
         ? displayName
         : (email.isNotEmpty ? email.split('@').first : 'User');
@@ -76,24 +78,43 @@ class _ProfilePageState extends State<ProfilePage> {
         return;
       }
 
+      if (!mounted) return;
       setState(() => _isUploadingPhoto = true);
+
+      debugPrint('📸 Starting photo upload for user: ${user.id}');
+
       final bytes = await selected.readAsBytes();
+      debugPrint('📸 Image loaded: ${bytes.length} bytes');
+
       final extension = _normalizedExtension(selected.name);
       final storagePath =
           '${user.id}/avatar_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
-      await Supabase.instance.client.storage.from('profile-photos').uploadBinary(
-        storagePath,
-        bytes,
-        fileOptions: FileOptions(
-          contentType: _contentTypeFor(extension),
-          upsert: false,
-        ),
-      );
+      debugPrint('📸 Upload path: $storagePath');
+      debugPrint('📸 Uploading to bucket: avatars');
+
+      await Supabase.instance.client.storage
+          .from('avatars')
+          .uploadBinary(
+            storagePath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: _contentTypeFor(extension),
+              upsert: false,
+            ),
+          );
+
+      debugPrint('📸 Upload successful!');
+
       final photoUrl = Supabase.instance.client.storage
-          .from('profile-photos')
+          .from('avatars')
           .getPublicUrl(storagePath);
+
+      debugPrint('📸 Public URL: $photoUrl');
+
       await AppDataRepository.updateProfilePhotoUrlForCurrentUser(photoUrl);
+
+      debugPrint('📸 Database updated with photo URL');
 
       final oldPhotoUrls = <String>{
         if (oldAuthPhotoUrl != null) oldAuthPhotoUrl,
@@ -110,38 +131,29 @@ class _ProfilePageState extends State<ProfilePage> {
 
       _showMessage('Profile photo updated.');
     } catch (error, stackTrace) {
-      debugPrint('Profile photo upload failed: $error\n$stackTrace');
-      _showMessage('Failed to upload photo. Please try again.');
+      debugPrint('❌ Profile photo upload failed: $error');
+      debugPrint('❌ Stack trace: $stackTrace');
+
+      // Provide more specific error messages
+      String errorMessage = 'Failed to upload photo. ';
+      if (error.toString().contains('404')) {
+        errorMessage +=
+            'Bucket "avatars" not found. Please create it in Supabase.';
+      } else if (error.toString().contains('403') ||
+          error.toString().contains('permission')) {
+        errorMessage += 'Permission denied. Please set up storage policies.';
+      } else if (error.toString().contains('401')) {
+        errorMessage += 'Authentication error. Please sign in again.';
+      } else {
+        errorMessage += 'Please try again.';
+      }
+
+      _showMessage(errorMessage);
     } finally {
       if (mounted) {
         setState(() => _isUploadingPhoto = false);
       }
     }
-  }
-
-  Future<void> _cleanupOldManagedPhotos({
-    required Set<String> photoUrls,
-    required String userId,
-    required String currentPhotoUrl,
-  }) async {
-    for (final oldPhotoUrl in photoUrls) {
-      if (oldPhotoUrl == currentPhotoUrl) continue;
-      final path = _extractStoragePath(oldPhotoUrl, 'profile-photos');
-      if (path != null && path.contains(userId)) {
-        try {
-          await Supabase.instance.client.storage
-              .from('profile-photos')
-              .remove([path]);
-        } catch (_) {}
-      }
-    }
-  }
-
-  String? _extractStoragePath(String url, String bucket) {
-    final marker = '/storage/v1/object/public/$bucket/';
-    final idx = url.indexOf(marker);
-    if (idx < 0) return null;
-    return url.substring(idx + marker.length);
   }
 
   String _normalizedExtension(String fileName) {
@@ -178,8 +190,56 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _cleanupOldManagedPhotos({
+    required Set<String> photoUrls,
+    required String userId,
+    required String currentPhotoUrl,
+  }) async {
+    for (final oldPhotoUrl in photoUrls) {
+      if (oldPhotoUrl == currentPhotoUrl) continue;
+      final path = _extractStoragePath(oldPhotoUrl, 'avatars');
+      if (path != null && path.contains(userId)) {
+        try {
+          await Supabase.instance.client.storage.from('avatars').remove([path]);
+        } catch (_) {}
+      }
+    }
+  }
+
+  String? _extractStoragePath(String url, String bucket) {
+    final marker = '/storage/v1/object/public/$bucket/';
+    final idx = url.indexOf(marker);
+    if (idx < 0) return null;
+    return url.substring(idx + marker.length);
+  }
 
   Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
     await Supabase.instance.client.auth.signOut();
     await LocalUserSessionStore.clear();
     if (!mounted) return;
@@ -420,6 +480,8 @@ class _ProfilePageState extends State<ProfilePage> {
         ? profile.fullName[0].toUpperCase()
         : 'U';
 
+    debugPrint('🖼️ Avatar photoUrl: $photoUrl');
+
     if (photoUrl == null || photoUrl.isEmpty) {
       return Center(
         child: Text(
@@ -436,7 +498,20 @@ class _ProfilePageState extends State<ProfilePage> {
     return Image.network(
       photoUrl,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Center(
+          child: CircularProgressIndicator(
+            value: loadingProgress.expectedTotalBytes != null
+                ? loadingProgress.cumulativeBytesLoaded /
+                      loadingProgress.expectedTotalBytes!
+                : null,
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('❌ Failed to load avatar image: $error');
+        debugPrint('❌ Photo URL: $photoUrl');
         return Center(
           child: Text(
             initials,
