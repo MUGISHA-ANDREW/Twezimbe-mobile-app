@@ -68,10 +68,12 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
   Future<void> _showLoginActivity() async {
     final user = Supabase.instance.client.auth.currentUser;
     final creation = user?.createdAt != null
-        ? (DateTime.tryParse(user!.createdAt)?.toLocal().toString() ?? 'Unknown')
+        ? (DateTime.tryParse(user!.createdAt)?.toLocal().toString() ??
+              'Unknown')
         : 'Unknown';
     final lastSignIn = user?.lastSignInAt != null
-        ? (DateTime.tryParse(user!.lastSignInAt!)?.toLocal().toString() ?? 'Unknown')
+        ? (DateTime.tryParse(user!.lastSignInAt!)?.toLocal().toString() ??
+              'Unknown')
         : 'Unknown';
 
     await showDialog<void>(
@@ -117,28 +119,6 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
               !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent),
-                    const SizedBox(height: 8),
-                    const Text('Failed to load security settings.'),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => setState(() {}),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
           final settings = snapshot.data ?? _fallbackSettings;
 
           return SingleChildScrollView(

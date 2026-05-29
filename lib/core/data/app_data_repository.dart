@@ -218,6 +218,13 @@ class AppDataRepository {
   static const String _chatActiveConversationPrefix =
       'chat_active_conversation_';
   static const String _securitySettingsPrefix = 'security_settings_';
+  static const AppSecuritySettingsData _defaultSecuritySettings =
+      AppSecuritySettingsData(
+        biometricEnabled: false,
+        twoFactorEnabled: false,
+        transactionAlerts: true,
+        loginAlerts: true,
+      );
   static const String _dueReminderPrefix = 'loan_due_reminder_';
 
   static AppSupportData support = const AppSupportData(
@@ -1980,45 +1987,37 @@ class AppDataRepository {
   static Stream<AppSecuritySettingsData> watchSecuritySettingsForCurrentUser() {
     final user = _currentUser;
     if (user == null) {
-      return const Stream<AppSecuritySettingsData>.empty();
+      return Stream<AppSecuritySettingsData>.value(_defaultSecuritySettings);
     }
 
     return _poll<AppSecuritySettingsData>(() async {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('$_securitySettingsPrefix${user.id}');
-      if (raw == null || raw.trim().isEmpty) {
-        return const AppSecuritySettingsData(
-          biometricEnabled: false,
-          twoFactorEnabled: false,
-          transactionAlerts: true,
-          loginAlerts: true,
-        );
-      }
-
       try {
-        final decoded = jsonDecode(raw);
-        if (decoded is! Map<String, dynamic>) {
-          return const AppSecuritySettingsData(
-            biometricEnabled: false,
-            twoFactorEnabled: false,
-            transactionAlerts: true,
-            loginAlerts: true,
-          );
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString('$_securitySettingsPrefix${user.id}');
+        if (raw == null || raw.trim().isEmpty) {
+          return _defaultSecuritySettings;
         }
 
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) {
+          return _defaultSecuritySettings;
+        }
+        final settingsMap = Map<String, dynamic>.from(decoded);
+
         return AppSecuritySettingsData(
-          biometricEnabled: _boolFromDynamic(decoded['biometricEnabled']),
-          twoFactorEnabled: _boolFromDynamic(decoded['twoFactorEnabled']),
-          transactionAlerts: _boolFromDynamic(decoded['transactionAlerts']),
-          loginAlerts: _boolFromDynamic(decoded['loginAlerts']),
+          biometricEnabled: _boolFromDynamic(settingsMap['biometricEnabled']),
+          twoFactorEnabled: _boolFromDynamic(settingsMap['twoFactorEnabled']),
+          transactionAlerts: _boolFromDynamic(settingsMap['transactionAlerts']),
+          loginAlerts: _boolFromDynamic(settingsMap['loginAlerts']),
         );
-      } catch (_) {
-        return const AppSecuritySettingsData(
-          biometricEnabled: false,
-          twoFactorEnabled: false,
-          transactionAlerts: true,
-          loginAlerts: true,
+      } catch (error, stackTrace) {
+        developer.log(
+          'Failed to read security settings, returning defaults.',
+          name: 'AppDataRepository',
+          error: error,
+          stackTrace: stackTrace,
         );
+        return _defaultSecuritySettings;
       }
     });
   }
