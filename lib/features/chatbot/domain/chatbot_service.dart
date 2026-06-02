@@ -78,6 +78,7 @@ class ChatbotService {
       return faqResponse;
     }
 
+
     // For any other input, return the fixed admin contact message per requirement.
     return _outOfScopeResponse;
   }
