@@ -1,0 +1,812 @@
+{
+  "E:\\flutter\\Twezimbe-mobile-app\\firebase.json": {
+    "mtime": 1777027912.0,
+    "ast_hash": "377ada5b89fd3b9e8961cba3e21668aa",
+    "semantic_hash": "377ada5b89fd3b9e8961cba3e21668aa"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\supabase_schema.sql": {
+    "mtime": 1779864234.0,
+    "ast_hash": "437ae4e0df63445866caac6c3943bf41",
+    "semantic_hash": "437ae4e0df63445866caac6c3943bf41"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web_entrypoint.dart": {
+    "mtime": 1779805566.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\build.gradle.kts": {
+    "mtime": 1776319712.0,
+    "ast_hash": "803fe22651fbe96ed401eb0b66a492d1",
+    "semantic_hash": "803fe22651fbe96ed401eb0b66a492d1"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\gradlew": {
+    "mtime": 1776624810.0,
+    "ast_hash": "7f1cd7eb3f75a1dc85cd37753972a6e2",
+    "semantic_hash": "7f1cd7eb3f75a1dc85cd37753972a6e2"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\settings.gradle.kts": {
+    "mtime": 1776319712.0,
+    "ast_hash": "006880f970efc631d2bb288c10b05386",
+    "semantic_hash": "006880f970efc631d2bb288c10b05386"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\build.gradle.kts": {
+    "mtime": 1776319712.0,
+    "ast_hash": "08d0a33835d7c7a221360315fec4f9fd",
+    "semantic_hash": "08d0a33835d7c7a221360315fec4f9fd"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\google-services.json": {
+    "mtime": 1776319712.0,
+    "ast_hash": "4a75313e13e537209b2acdd3517dd840",
+    "semantic_hash": "4a75313e13e537209b2acdd3517dd840"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\java\\io\\flutter\\plugins\\GeneratedPluginRegistrant.java": {
+    "mtime": 1779912000.5204678,
+    "ast_hash": "835aecdcb029a719d9436a555730c330",
+    "semantic_hash": "835aecdcb029a719d9436a555730c330"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\kotlin\\com\\example\\twezimbeapp\\MainActivity.kt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "736bac945a174e0059550dd36c15d5b3",
+    "semantic_hash": "736bac945a174e0059550dd36c15d5b3"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\functions\\index.js": {
+    "mtime": 1777216752.0,
+    "ast_hash": "cdb84b14cc1e654261494810263fb8a1",
+    "semantic_hash": "cdb84b14cc1e654261494810263fb8a1"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\functions\\package.json": {
+    "mtime": 1776319712.0,
+    "ast_hash": "46f30ce4f501e9ed0f3d2bcd028e7760",
+    "semantic_hash": "46f30ce4f501e9ed0f3d2bcd028e7760"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Flutter\\flutter_export_environment.sh": {
+    "mtime": 1779781512.0,
+    "ast_hash": "0de042946ec31b5a846084278c5fcd29",
+    "semantic_hash": "0de042946ec31b5a846084278c5fcd29"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Flutter\\ephemeral\\flutter_lldb_helper.py": {
+    "mtime": 1779781512.0,
+    "ast_hash": "98fc75412162af387e2e3461e4e58094",
+    "semantic_hash": "98fc75412162af387e2e3461e4e58094"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\AppDelegate.swift": {
+    "mtime": 1776319712.0,
+    "ast_hash": "e277c49e98c9f80e9e71c0524a5cb60f",
+    "semantic_hash": "e277c49e98c9f80e9e71c0524a5cb60f"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\GeneratedPluginRegistrant.h": {
+    "mtime": 1776321496.0,
+    "ast_hash": "decb9041b5e91a07e66f4664e5dac408",
+    "semantic_hash": "decb9041b5e91a07e66f4664e5dac408"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\GeneratedPluginRegistrant.m": {
+    "mtime": 1779864408.0,
+    "ast_hash": "eff81a642b193d8bbb78f9083fc66fd7",
+    "semantic_hash": "eff81a642b193d8bbb78f9083fc66fd7"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Runner-Bridging-Header.h": {
+    "mtime": 1776319712.0,
+    "ast_hash": "7ad7b5cea096132de13ba526b2b9efbe",
+    "semantic_hash": "7ad7b5cea096132de13ba526b2b9efbe"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Contents.json": {
+    "mtime": 1776319712.0,
+    "ast_hash": "c870f277d0c83d1af12f8dc2d368879a",
+    "semantic_hash": "c870f277d0c83d1af12f8dc2d368879a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\Contents.json": {
+    "mtime": 1776319712.0,
+    "ast_hash": "b9e927ac17345f2d5f052fe68a3487f9",
+    "semantic_hash": "b9e927ac17345f2d5f052fe68a3487f9"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\RunnerTests\\RunnerTests.swift": {
+    "mtime": 1776319712.0,
+    "ast_hash": "24e5d095048eb86c30423f4e04b6e57b",
+    "semantic_hash": "24e5d095048eb86c30423f4e04b6e57b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\main.dart": {
+    "mtime": 1779864096.0,
+    "ast_hash": "addbb63e93150126bbf1a91a7cd96cc3",
+    "semantic_hash": "addbb63e93150126bbf1a91a7cd96cc3"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\constants\\app_timeouts.dart": {
+    "mtime": 1779688676.0,
+    "ast_hash": "c071335493bed1d6d0c6ed7af1b7bd0a",
+    "semantic_hash": "c071335493bed1d6d0c6ed7af1b7bd0a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\app_data_repository.dart": {
+    "mtime": 1779864614.0,
+    "ast_hash": "edcb290fb2976917c9e6f15e321cb156",
+    "semantic_hash": "edcb290fb2976917c9e6f15e321cb156"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\app_logger.dart": {
+    "mtime": 1779786286.0,
+    "ast_hash": "726320b1cd8f7dfb64e0ff67033de254",
+    "semantic_hash": "726320b1cd8f7dfb64e0ff67033de254"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\change_bus.dart": {
+    "mtime": 1779786286.0,
+    "ast_hash": "6b6226736ced277c03b3490e8ce363d2",
+    "semantic_hash": "6b6226736ced277c03b3490e8ce363d2"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\database_helper.dart": {
+    "mtime": 1779822210.0,
+    "ast_hash": "5f2717ad03f4a190350b6b5fbf356be0",
+    "semantic_hash": "5f2717ad03f4a190350b6b5fbf356be0"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\data_exceptions.dart": {
+    "mtime": 1779786286.0,
+    "ast_hash": "3f2fae4760a2e61a25b5ef58dc780267",
+    "semantic_hash": "3f2fae4760a2e61a25b5ef58dc780267"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\db_constants.dart": {
+    "mtime": 1779822182.0,
+    "ast_hash": "074681941df43756f4030b26bbad212b",
+    "semantic_hash": "074681941df43756f4030b26bbad212b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\local_user_session_store.dart": {
+    "mtime": 1779864174.0,
+    "ast_hash": "32224938fd6e1c8f762c5b16657b8aa4",
+    "semantic_hash": "32224938fd6e1c8f762c5b16657b8aa4"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repository_registry.dart": {
+    "mtime": 1779786286.0,
+    "ast_hash": "ab8abdcb59ac7e26030f16ae5060e38a",
+    "semantic_hash": "ab8abdcb59ac7e26030f16ae5060e38a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\storage_config.dart": {
+    "mtime": 1779786288.0,
+    "ast_hash": "908d583bd0c6112ea78571b4e18cc8c3",
+    "semantic_hash": "908d583bd0c6112ea78571b4e18cc8c3"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\deposit_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "60491202ecf2bd77fe76e223a9d570c6",
+    "semantic_hash": "60491202ecf2bd77fe76e223a9d570c6"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\deposit_transaction_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "2cc98af58dbe160221ebfc0d3770aed4",
+    "semantic_hash": "2cc98af58dbe160221ebfc0d3770aed4"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\ledger_entry_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "8b51e672e4cb95db1ea8393762cdd514",
+    "semantic_hash": "8b51e672e4cb95db1ea8393762cdd514"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\loan_application_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "ea93746bc6ede03ececf992beea44bd7",
+    "semantic_hash": "ea93746bc6ede03ececf992beea44bd7"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\loan_model.dart": {
+    "mtime": 1779786288.0,
+    "ast_hash": "8207933e8001ca71346d6c32636d981a",
+    "semantic_hash": "8207933e8001ca71346d6c32636d981a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\loan_product_model.dart": {
+    "mtime": 1779804418.0,
+    "ast_hash": "c7b7fc55c60b7dd1946fdb79c08aeb80",
+    "semantic_hash": "c7b7fc55c60b7dd1946fdb79c08aeb80"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\loan_repayment_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "f6cd0929aea37bb2906c202823398d2a",
+    "semantic_hash": "f6cd0929aea37bb2906c202823398d2a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\models\\withdrawal_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "66b60cf10c86d80fa6f32320868dbb27",
+    "semantic_hash": "66b60cf10c86d80fa6f32320868dbb27"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repositories\\deposit_repository.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "3e0687722b47d85c57faa9b1d55e7026",
+    "semantic_hash": "3e0687722b47d85c57faa9b1d55e7026"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repositories\\loan_repository.dart": {
+    "mtime": 1779804418.0,
+    "ast_hash": "b9876ea96f53e1efababdb1c3349862d",
+    "semantic_hash": "b9876ea96f53e1efababdb1c3349862d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repositories\\sqlite_deposit_repository.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "279230f5a5de1a0f2cbeaa12743e38e1",
+    "semantic_hash": "279230f5a5de1a0f2cbeaa12743e38e1"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repositories\\sqlite_loan_repository.dart": {
+    "mtime": 1779804418.0,
+    "ast_hash": "abb52832e87a1739e3b375f54cf7ea93",
+    "semantic_hash": "abb52832e87a1739e3b375f54cf7ea93"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repositories\\sqlite_withdrawal_repository.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "ec6be9e4513b9d3315e3de69df2ebc79",
+    "semantic_hash": "ec6be9e4513b9d3315e3de69df2ebc79"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\data\\repositories\\withdrawal_repository.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "68c5bc7787907ad2bfcac662a07cc0ca",
+    "semantic_hash": "68c5bc7787907ad2bfcac662a07cc0ca"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\notifications\\local_notification_service.dart": {
+    "mtime": 1779823878.0,
+    "ast_hash": "a4b7fbd6d9ae3e48d9856d1d588d2a02",
+    "semantic_hash": "a4b7fbd6d9ae3e48d9856d1d588d2a02"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\theme\\app_theme.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "e986279bee2d192fc879153125b3f9c9",
+    "semantic_hash": "e986279bee2d192fc879153125b3f9c9"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\core\\widgets\\processing_payment_dialog.dart": {
+    "mtime": 1777170252.0,
+    "ast_hash": "6048ad3dbef3f0beceba8fce846999bd",
+    "semantic_hash": "6048ad3dbef3f0beceba8fce846999bd"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\data\\admin_local_repository.dart": {
+    "mtime": 1779864630.0,
+    "ast_hash": "fcacc56b285ebfef9f2dbc77c87dcb65",
+    "semantic_hash": "fcacc56b285ebfef9f2dbc77c87dcb65"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\domain\\models\\admin_loan_application_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "db848497f920542dcc8d4c18008bd2ec",
+    "semantic_hash": "db848497f920542dcc8d4c18008bd2ec"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\domain\\models\\admin_notification_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "f69ef17b20b1546db8ca0007c309f5bb",
+    "semantic_hash": "f69ef17b20b1546db8ca0007c309f5bb"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\domain\\models\\admin_transaction_model.dart": {
+    "mtime": 1779786300.0,
+    "ast_hash": "1f36c70ff9547a43255c4afc5d563a9d",
+    "semantic_hash": "1f36c70ff9547a43255c4afc5d563a9d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\domain\\models\\admin_user_model.dart": {
+    "mtime": 1779804418.0,
+    "ast_hash": "92707b4434f6dfaea6651d1d1eed3e3b",
+    "semantic_hash": "92707b4434f6dfaea6651d1d1eed3e3b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\presentation\\pages\\admin_dashboard_page.dart": {
+    "mtime": 1779864388.0,
+    "ast_hash": "64e72ff291a5851553e30d016408b5bd",
+    "semantic_hash": "64e72ff291a5851553e30d016408b5bd"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\presentation\\pages\\admin_loans_page.dart": {
+    "mtime": 1777148386.0,
+    "ast_hash": "213e7f38c1313977b4de415fcce160cf",
+    "semantic_hash": "213e7f38c1313977b4de415fcce160cf"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\presentation\\pages\\admin_users_page.dart": {
+    "mtime": 1777148386.0,
+    "ast_hash": "525d124ed1387058e76071371f25f1da",
+    "semantic_hash": "525d124ed1387058e76071371f25f1da"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\admin\\presentation\\pages\\admin_user_details_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "9de3e729308f2c90aa3650c7955c2483",
+    "semantic_hash": "9de3e729308f2c90aa3650c7955c2483"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\auth\\domain\\auth_input_validators.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "43e4cf93e4495793030c341de2432666",
+    "semantic_hash": "43e4cf93e4495793030c341de2432666"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\auth\\presentation\\pages\\sign_in_page.dart": {
+    "mtime": 1779864278.0,
+    "ast_hash": "d8349a3f3efaa9b2c66ac4d2f98f25b7",
+    "semantic_hash": "d8349a3f3efaa9b2c66ac4d2f98f25b7"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\auth\\presentation\\pages\\sign_up_page.dart": {
+    "mtime": 1779864356.0,
+    "ast_hash": "e6e4368b6a8b5b06d3b9c7c24b9dd1d6",
+    "semantic_hash": "e6e4368b6a8b5b06d3b9c7c24b9dd1d6"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\chatbot\\domain\\chatbot_service.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "3fb4acf2288c179b084e7f0064e1256c",
+    "semantic_hash": "3fb4acf2288c179b084e7f0064e1256c"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\chatbot\\presentation\\pages\\chatbot_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "1f826ed4c40e7cbac1e5231a2153259b",
+    "semantic_hash": "1f826ed4c40e7cbac1e5231a2153259b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\chatbot\\presentation\\pages\\chat_history_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "9a9d84086718805af14e0a10b33c1d98",
+    "semantic_hash": "9a9d84086718805af14e0a10b33c1d98"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\dashboard\\presentation\\pages\\dashboard_page.dart": {
+    "mtime": 1779864388.0,
+    "ast_hash": "fc7f9f99a9054ae3e14181891397c949",
+    "semantic_hash": "fc7f9f99a9054ae3e14181891397c949"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\dashboard\\presentation\\pages\\main_layout.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "a125965efa0d5f5a539324d698cf17fb",
+    "semantic_hash": "a125965efa0d5f5a539324d698cf17fb"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\loans\\presentation\\pages\\apply_loan_page.dart": {
+    "mtime": 1779688676.0,
+    "ast_hash": "168a447d1c54ebcc9d00676af7505eb9",
+    "semantic_hash": "168a447d1c54ebcc9d00676af7505eb9"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\loans\\presentation\\pages\\loans_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "3c78ff2227d6d900749a87506bf4e12d",
+    "semantic_hash": "3c78ff2227d6d900749a87506bf4e12d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\loans\\presentation\\pages\\loan_application_success_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "0a1c8af8a4cd3283b6b0abe6a7bda5fc",
+    "semantic_hash": "0a1c8af8a4cd3283b6b0abe6a7bda5fc"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\loans\\presentation\\pages\\loan_calculator_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "e4004f95c93cacd50c5695f670fd8448",
+    "semantic_hash": "e4004f95c93cacd50c5695f670fd8448"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\loans\\presentation\\pages\\loan_details_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "9baf6adc87c034f77c33eb4ab2c8dc14",
+    "semantic_hash": "9baf6adc87c034f77c33eb4ab2c8dc14"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\loans\\presentation\\pages\\make_payment_page.dart": {
+    "mtime": 1779864388.0,
+    "ast_hash": "bba21235ae8e3fc94a4675b4801c739b",
+    "semantic_hash": "bba21235ae8e3fc94a4675b4801c739b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\notifications\\presentation\\pages\\notifications_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "592b3157122e8cd8de7ec04178aedbb5",
+    "semantic_hash": "592b3157122e8cd8de7ec04178aedbb5"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\profile\\presentation\\pages\\help_support_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "5280ea21be983eaaefabbd6903b93d40",
+    "semantic_hash": "5280ea21be983eaaefabbd6903b93d40"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\profile\\presentation\\pages\\personal_info_page.dart": {
+    "mtime": 1779864642.0,
+    "ast_hash": "9541e565ba733a266148917ac37ecb98",
+    "semantic_hash": "9541e565ba733a266148917ac37ecb98"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\profile\\presentation\\pages\\profile_page.dart": {
+    "mtime": 1779864640.0,
+    "ast_hash": "52519dadf809dc7debf6e00fc4b2b638",
+    "semantic_hash": "52519dadf809dc7debf6e00fc4b2b638"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\profile\\presentation\\pages\\security_settings_page.dart": {
+    "mtime": 1779864388.0,
+    "ast_hash": "61416419e18622dc1d29af1fbd5bd1b0",
+    "semantic_hash": "61416419e18622dc1d29af1fbd5bd1b0"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\transactions\\presentation\\pages\\deposit_page.dart": {
+    "mtime": 1779863136.0,
+    "ast_hash": "0c319267ee6802915a714cd874f60718",
+    "semantic_hash": "0c319267ee6802915a714cd874f60718"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\transactions\\presentation\\pages\\transactions_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "485e0af7ef1ee39db8dd577b5bd12add",
+    "semantic_hash": "485e0af7ef1ee39db8dd577b5bd12add"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\transactions\\presentation\\pages\\transaction_success_page.dart": {
+    "mtime": 1776319712.0,
+    "ast_hash": "23f42a388a4aa56ced5c152116e5dd85",
+    "semantic_hash": "23f42a388a4aa56ced5c152116e5dd85"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\lib\\features\\transactions\\presentation\\pages\\withdraw_page.dart": {
+    "mtime": 1779863342.0,
+    "ast_hash": "60d12c086d1ee20b9206644d9588077a",
+    "semantic_hash": "60d12c086d1ee20b9206644d9588077a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\flutter\\generated_plugin_registrant.cc": {
+    "mtime": 1779864044.0,
+    "ast_hash": "b6f9ce0e358ff1f87efecec1dd684e21",
+    "semantic_hash": "b6f9ce0e358ff1f87efecec1dd684e21"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\flutter\\generated_plugin_registrant.h": {
+    "mtime": 1776321496.0,
+    "ast_hash": "d295462c9da9f7fef22dc86c34492318",
+    "semantic_hash": "d295462c9da9f7fef22dc86c34492318"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\runner\\main.cc": {
+    "mtime": 1776319712.0,
+    "ast_hash": "539395bcd63dba20afed0838d136189f",
+    "semantic_hash": "539395bcd63dba20afed0838d136189f"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\runner\\my_application.cc": {
+    "mtime": 1776319712.0,
+    "ast_hash": "c1a810ae5ab4ace8cf874e41d184829f",
+    "semantic_hash": "c1a810ae5ab4ace8cf874e41d184829f"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\runner\\my_application.h": {
+    "mtime": 1776319712.0,
+    "ast_hash": "f6b37d58752c8671078b6f660e33e8c1",
+    "semantic_hash": "f6b37d58752c8671078b6f660e33e8c1"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Flutter\\GeneratedPluginRegistrant.swift": {
+    "mtime": 1779864408.0,
+    "ast_hash": "365b58b8d4e1fed1daa2926014ea3a49",
+    "semantic_hash": "365b58b8d4e1fed1daa2926014ea3a49"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Flutter\\ephemeral\\flutter_export_environment.sh": {
+    "mtime": 1779781512.0,
+    "ast_hash": "2cc99173c74d0c525bc9ed3d40f771af",
+    "semantic_hash": "2cc99173c74d0c525bc9ed3d40f771af"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\AppDelegate.swift": {
+    "mtime": 1776319712.0,
+    "ast_hash": "4b52e0b89ebfef9baf45b04548c463d6",
+    "semantic_hash": "4b52e0b89ebfef9baf45b04548c463d6"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\MainFlutterWindow.swift": {
+    "mtime": 1776319712.0,
+    "ast_hash": "93c22dae2d93f3dc1402e121901f582b",
+    "semantic_hash": "93c22dae2d93f3dc1402e121901f582b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Contents.json": {
+    "mtime": 1776319712.0,
+    "ast_hash": "7a43602fd86211680ed6e06fc847fdab",
+    "semantic_hash": "7a43602fd86211680ed6e06fc847fdab"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\RunnerTests\\RunnerTests.swift": {
+    "mtime": 1776319712.0,
+    "ast_hash": "8059f5d27a19c556eeafb49b3f9b7bdd",
+    "semantic_hash": "8059f5d27a19c556eeafb49b3f9b7bdd"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\test\\widget_test.dart": {
+    "mtime": 1779806612.0,
+    "ast_hash": "e2c4d9929d37500218fdff5830430067",
+    "semantic_hash": "e2c4d9929d37500218fdff5830430067"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\test\\data\\mock_database_helper_test.dart": {
+    "mtime": 1779862898.0,
+    "ast_hash": "a2731be67ca6e28fd0fdfe05f2ca507b",
+    "semantic_hash": "a2731be67ca6e28fd0fdfe05f2ca507b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\test\\data\\sqlite_deposit_repository_test.dart": {
+    "mtime": 1779805046.0,
+    "ast_hash": "0de5be3bf40fb07d046f2a82cd96f3b8",
+    "semantic_hash": "0de5be3bf40fb07d046f2a82cd96f3b8"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\test\\data\\sqlite_loan_repository_test.dart": {
+    "mtime": 1779805046.0,
+    "ast_hash": "7caa4d8fbf1594ae25a9ec5deec73f1f",
+    "semantic_hash": "7caa4d8fbf1594ae25a9ec5deec73f1f"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\test\\data\\sqlite_withdrawal_repository_test.dart": {
+    "mtime": 1779805046.0,
+    "ast_hash": "f0f8ad8f73afbe5b57392bd8a99b0a03",
+    "semantic_hash": "f0f8ad8f73afbe5b57392bd8a99b0a03"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\manifest.json": {
+    "mtime": 1776319712.0,
+    "ast_hash": "701adc1dc5792535b1f21256b330f680",
+    "semantic_hash": "701adc1dc5792535b1f21256b330f680"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\sqflite_sw.js": {
+    "mtime": 1779864000.0,
+    "ast_hash": "aac413f2e0c3b07b416d0ee8e4aa0c36",
+    "semantic_hash": "aac413f2e0c3b07b416d0ee8e4aa0c36"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\flutter\\generated_plugin_registrant.cc": {
+    "mtime": 1779864408.0,
+    "ast_hash": "5ca89fbf5093c4a20a43228cd7d90fed",
+    "semantic_hash": "5ca89fbf5093c4a20a43228cd7d90fed"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\flutter\\generated_plugin_registrant.h": {
+    "mtime": 1776321496.0,
+    "ast_hash": "0ea33875f9f8e118f9c2ded03e2e2835",
+    "semantic_hash": "0ea33875f9f8e118f9c2ded03e2e2835"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\flutter_window.cpp": {
+    "mtime": 1776319712.0,
+    "ast_hash": "2f463f9b7da67a2d692a012f9ea85e0c",
+    "semantic_hash": "2f463f9b7da67a2d692a012f9ea85e0c"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\flutter_window.h": {
+    "mtime": 1776319712.0,
+    "ast_hash": "7defcc89d4a26d56e801241d624d48fb",
+    "semantic_hash": "7defcc89d4a26d56e801241d624d48fb"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\main.cpp": {
+    "mtime": 1776319712.0,
+    "ast_hash": "995e645d16e71d6e0a6a2c1a6f82323d",
+    "semantic_hash": "995e645d16e71d6e0a6a2c1a6f82323d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\resource.h": {
+    "mtime": 1776319712.0,
+    "ast_hash": "1ade5dd15e613479a15e8832ed276f2b",
+    "semantic_hash": "1ade5dd15e613479a15e8832ed276f2b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\utils.cpp": {
+    "mtime": 1776319712.0,
+    "ast_hash": "432461b09d862a2f8dadf380ff0e34e5",
+    "semantic_hash": "432461b09d862a2f8dadf380ff0e34e5"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\utils.h": {
+    "mtime": 1776319712.0,
+    "ast_hash": "fd81e143f5614eb6fd75efe539002853",
+    "semantic_hash": "fd81e143f5614eb6fd75efe539002853"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\win32_window.cpp": {
+    "mtime": 1776319712.0,
+    "ast_hash": "571eb8234dbc2661be03aa5f2a4d2fca",
+    "semantic_hash": "571eb8234dbc2661be03aa5f2a4d2fca"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\win32_window.h": {
+    "mtime": 1776319712.0,
+    "ast_hash": "7569387d58711ab975940f4df3b4bcda",
+    "semantic_hash": "7569387d58711ab975940f4df3b4bcda"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\analysis_options.yaml": {
+    "mtime": 1776319712.0,
+    "ast_hash": "9e65f4b9beebb674c0dc252f70a5c177",
+    "semantic_hash": "9e65f4b9beebb674c0dc252f70a5c177"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\devtools_options.yaml": {
+    "mtime": 1779690094.0,
+    "ast_hash": "d1ff5187b1b67653e7357395895e8449",
+    "semantic_hash": "d1ff5187b1b67653e7357395895e8449"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\pubspec.yaml": {
+    "mtime": 1779864402.0,
+    "ast_hash": "e37a8183a5c29f786003925ba1ee1b10",
+    "semantic_hash": "e37a8183a5c29f786003925ba1ee1b10"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\README.md": {
+    "mtime": 1776319712.0,
+    "ast_hash": "f7ee1b402881509d197f34963e569927",
+    "semantic_hash": "f7ee1b402881509d197f34963e569927"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\CMakeLists.txt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "92104f60f2ecb89797b6a9ff6aa3a850",
+    "semantic_hash": "92104f60f2ecb89797b6a9ff6aa3a850"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\flutter\\CMakeLists.txt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "2195470ce31675d31db5a37590d011f6",
+    "semantic_hash": "2195470ce31675d31db5a37590d011f6"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\linux\\runner\\CMakeLists.txt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "30cc1614b16214b66c014af09ba699eb",
+    "semantic_hash": "30cc1614b16214b66c014af09ba699eb"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\index.html": {
+    "mtime": 1776319712.0,
+    "ast_hash": "84d71d1b2979c5f1866b55494109b345",
+    "semantic_hash": "84d71d1b2979c5f1866b55494109b345"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\CMakeLists.txt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "cc6c5b320c8546f96e2475ef0e420a23",
+    "semantic_hash": "cc6c5b320c8546f96e2475ef0e420a23"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\flutter\\CMakeLists.txt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "bbf66fed5180bd9ae8198b8d7c4a0001",
+    "semantic_hash": "bbf66fed5180bd9ae8198b8d7c4a0001"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\windows\\runner\\CMakeLists.txt": {
+    "mtime": 1776319712.0,
+    "ast_hash": "028602ab9754bffe716659ada7590d29",
+    "semantic_hash": "028602ab9754bffe716659ada7590d29"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\res\\mipmap-hdpi\\ic_launcher.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "111bd5a749ca7be26669ab273ba327df",
+    "semantic_hash": "111bd5a749ca7be26669ab273ba327df"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\res\\mipmap-mdpi\\ic_launcher.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "4de54d4a1301a753176cc10ec9a913df",
+    "semantic_hash": "4de54d4a1301a753176cc10ec9a913df"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\res\\mipmap-xhdpi\\ic_launcher.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "b14a2026e50f5200cb44efffe4541c4b",
+    "semantic_hash": "b14a2026e50f5200cb44efffe4541c4b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\res\\mipmap-xxhdpi\\ic_launcher.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "8a293654a8471e58f1e763fede0eb95d",
+    "semantic_hash": "8a293654a8471e58f1e763fede0eb95d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\android\\app\\src\\main\\res\\mipmap-xxxhdpi\\ic_launcher.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "25d1271b747b2ed7c121620b6b4ec2ec",
+    "semantic_hash": "25d1271b747b2ed7c121620b6b4ec2ec"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\assets\\branding\\launcher_icon.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "f9994b357fa03ba0021da906d7660bc8",
+    "semantic_hash": "f9994b357fa03ba0021da906d7660bc8"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-1024x1024@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "35445a8ff64594aa6e98de7879bf0f53",
+    "semantic_hash": "35445a8ff64594aa6e98de7879bf0f53"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-20x20@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "8b8af05fbe7fbb55fdf8b352f10ce305",
+    "semantic_hash": "8b8af05fbe7fbb55fdf8b352f10ce305"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-20x20@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "72cf10d2c5cfa01f885bfaf274b1061d",
+    "semantic_hash": "72cf10d2c5cfa01f885bfaf274b1061d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-20x20@3x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "a568a5360c2e34cd5cd6b2da6645e46e",
+    "semantic_hash": "a568a5360c2e34cd5cd6b2da6645e46e"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-29x29@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "658998f4b2be317f75c3fb8d16ac0433",
+    "semantic_hash": "658998f4b2be317f75c3fb8d16ac0433"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-29x29@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "ce9af12c710e2a222b6ab3bd34ca8782",
+    "semantic_hash": "ce9af12c710e2a222b6ab3bd34ca8782"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-29x29@3x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "70b89f34f4ec0044a21918ce53e6f3dc",
+    "semantic_hash": "70b89f34f4ec0044a21918ce53e6f3dc"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-40x40@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "72cf10d2c5cfa01f885bfaf274b1061d",
+    "semantic_hash": "72cf10d2c5cfa01f885bfaf274b1061d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-40x40@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "8b33ac736dc887c8a7b1f8b1d1453e9b",
+    "semantic_hash": "8b33ac736dc887c8a7b1f8b1d1453e9b"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-40x40@3x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "10d9ac60c0f4ce5f231fe877951c455c",
+    "semantic_hash": "10d9ac60c0f4ce5f231fe877951c455c"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-50x50@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "a8f6752ff3a15de1e8b20c56e0c095c7",
+    "semantic_hash": "a8f6752ff3a15de1e8b20c56e0c095c7"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-50x50@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "86c79235219deeecb056b5bce8abb0ca",
+    "semantic_hash": "86c79235219deeecb056b5bce8abb0ca"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-57x57@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "7ea50982c610230c9839a856a66f44e3",
+    "semantic_hash": "7ea50982c610230c9839a856a66f44e3"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-57x57@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "9aafc3a60ff9c55dba448de5ab2189f9",
+    "semantic_hash": "9aafc3a60ff9c55dba448de5ab2189f9"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-60x60@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "10d9ac60c0f4ce5f231fe877951c455c",
+    "semantic_hash": "10d9ac60c0f4ce5f231fe877951c455c"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-60x60@3x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "f04b686fa5b2b751f1a8e442dddda696",
+    "semantic_hash": "f04b686fa5b2b751f1a8e442dddda696"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-72x72@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "111bd5a749ca7be26669ab273ba327df",
+    "semantic_hash": "111bd5a749ca7be26669ab273ba327df"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-72x72@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "8a293654a8471e58f1e763fede0eb95d",
+    "semantic_hash": "8a293654a8471e58f1e763fede0eb95d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-76x76@1x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "44830df745ece423c4850ba5f3c254bb",
+    "semantic_hash": "44830df745ece423c4850ba5f3c254bb"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-76x76@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "60a3caf94d856fd1a3540ad8fc249e7a",
+    "semantic_hash": "60a3caf94d856fd1a3540ad8fc249e7a"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\AppIcon.appiconset\\Icon-App-83.5x83.5@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "b82836e86addd172dbb2c03a9c34b363",
+    "semantic_hash": "b82836e86addd172dbb2c03a9c34b363"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\LaunchImage.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "978c1bee49d7ad5fc1a4d81099b13e18",
+    "semantic_hash": "978c1bee49d7ad5fc1a4d81099b13e18"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\LaunchImage@2x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "978c1bee49d7ad5fc1a4d81099b13e18",
+    "semantic_hash": "978c1bee49d7ad5fc1a4d81099b13e18"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\ios\\Runner\\Assets.xcassets\\LaunchImage.imageset\\LaunchImage@3x.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "978c1bee49d7ad5fc1a4d81099b13e18",
+    "semantic_hash": "978c1bee49d7ad5fc1a4d81099b13e18"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_1024.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "35445a8ff64594aa6e98de7879bf0f53",
+    "semantic_hash": "35445a8ff64594aa6e98de7879bf0f53"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_128.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "da5dcea07efba822f4f3b3c5cdf1f711",
+    "semantic_hash": "da5dcea07efba822f4f3b3c5cdf1f711"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_16.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "46cfb94638ba6007d47a3b8dac500749",
+    "semantic_hash": "46cfb94638ba6007d47a3b8dac500749"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_256.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "7e9efb3a492f4ac4175b3638760a7466",
+    "semantic_hash": "7e9efb3a492f4ac4175b3638760a7466"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_32.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "83ef2940e410d8ca8de03e8780c52244",
+    "semantic_hash": "83ef2940e410d8ca8de03e8780c52244"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_512.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "08cbfacfbf4e9888665130ad66b3c873",
+    "semantic_hash": "08cbfacfbf4e9888665130ad66b3c873"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\macos\\Runner\\Assets.xcassets\\AppIcon.appiconset\\app_icon_64.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "9ef23b1aec0502ee8b7a6eac7e3ac80d",
+    "semantic_hash": "9ef23b1aec0502ee8b7a6eac7e3ac80d"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\favicon.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "46cfb94638ba6007d47a3b8dac500749",
+    "semantic_hash": "46cfb94638ba6007d47a3b8dac500749"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\icons\\Icon-192.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "25d1271b747b2ed7c121620b6b4ec2ec",
+    "semantic_hash": "25d1271b747b2ed7c121620b6b4ec2ec"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\icons\\Icon-512.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "08cbfacfbf4e9888665130ad66b3c873",
+    "semantic_hash": "08cbfacfbf4e9888665130ad66b3c873"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\icons\\Icon-maskable-192.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "25d1271b747b2ed7c121620b6b4ec2ec",
+    "semantic_hash": "25d1271b747b2ed7c121620b6b4ec2ec"
+  },
+  "E:\\flutter\\Twezimbe-mobile-app\\web\\icons\\Icon-maskable-512.png": {
+    "mtime": 1776319712.0,
+    "ast_hash": "08cbfacfbf4e9888665130ad66b3c873",
+    "semantic_hash": "08cbfacfbf4e9888665130ad66b3c873"
+  }
+}

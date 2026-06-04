@@ -1,6 +1,6 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/loans/presentation/pages/apply_loan_page.dart';
@@ -9,6 +9,7 @@ import 'package:twezimbeapp/features/loans/presentation/pages/make_payment_page.
 import 'package:twezimbeapp/features/transactions/presentation/pages/deposit_page.dart';
 import 'package:twezimbeapp/features/transactions/presentation/pages/withdraw_page.dart';
 import 'package:twezimbeapp/features/profile/presentation/pages/profile_page.dart';
+import 'package:twezimbeapp/features/transactions/presentation/pages/all_transactions_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, this.optimisticRecentTransaction});
@@ -22,6 +23,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   bool _isBalanceVisible = false;
   Timer? _refreshTimer;
+  AppTransactionData? _optimisticRecentTransaction;
 
   @override
   void initState() {
@@ -40,7 +42,7 @@ class _DashboardPageState extends State<DashboardPage> {
     super.dispose();
   }
 
-  User? get _currentUser => FirebaseAuth.instance.currentUser;
+  User? get _currentUser => Supabase.instance.client.auth.currentUser;
 
   String _getGreetingName(AppProfileData profile) {
     // Use profile's fullName (which is editable) - this is the exact username
@@ -82,11 +84,11 @@ class _DashboardPageState extends State<DashboardPage> {
     return AppProfileData(
       fullName: email.isNotEmpty ? email.split('@').first : 'there',
       email: email,
-      phoneNumber: user?.phoneNumber ?? 'Not set',
+      phoneNumber: user?.phone ?? 'Not set',
       dateOfBirth: 'Not set',
       nationalId: 'Not set',
       address: 'Not set',
-      photoUrl: user?.photoURL,
+      photoUrl: user?.userMetadata?['photo_url'] as String?,
       customerId: email.isNotEmpty
           ? 'CUST-${email.split('@').first.toUpperCase()}'
           : 'CUST-00000',
@@ -100,7 +102,8 @@ class _DashboardPageState extends State<DashboardPage> {
   List<AppTransactionData> _mergedRecentTransactions(
     List<AppTransactionData> streamedTransactions,
   ) {
-    final optimistic = widget.optimisticRecentTransaction;
+    final optimistic =
+        _optimisticRecentTransaction ?? widget.optimisticRecentTransaction;
     if (optimistic == null) return streamedTransactions;
 
     final exists = streamedTransactions.any(
@@ -547,7 +550,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            _isBalanceVisible ? profile.availableBalance : 'UGX •••••••',
+            _isBalanceVisible ? profile.availableBalance : 'UGX �������',
             style: const TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
@@ -635,13 +638,18 @@ class _DashboardPageState extends State<DashboardPage> {
                 label: 'Deposit',
                 color: AppColors.successGreen,
                 onTap: () async {
-                  await Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const DepositPage(),
                     ),
                   );
-                  if (mounted) setState(() {});
+                  if (!mounted) return;
+                  if (result is AppTransactionData) {
+                    setState(() => _optimisticRecentTransaction = result);
+                  } else {
+                    setState(() {});
+                  }
                 },
               ),
             ),
@@ -652,13 +660,18 @@ class _DashboardPageState extends State<DashboardPage> {
                 label: 'Withdraw',
                 color: AppColors.errorRed,
                 onTap: () async {
-                  await Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const WithdrawPage(),
                     ),
                   );
-                  if (mounted) setState(() {});
+                  if (!mounted) return;
+                  if (result is AppTransactionData) {
+                    setState(() => _optimisticRecentTransaction = result);
+                  } else {
+                    setState(() {});
+                  }
                 },
               ),
             ),
@@ -744,7 +757,14 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
             TextButton(
-              onPressed: () {},
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AllTransactionsPage(),
+                  ),
+                );
+              },
               child: const Text(
                 'See All',
                 style: TextStyle(

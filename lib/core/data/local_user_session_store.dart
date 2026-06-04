@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -58,10 +58,10 @@ class LocalUserSessionStore {
 
     final file = await _sessionFile();
     final session = LocalUserSession(
-      uid: user.uid,
+      uid: user.id,
       email: user.email ?? '',
-      displayName: user.displayName ?? '',
-      phoneNumber: user.phoneNumber ?? '',
+      displayName: user.userMetadata?['display_name'] as String? ?? '',
+      phoneNumber: user.phone ?? '',
       lastAuthenticatedAt: DateTime.now().toIso8601String(),
     );
 
@@ -96,7 +96,7 @@ class LocalUserSessionStore {
   }
 
   static Future<void> saveFromCurrentUser() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
       await clear();
       return;

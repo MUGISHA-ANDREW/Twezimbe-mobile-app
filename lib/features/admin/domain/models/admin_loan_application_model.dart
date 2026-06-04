@@ -45,42 +45,49 @@ class AdminLoanApplicationModel {
       return null;
     }
 
-    String valueAsString(dynamic value, {String fallback = ''}) {
+    String str(dynamic value, {String fallback = ''}) {
       if (value == null) return fallback;
       final text = value.toString().trim();
       return text.isEmpty ? fallback : text;
     }
 
-    int valueAsInt(dynamic value) {
+    int asInt(dynamic value) {
+      if (value is bool) return value ? 1 : 0;
       if (value is int) return value;
       if (value is num) return value.toInt();
       if (value is String) return int.tryParse(value.trim()) ?? 0;
       return 0;
     }
 
-    final id = valueAsString(data['id']);
-    final applicationId = valueAsString(data['applicationId'], fallback: id);
-    final rejectionReason = valueAsString(data['rejectionReason']);
-    final reviewedBy = valueAsString(data['reviewedBy']);
+    final id = str(data['id']);
+    // Support both snake_case (Supabase) and camelCase (legacy SQLite)
+    final applicationId = str(
+      data['application_id'] ?? data['applicationId'],
+      fallback: id,
+    );
+    final rejectionReason = str(
+      data['rejection_reason'] ?? data['rejectionReason'],
+    );
+    final reviewedBy = str(data['reviewed_by'] ?? data['reviewedBy']);
 
     return AdminLoanApplicationModel(
       id: id,
       applicationId: applicationId,
-      userId: valueAsString(data['userId']),
-      userName: valueAsString(data['userName']),
-      userEmail: valueAsString(data['userEmail']),
-      userPhone: valueAsString(data['userPhone']),
-      customerId: valueAsString(data['customerId']),
-      loanType: valueAsString(data['loanType']),
-      amountValue: valueAsInt(data['amountValue']),
-      period: valueAsString(data['period']),
-      purpose: valueAsString(data['purpose']),
-      status: valueAsString(data['status'], fallback: 'Pending Review'),
+      userId: str(data['user_id'] ?? data['userId']),
+      userName: str(data['user_name'] ?? data['userName']),
+      userEmail: str(data['user_email'] ?? data['userEmail']),
+      userPhone: str(data['user_phone'] ?? data['userPhone']),
+      customerId: str(data['customer_id'] ?? data['customerId']),
+      loanType: str(data['loan_type'] ?? data['loanType']),
+      amountValue: asInt(data['amount_value'] ?? data['amountValue']),
+      period: str(data['period']),
+      purpose: str(data['purpose']),
+      status: str(data['status'], fallback: 'Pending Review'),
       rejectionReason: rejectionReason.isEmpty ? null : rejectionReason,
       reviewedBy: reviewedBy.isEmpty ? null : reviewedBy,
-      reviewedAt: parseDate(data['reviewedAt']),
-      createdAt: parseDate(data['createdAt']),
-      updatedAt: parseDate(data['updatedAt']),
+      reviewedAt: parseDate(data['reviewed_at'] ?? data['reviewedAt']),
+      createdAt: parseDate(data['created_at'] ?? data['createdAt']),
+      updatedAt: parseDate(data['updated_at'] ?? data['updatedAt']),
     );
   }
 }

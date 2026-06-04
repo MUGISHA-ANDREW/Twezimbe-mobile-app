@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 
@@ -50,7 +50,7 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
   }
 
   Future<void> _sendPasswordReset() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     final email = user?.email;
     if (email == null || email.isEmpty) {
       _showMessage('No email found for password reset.');
@@ -58,19 +58,23 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
     }
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
       _showMessage('Password reset email sent to $email.');
-    } on FirebaseAuthException catch (_) {
+    } on AuthException catch (_) {
       _showMessage('Failed to send reset email. Try again later.');
     }
   }
 
   Future<void> _showLoginActivity() async {
-    final user = FirebaseAuth.instance.currentUser;
-    final metadata = user?.metadata;
-    final creation = metadata?.creationTime?.toLocal().toString() ?? 'Unknown';
-    final lastSignIn =
-        metadata?.lastSignInTime?.toLocal().toString() ?? 'Unknown';
+    final user = Supabase.instance.client.auth.currentUser;
+    final creation = user?.createdAt != null
+        ? (DateTime.tryParse(user!.createdAt)?.toLocal().toString() ??
+              'Unknown')
+        : 'Unknown';
+    final lastSignIn = user?.lastSignInAt != null
+        ? (DateTime.tryParse(user!.lastSignInAt!)?.toLocal().toString() ??
+              'Unknown')
+        : 'Unknown';
 
     await showDialog<void>(
       context: context,
@@ -115,28 +119,6 @@ class _SecuritySettingsPageState extends State<SecuritySettingsPage> {
               !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent),
-                    const SizedBox(height: 8),
-                    const Text('Failed to load security settings.'),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => setState(() {}),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
           final settings = snapshot.data ?? _fallbackSettings;
 
           return SingleChildScrollView(

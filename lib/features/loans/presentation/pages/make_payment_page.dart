@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:twezimbeapp/core/data/database_helper.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
@@ -14,7 +13,7 @@ class MakePaymentPage extends StatefulWidget {
 }
 
 class _MakePaymentPageState extends State<MakePaymentPage> {
-  final DatabaseHelper _db = DatabaseHelper();
+  static SupabaseClient get _sb => Supabase.instance.client;
 
   String _selectedMethod = 'MTN Mobile Money';
   bool _payFullInstallment = true;
@@ -44,30 +43,58 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
   }
 
   Future<void> _loadLoanData() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _sb.auth.currentUser;
     if (user == null) return;
 
-    final data = await _db.getActiveLoan(user.uid);
-    if (data != null) {
-      setState(() {
-        _loanType = data['type'] ?? 'Salary Loan';
-        _remainingBalance =
-            (data['remainingBalanceValue'] as num?)?.toInt() ?? 0;
-        _loanId = data['loanId'] ?? '-';
+    // Query Supabase directly — no SQLite involved
+    Map<String, dynamic>? row;
+    try {
+      // Prefer an Active loan; fall back to the most recent one
+      row = await _sb
+          .from('loans')
+          .select()
+          .eq('user_id', user.id)
+          .eq('status', 'Active')
+          .order('updated_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+    } catch (_) {}
 
-        // Calculate next installment (simplified - 5% of remaining balance monthly)
-        if (_remainingBalance <= 0) {
-          _nextInstallmentAmount = 0;
-        } else {
-          _nextInstallmentAmount = (_remainingBalance * 0.05).ceil();
-          if (_nextInstallmentAmount < 10000) {
-            _nextInstallmentAmount = 10000; // Minimum
-          }
-        }
-
-        _nextPaymentDate = data['nextPaymentDate'] ?? 'TBD';
-      });
+    if (row == null) {
+      try {
+        row = await _sb
+            .from('loans')
+            .select()
+            .eq('user_id', user.id)
+            .order('updated_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+      } catch (_) {}
     }
+
+    if (row == null || !mounted) return;
+
+    final remaining = (row['remaining_balance_value'] as num?)?.toInt() ?? 0;
+    setState(() {
+      _loanType = (row!['loan_type'] as String?)?.trim().isNotEmpty == true
+          ? row['loan_type'] as String
+          : 'Salary Loan';
+      _remainingBalance = remaining;
+      _loanId = (row['loan_id'] as String?)?.trim().isNotEmpty == true
+          ? row['loan_id'] as String
+          : '-';
+      _nextPaymentDate =
+          (row['next_payment_date'] as String?)?.trim().isNotEmpty == true
+              ? row['next_payment_date'] as String
+              : 'TBD';
+
+      if (_remainingBalance <= 0) {
+        _nextInstallmentAmount = 0;
+      } else {
+        _nextInstallmentAmount = (_remainingBalance * 0.05).ceil();
+        if (_nextInstallmentAmount < 10000) _nextInstallmentAmount = 10000;
+      }
+    });
   }
 
   int get _paymentAmount {
@@ -449,7 +476,7 @@ class _MakePaymentPageState extends State<MakePaymentPage> {
     _showProcessingDialog();
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         throw StateError('No authenticated user found.');
       }

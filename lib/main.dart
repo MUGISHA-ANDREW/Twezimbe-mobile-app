@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'dart:async';
-import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:twezimbeapp/core/data/db_factory_initializer.dart';
 import 'package:twezimbeapp/core/data/local_user_session_store.dart';
 import 'package:twezimbeapp/core/notifications/local_notification_service.dart';
-import 'package:twezimbeapp/core/notifications/push_notification_service.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/features/admin/presentation/pages/admin_dashboard_page.dart';
-import 'package:twezimbeapp/firebase_options.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/features/auth/presentation/pages/sign_in_page.dart';
 import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.dart';
@@ -19,7 +14,13 @@ import 'package:twezimbeapp/features/dashboard/presentation/pages/main_layout.da
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await _initializeDatabaseFactory();
+  // Must be called before any DatabaseHelper access.
+  await initializeDatabaseFactory();
+
+  await Supabase.initialize(
+    url: 'https://dnbnhqelnxvrhtbazrxt.supabase.co',
+    anonKey: 'sb_publishable_erXFel5CNhqEF1Kiips66w_DeW0GAUz',
+  );
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -29,23 +30,14 @@ Future<void> main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await LocalNotificationService.initialize();
-  await PushNotificationService.initialize();
   runApp(const TwezimbeApp());
-}
-
-Future<void> _initializeDatabaseFactory() async {
-  if (kIsWeb) {
-    databaseFactory = databaseFactoryFfiWeb;
-  }
 }
 
 class TwezimbeApp extends StatelessWidget {
@@ -67,18 +59,56 @@ class AuthGatePage extends StatefulWidget {
 
   @override
   State<AuthGatePage> createState() => _AuthGatePageState();
-  
 }
 
 class _AuthGatePageState extends State<AuthGatePage> {
   bool? _isAuthenticated;
   bool _isBootstrapAdmin = false;
   bool _isLoading = true;
+  StreamSubscription<AuthState>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    _listenToAuthChanges();
     _initializeStartup();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenToAuthChanges() {
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((
+      data,
+    ) {
+      if (!mounted) return;
+      final user = data.session?.user;
+      if (user == null) {
+        setState(() {
+          _isAuthenticated = false;
+          _isBootstrapAdmin = false;
+        });
+        return;
+      }
+
+      _handleAuthenticatedUser(user);
+      if (mounted) {
+        setState(() => _isAuthenticated = true);
+      }
+    });
+  }
+
+  void _handleAuthenticatedUser(User user) {
+    _isBootstrapAdmin = _isBootstrapAdminEmail(user.email);
+    unawaited(
+      AppDataRepository.ensureProfileForCurrentUser(
+        email: user.email,
+      ).catchError((_) {}),
+    );
+    unawaited(LocalUserSessionStore.saveUser(user).catchError((_) {}));
   }
 
   Future<void> _initializeStartup() async {
@@ -101,25 +131,11 @@ class _AuthGatePageState extends State<AuthGatePage> {
   }
 
   Future<bool> _resolveInitialAuthState() async {
-    final currentUser = FirebaseAuth.instance.currentUser;
+    final session = Supabase.instance.client.auth.currentSession;
+    final currentUser = session?.user;
+
     if (currentUser != null) {
-      _isBootstrapAdmin = _isBootstrapAdminEmail(currentUser.email);
-      unawaited(
-        AppDataRepository.ensureProfileForCurrentUser(
-          email: currentUser.email,
-        ).catchError((_) {}),
-      );
-      unawaited(LocalUserSessionStore.saveUser(currentUser).catchError((_) {}));
-      unawaited(
-        PushNotificationService.saveTokenLocally(
-          currentUser.uid,
-        ).catchError((_) {}),
-      );
-      unawaited(
-        AppDataRepository.checkAndSendPaymentDueNotification().catchError(
-          (_) {},
-        ),
-      );
+      _handleAuthenticatedUser(currentUser);
       if (mounted) setState(() => _isAuthenticated = true);
       return true;
     }
@@ -153,13 +169,12 @@ class _AuthGatePageState extends State<AuthGatePage> {
       return StreamBuilder<AppProfileData>(
         stream: AppDataRepository.watchProfileForCurrentUser(),
         builder: (context, snapshot) {
-          final currentUser = FirebaseAuth.instance.currentUser;
+          final currentUser = Supabase.instance.client.auth.currentUser;
           if (_isBootstrapAdminEmail(currentUser?.email)) {
             return const AdminDashboardPage();
           }
 
           final profile = snapshot.data;
-          // Show admin dashboard if user is admin
           if (profile?.isAdmin == true) {
             return const AdminDashboardPage();
           }

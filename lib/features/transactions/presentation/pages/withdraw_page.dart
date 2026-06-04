@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:twezimbeapp/core/data/app_data_repository.dart';
 import 'package:twezimbeapp/core/theme/app_theme.dart';
 import 'package:twezimbeapp/core/widgets/processing_payment_dialog.dart';
+import 'package:twezimbeapp/features/transactions/presentation/pages/transaction_success_page.dart';
 
 class WithdrawPage extends StatefulWidget {
   const WithdrawPage({super.key});
@@ -70,7 +71,6 @@ class _WithdrawPageState extends State<WithdrawPage> {
     required String reference,
     required String maskedPhone,
   }) async {
-    // Persist transaction details and create an in-app notification.
     await AppDataRepository.addTransactionForCurrentUser(
       title: 'Withdrawal to $_selectedMethod',
       subtitle: '$maskedPhone • Ref $reference',
@@ -124,7 +124,18 @@ class _WithdrawPageState extends State<WithdrawPage> {
       if (!mounted) {
         return;
       }
-      Navigator.pop(context, true);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TransactionSuccessPage(
+            type: 'Withdrawal',
+            amount: 'UGX ${amountValue.toString()}',
+            reference: reference,
+            recipient: _maskedPhone(rawPhone),
+            date: DateTime.now().toIso8601String(),
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

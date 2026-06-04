@@ -17,9 +17,25 @@ class _ChatbotPageState extends State<ChatbotPage> {
   final ChatbotService _chatbotService = ChatbotService();
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final List<AppChatMessageData> _messages = <AppChatMessageData>[];
   bool _isAwaitingReply = false;
   bool _isManagingChats = false;
   String? _activeConversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _messages.add(
+      AppChatMessageData(
+        id: 'welcome_${DateTime.now().microsecondsSinceEpoch}',
+        conversationId: 'local_welcome',
+        isUser: false,
+        text:
+            'Hello! 👋 Welcome to Twezimbe! I am here to help. Ask me anything.',
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -51,21 +67,24 @@ class _ChatbotPageState extends State<ChatbotPage> {
       return;
     }
 
+    final conversationId =
+        _activeConversationId ?? 'local_${DateTime.now().millisecondsSinceEpoch}';
+
     setState(() {
       _isAwaitingReply = true;
       _controller.clear();
+      _messages.add(
+        AppChatMessageData(
+          id: 'user_${DateTime.now().microsecondsSinceEpoch}',
+          conversationId: conversationId,
+          isUser: true,
+          text: input,
+          createdAt: DateTime.now(),
+        ),
+      );
     });
 
     try {
-      final conversationId =
-          _activeConversationId ??
-          await AppDataRepository.getOrCreateActiveChatConversationIdForCurrentUser();
-
-      await AppDataRepository.addChatMessageForCurrentUser(
-        isUser: true,
-        text: input,
-        conversationId: conversationId,
-      );
       _scrollToBottom();
 
       await Future<void>.delayed(const Duration(milliseconds: 600));
@@ -74,11 +93,39 @@ class _ChatbotPageState extends State<ChatbotPage> {
       }
 
       final reply = _chatbotService.getResponse(input);
-      await AppDataRepository.addChatMessageForCurrentUser(
-        isUser: false,
-        text: reply,
-        conversationId: conversationId,
-      );
+      setState(() {
+        _messages.add(
+          AppChatMessageData(
+            id: 'bot_${DateTime.now().microsecondsSinceEpoch}',
+            conversationId: conversationId,
+            isUser: false,
+            text: reply,
+            createdAt: DateTime.now(),
+          ),
+        );
+      });
+
+      try {
+        final persistedConversationId =
+            _activeConversationId ??
+            await AppDataRepository.getOrCreateActiveChatConversationIdForCurrentUser();
+        if (mounted) {
+          setState(() => _activeConversationId = persistedConversationId);
+        }
+        await AppDataRepository.addChatMessageForCurrentUser(
+          isUser: true,
+          text: input,
+          conversationId: persistedConversationId,
+        );
+        await AppDataRepository.addChatMessageForCurrentUser(
+          isUser: false,
+          text: reply,
+          conversationId: persistedConversationId,
+        );
+      } catch (_) {
+        // Local chat still works even when persistence is unavailable.
+      }
+
       _scrollToBottom();
     } catch (e) {
       if (!mounted) return;
@@ -138,6 +185,23 @@ class _ChatbotPageState extends State<ChatbotPage> {
       messageId: message.id,
       text: cleaned,
     );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      final index = _messages.indexWhere((item) => item.id == message.id);
+      if (index >= 0) {
+        _messages[index] = AppChatMessageData(
+          id: message.id,
+          conversationId: message.conversationId,
+          isUser: message.isUser,
+          text: cleaned,
+          createdAt: message.createdAt,
+        );
+      }
+    });
   }
 
   Future<void> _deleteMessage(AppChatMessageData message) async {
@@ -166,6 +230,14 @@ class _ChatbotPageState extends State<ChatbotPage> {
     }
 
     await AppDataRepository.deleteChatMessageForCurrentUser(message.id);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _messages.removeWhere((item) => item.id == message.id);
+    });
   }
 
   Future<void> _startNewChat() async {
@@ -182,6 +254,18 @@ class _ChatbotPageState extends State<ChatbotPage> {
       }
       setState(() {
         _activeConversationId = conversationId;
+        _messages
+          ..clear()
+          ..add(
+            AppChatMessageData(
+              id: 'welcome_${DateTime.now().microsecondsSinceEpoch}',
+              conversationId: conversationId,
+              isUser: false,
+              text:
+                  'Hello! 👋 Welcome to Twezimbe! I am here to help. Ask me anything.',
+              createdAt: DateTime.now(),
+            ),
+          );
       });
       _scrollToBottom();
       ScaffoldMessenger.of(
@@ -189,6 +273,21 @@ class _ChatbotPageState extends State<ChatbotPage> {
       ).showSnackBar(const SnackBar(content: Text('Started a new chat.')));
     } catch (error) {
       if (!mounted) return;
+      setState(() {
+        _activeConversationId = 'local_${DateTime.now().millisecondsSinceEpoch}';
+        _messages
+          ..clear()
+          ..add(
+            AppChatMessageData(
+              id: 'welcome_${DateTime.now().microsecondsSinceEpoch}',
+              conversationId: _activeConversationId!,
+              isUser: false,
+              text:
+                  'Hello! 👋 Welcome to Twezimbe! I am here to help. Ask me anything.',
+              createdAt: DateTime.now(),
+            ),
+          );
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to start a new chat. $error')),
       );
@@ -370,143 +469,112 @@ class _ChatbotPageState extends State<ChatbotPage> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: StreamBuilder<String?>(
-                stream:
-                    AppDataRepository.watchActiveChatConversationIdForCurrentUser(),
-                builder: (context, activeConversationSnapshot) {
-                  final activeConversationId = activeConversationSnapshot.data;
-                  _activeConversationId = activeConversationId;
-
-                  if (activeConversationId == null ||
-                      activeConversationId.isEmpty) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  return StreamBuilder<List<AppChatMessageData>>(
-                    stream: AppDataRepository.watchChatMessagesForCurrentUser(
-                      conversationId: activeConversationId,
-                    ),
-                    builder: (context, snapshot) {
-                      final messages =
-                          snapshot.data ?? const <AppChatMessageData>[];
-
-                      return ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final message = messages[index];
-                          return GestureDetector(
-                            onLongPress: message.isUser
-                                ? () async {
-                                    await showModalBottomSheet<void>(
-                                      context: context,
-                                      builder: (context) {
-                                        return SafeArea(
-                                          child: Wrap(
-                                            children: [
-                                              ListTile(
-                                                leading: const Icon(Icons.edit),
-                                                title: const Text(
-                                                  'Edit message',
-                                                ),
-                                                onTap: () async {
-                                                  Navigator.pop(context);
-                                                  await _editMessage(message);
-                                                },
-                                              ),
-                                              ListTile(
-                                                leading: const Icon(
-                                                  Icons.delete_outline,
-                                                ),
-                                                title: const Text(
-                                                  'Delete message',
-                                                ),
-                                                onTap: () async {
-                                                  Navigator.pop(context);
-                                                  await _deleteMessage(message);
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  }
-                                : null,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              child: Row(
-                                mainAxisAlignment: message.isUser
-                                    ? MainAxisAlignment.end
-                                    : MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  if (!message.isUser) ...[
-                                    CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: AppColors.primaryBlue
-                                          .withValues(alpha: 0.12),
-                                      child: const Icon(
-                                        Icons.smart_toy_outlined,
-                                        color: AppColors.primaryBlue,
-                                        size: 18,
+              child: ListView.builder(
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                itemCount: _messages.length,
+                itemBuilder: (context, index) {
+                  final message = _messages[index];
+                  return GestureDetector(
+                    onLongPress: message.isUser
+                        ? () async {
+                            await showModalBottomSheet<void>(
+                              context: context,
+                              builder: (context) {
+                                return SafeArea(
+                                  child: Wrap(
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.edit),
+                                        title: const Text('Edit message'),
+                                        onTap: () async {
+                                          Navigator.pop(context);
+                                          await _editMessage(message);
+                                        },
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  Flexible(
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
+                                      ListTile(
+                                        leading: const Icon(Icons.delete_outline),
+                                        title: const Text('Delete message'),
+                                        onTap: () async {
+                                          Navigator.pop(context);
+                                          await _deleteMessage(message);
+                                        },
                                       ),
-                                      constraints: BoxConstraints(
-                                        maxWidth:
-                                            MediaQuery.of(context).size.width *
-                                            0.74,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: message.isUser
-                                            ? AppColors.primaryBlue
-                                            : Colors.white,
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(
-                                          color: message.isUser
-                                              ? AppColors.primaryBlue
-                                              : Colors.grey.shade300,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        message.text,
-                                        style: TextStyle(
-                                          color: message.isUser
-                                              ? Colors.white
-                                              : AppColors.textMain,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ),
+                                    ],
                                   ),
-                                  if (message.isUser) ...[
-                                    const SizedBox(width: 8),
-                                    CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: AppColors.primaryBlue,
-                                      child: const Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                                );
+                              },
+                            );
+                          }
+                        : null,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        mainAxisAlignment: message.isUser
+                            ? MainAxisAlignment.end
+                            : MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          if (!message.isUser) ...[
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor:
+                                  AppColors.primaryBlue.withValues(alpha: 0.12),
+                              child: const Icon(
+                                Icons.smart_toy_outlined,
+                                color: AppColors.primaryBlue,
+                                size: 18,
                               ),
                             ),
-                          );
-                        },
-                      );
-                    },
+                            const SizedBox(width: 8),
+                          ],
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.of(context).size.width * 0.74,
+                              ),
+                              decoration: BoxDecoration(
+                                color: message.isUser
+                                    ? AppColors.primaryBlue
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: message.isUser
+                                      ? AppColors.primaryBlue
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Text(
+                                message.text,
+                                style: TextStyle(
+                                  color: message.isUser
+                                      ? Colors.white
+                                      : AppColors.textMain,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (message.isUser) ...[
+                            const SizedBox(width: 8),
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: AppColors.primaryBlue,
+                              child: const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   );
                 },
               ),

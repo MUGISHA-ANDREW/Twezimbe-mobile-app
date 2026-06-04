@@ -41,40 +41,38 @@ class AdminUserModel {
       return null;
     }
 
-    String valueAsString(dynamic value, {String fallback = ''}) {
+    String str(dynamic value, {String fallback = ''}) {
       if (value == null) return fallback;
       final text = value.toString().trim();
       return text.isEmpty ? fallback : text;
     }
 
-    int valueAsInt(dynamic value) {
+    int asInt(dynamic value) {
+      if (value is bool) return value ? 1 : 0;
       if (value is int) return value;
       if (value is num) return value.toInt();
       if (value is String) return int.tryParse(value.trim()) ?? 0;
       return 0;
     }
 
-    final photoUrl = valueAsString(data['photoUrl']);
+    final photoUrl = str(data['photo_url']);
 
     return AdminUserModel(
-      id: valueAsString(data['id']),
-      fullName: valueAsString(data['fullName'], fallback: 'Unknown'),
-      email: valueAsString(data['email']),
-      phoneNumber: valueAsString(data['phoneNumber']),
-      customerId: valueAsString(data['customerId']),
-      kycStatus: valueAsString(data['kycStatus'], fallback: 'Pending'),
-      accountType: valueAsString(
-        data['accountType'],
-        fallback: 'Savings Account',
-      ),
+      id: str(data['id']),
+      fullName: str(data['full_name'], fallback: 'Unknown'),
+      email: str(data['email']),
+      phoneNumber: str(data['phone_number']),
+      customerId: str(data['customer_id']),
+      kycStatus: str(data['kyc_status'], fallback: 'Pending'),
+      accountType: str(data['account_type'], fallback: 'Savings Account'),
       photoUrl: photoUrl.isEmpty ? null : photoUrl,
-      isAdmin: valueAsInt(data['isAdmin']) == 1,
-      balanceValue: valueAsInt(data['balanceValue']),
-      dateOfBirth: valueAsString(data['dateOfBirth']),
-      nationalId: valueAsString(data['nationalId']),
-      address: valueAsString(data['address']),
-      createdAt: parseDate(data['createdAt']),
-      updatedAt: parseDate(data['updatedAt']),
+      isAdmin: asInt(data['is_admin']) == 1,
+      balanceValue: asInt(data['balance_value']),
+      dateOfBirth: str(data['date_of_birth']),
+      nationalId: str(data['national_id']),
+      address: str(data['address']),
+      createdAt: parseDate(data['created_at']),
+      updatedAt: parseDate(data['updated_at']),
     );
   }
 

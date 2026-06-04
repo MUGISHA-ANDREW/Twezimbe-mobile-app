@@ -1,16 +1,29 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:twezimbeapp/core/constants/app_timeouts.dart';
-import 'package:twezimbeapp/core/data/database_helper.dart';
+import 'package:twezimbeapp/core/data/change_bus.dart';
+import 'package:twezimbeapp/core/data/db_constants.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_loan_application_model.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_notification_model.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_transaction_model.dart';
 import 'package:twezimbeapp/features/admin/domain/models/admin_user_model.dart';
 
+
+
+void debugStep(String step) {
+  print('🟡 [ADMIN FLOW] $step');
+}
+
+void debugSuccess(String step) {
+  print('🟢 [ADMIN FLOW] $step');
+}
+
+void debugError(String step, Object e) {
+  print('🔴 [ADMIN FLOW ERROR] $step');
+  print('   └── $e');
+}
+/// Supabase-backed admin repository.
 class AdminLocalRepository {
   AdminLocalRepository._();
 
@@ -22,116 +35,140 @@ class AdminLocalRepository {
   static const String _loanStatusFilterKey =
       'admin_loans_status_filter_preference';
 
-  final DatabaseHelper _db = DatabaseHelper();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static SupabaseClient get _sb => Supabase.instance.client;
+  final DatabaseChangeBus _bus = DatabaseChangeBus.instance;
 
-  Stream<List<AdminUserModel>> watchUsersFromFirestore() {
-    return _firestore
-        .collection('users')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) {
-          return snap.docs
-              .map((doc) {
-                final data = doc.data();
-                return AdminUserModel(
-                  id: _string(data['uid']).isNotEmpty
-                      ? _string(data['uid'])
-                      : doc.id,
-                  fullName: _string(data['name']).isNotEmpty
-                      ? _string(data['name'])
-                      : 'Unknown',
-                  email: _string(data['email']),
-                  phoneNumber: _string(data['phone']),
-                  customerId: _string(data['customerId']),
-                  kycStatus: _string(data['kycStatus']).isNotEmpty
-                      ? _string(data['kycStatus'])
-                      : 'Pending',
-                  accountType: _string(data['accountType']).isNotEmpty
-                      ? _string(data['accountType'])
-                      : 'Savings Account',
-                  photoUrl: _string(data['photoUrl']).isEmpty
-                      ? null
-                      : _string(data['photoUrl']),
-                  isAdmin: _string(data['role']).toLowerCase() == 'admin',
-                  balanceValue: _int(data['balanceValue']),
-                  dateOfBirth: _string(data['dateOfBirth']),
-                  nationalId: _string(data['nationalId']),
-                  address: _string(data['address']),
-                  createdAt: _toDateTime(data['createdAt']),
-                  updatedAt: _toDateTime(data['updatedAt']),
-                );
-              })
-              .toList(growable: false);
-        });
-  }
+  // ---------------------------------------------------------------------------
+  // Streams
+  // ---------------------------------------------------------------------------
 
-  Stream<List<AdminLoanApplicationModel>> watchLoanApplicationsFromFirestore() {
-    return _firestore
-        .collection('loan_applications')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) {
-          return snap.docs
-              .map((doc) {
-                final data = doc.data();
-                final status = _normalizeLoanStatus(_string(data['status']));
-                return AdminLoanApplicationModel(
-                  id: doc.id,
-                  applicationId: _string(data['applicationId']).isNotEmpty
-                      ? _string(data['applicationId'])
-                      : doc.id,
-                  userId: _string(data['userId']),
-                  userName: _string(data['userName']),
-                  userEmail: _string(data['userEmail']),
-                  userPhone: _string(data['userPhone']),
-                  customerId: _string(data['customerId']),
-                  loanType: _string(data['loanType']),
-                  amountValue: _int(data['amount'] ?? data['amountValue']),
-                  period: _string(data['duration']).isNotEmpty
-                      ? _string(data['duration'])
-                      : _string(data['period']),
-                  purpose: _string(data['purpose']),
-                  status: status,
-                  rejectionReason: _string(data['rejectionReason']).isEmpty
-                      ? null
-                      : _string(data['rejectionReason']),
-                  reviewedBy: _string(data['adminId']).isEmpty
-                      ? null
-                      : _string(data['adminId']),
-                  reviewedAt: _toDateTime(data['decisionAt']),
-                  createdAt: _toDateTime(data['createdAt']),
-                  updatedAt: _toDateTime(data['updatedAt']),
-                );
-              })
-              .toList(growable: false);
-        });
-  }
+  Stream<List<AdminUserModel>> watchUsers() {
+    final controller =
+        StreamController<List<AdminUserModel>>.broadcast();
+    StreamSubscription<String>? sub;
 
-  Stream<int> watchTotalUsersCountFromFirebase() {
-    return _firestore.collection('users').snapshots().map((snap) => snap.size);
-  }
-
-  Stream<int> watchTotalIncomeFromFirebase() {
-    return _firestore.collection('transactions').snapshots().map((snap) {
-      var total = 0;
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final amount = _int(data['amountValue'] ?? data['amount']);
-        final type = _string(data['type']).toLowerCase();
-        final title = _string(data['title']).toLowerCase();
-        final isIncome =
-            type == 'deposit' ||
-            type == 'repayment' ||
-            title.contains('deposit') ||
-            title.contains('repayment');
-        if (isIncome && amount > 0) {
-          total += amount;
-        }
+    Future<void> emit() async {
+      try {
+        final rows = await _sb
+            .from('users')
+            .select()
+            .order('created_at', ascending: false);
+        controller.add(
+          rows.map(AdminUserModel.fromSqlMap).toList(),
+        );
+      } catch (_) {
+        controller.add([]);
       }
-      return total;
-    });
+    }
+
+    controller.onListen = () {
+      unawaited(emit());
+      sub = _bus.stream.where((t) => t == DbTables.users).listen((_) {
+        unawaited(emit());
+      });
+    };
+
+    controller.onCancel = () async => sub?.cancel();
+
+    return controller.stream;
   }
+
+  Stream<List<AdminLoanApplicationModel>> watchLoanApplications() {
+    final controller =
+        StreamController<List<AdminLoanApplicationModel>>.broadcast();
+    StreamSubscription<String>? sub;
+
+    Future<void> emit() async {
+      try {
+        final rows = await _sb
+            .from('loan_applications')
+            .select()
+            .order('created_at', ascending: false);
+        controller.add(
+          rows
+              .map(AdminLoanApplicationModel.fromSqlMap)
+              .toList(growable: false),
+        );
+      } catch (_) {
+        controller.add([]);
+      }
+    }
+
+    controller.onListen = () {
+      unawaited(emit());
+      sub = _bus.stream
+          .where((t) => t == DbTables.loanApplications)
+          .listen((_) => unawaited(emit()));
+    };
+
+    controller.onCancel = () async => sub?.cancel();
+
+    return controller.stream;
+  }
+
+  Stream<int> watchTotalUsersCount() {
+    final controller = StreamController<int>.broadcast();
+    StreamSubscription<String>? sub;
+
+    Future<void> emit() async {
+      try {
+        final rows = await _sb.from('users').select('id');
+        controller.add(rows.length);
+      } catch (_) {
+        controller.add(0);
+      }
+    }
+
+    controller.onListen = () {
+      unawaited(emit());
+      sub = _bus.stream.where((t) => t == DbTables.users).listen((_) {
+        unawaited(emit());
+      });
+    };
+
+    controller.onCancel = () async => sub?.cancel();
+
+    return controller.stream;
+  }
+
+  Stream<int> watchTotalIncome() {
+    final controller = StreamController<int>.broadcast();
+    StreamSubscription<String>? sub;
+
+    Future<void> emit() async {
+      try {
+        final rows = await _sb
+            .from('transactions')
+            .select('amount_value, is_credit, title');
+        int total = 0;
+        for (final row in rows) {
+          final isCredit = row['is_credit'] == true;
+          final title = (row['title'] ?? '').toString().toLowerCase();
+          if (isCredit || title.contains('repayment')) {
+            total += (row['amount_value'] as num?)?.toInt() ?? 0;
+          }
+        }
+        controller.add(total);
+      } catch (_) {
+        controller.add(0);
+      }
+    }
+
+    controller.onListen = () {
+      unawaited(emit());
+      sub = _bus.stream
+          .where((t) => t == DbTables.transactions)
+          .listen((_) => unawaited(emit()));
+    };
+
+    controller.onCancel = () async => sub?.cancel();
+
+    return controller.stream;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Filter preferences
+  // ---------------------------------------------------------------------------
 
   Future<String> getSavedUsersStatusFilter() async {
     final prefs = await SharedPreferences.getInstance();
@@ -153,252 +190,141 @@ class AdminLocalRepository {
     await prefs.setString(_loanStatusFilterKey, value);
   }
 
+  // ---------------------------------------------------------------------------
+  // Sync helpers (no-ops — Supabase IS the remote)
+  // ---------------------------------------------------------------------------
+
   Future<void> syncUsersFromRemote() async {
-    // Keep local cache aligned with whichever Firebase user is currently signed in.
-    await _syncCurrentSignedInUserToSqlite();
-
-    // Pull full auth users list from a privileged backend callable, then cache in SQLite.
-    try {
-      final callable = FirebaseFunctions.instance.httpsCallable(
-        'listAuthUsers',
-      );
-      final response = await callable.call().timeout(kAppOperationTimeout);
-
-      final data = response.data;
-      if (data is! Map) {
-        return;
-      }
-
-      final rawUsers = data['users'];
-      if (rawUsers is! List) {
-        return;
-      }
-
-      final rows = <Map<String, dynamic>>[];
-      final nowIso = DateTime.now().toIso8601String();
-
-      for (final entry in rawUsers) {
-        if (entry is! Map) {
-          continue;
-        }
-
-        final uid = _string(entry['uid']);
-        if (uid.isEmpty) {
-          continue;
-        }
-
-        final existing = await _db.getUser(uid);
-        final email = _string(entry['email']);
-        final fullName = _string(entry['displayName']).isNotEmpty
-            ? _string(entry['displayName'])
-            : _string(existing?['fullName']).isNotEmpty
-            ? _string(existing?['fullName'])
-            : (email.isNotEmpty ? email.split('@').first : 'Member');
-
-        rows.add({
-          'id': uid,
-          'fullName': fullName,
-          'email': email,
-          'phoneNumber': _string(entry['phoneNumber']).isNotEmpty
-              ? _string(entry['phoneNumber'])
-              : _string(existing?['phoneNumber']),
-          'dateOfBirth': _string(existing?['dateOfBirth']),
-          'nationalId': _string(existing?['nationalId']),
-          'address': _string(existing?['address']),
-          'photoUrl': _string(entry['photoURL']).isNotEmpty
-              ? _string(entry['photoURL'])
-              : _string(existing?['photoUrl']),
-          'customerId': _string(existing?['customerId']).isNotEmpty
-              ? _string(existing?['customerId'])
-              : _customerIdFromUid(uid),
-          'kycStatus': _string(existing?['kycStatus']).isNotEmpty
-              ? _string(existing?['kycStatus'])
-              : 'Pending',
-          'accountType': _string(existing?['accountType']).isNotEmpty
-              ? _string(existing?['accountType'])
-              : 'Savings Account',
-          'balanceValue': _int(existing?['balanceValue']),
-          'isAdmin': (_int(existing?['isAdmin']) == 1 || _isAdminEmail(email))
-              ? 1
-              : 0,
-          'createdAt': _string(existing?['createdAt']).isNotEmpty
-              ? _string(existing?['createdAt'])
-              : (_string(entry['creationTime']).isNotEmpty
-                    ? _string(entry['creationTime'])
-                    : nowIso),
-          'updatedAt': _string(entry['lastSignInTime']).isNotEmpty
-              ? _string(entry['lastSignInTime'])
-              : nowIso,
-        });
-      }
-
-      if (rows.isNotEmpty) {
-        await _db.upsertUsers(rows);
-      }
-    } on FirebaseFunctionsException {
-      // Function unavailable/unauthorized: keep using local cache.
-    } catch (_) {
-      // Network/parse issue: keep using local cache.
-    }
+    _bus.notify(DbTables.users);
   }
 
-  Future<void> _syncCurrentSignedInUserToSqlite() async {
-    final current = FirebaseAuth.instance.currentUser;
-    if (current == null) {
-      return;
-    }
-
-    final existing = await _db.getUser(current.uid);
-    final nowIso = DateTime.now().toIso8601String();
-    final email = _string(current.email).toLowerCase();
-    final fullName = _string(current.displayName).isNotEmpty
-        ? _string(current.displayName)
-        : _string(existing?['fullName']).isNotEmpty
-        ? _string(existing?['fullName'])
-        : (email.isNotEmpty ? email.split('@').first : 'Member');
-
-    final payload = <String, dynamic>{
-      'id': current.uid,
-      'fullName': fullName,
-      'email': email,
-      'phoneNumber': _string(current.phoneNumber).isNotEmpty
-          ? _string(current.phoneNumber)
-          : _string(existing?['phoneNumber']),
-      'dateOfBirth': _string(existing?['dateOfBirth']),
-      'nationalId': _string(existing?['nationalId']),
-      'address': _string(existing?['address']),
-      'photoUrl': _string(current.photoURL).isNotEmpty
-          ? _string(current.photoURL)
-          : _string(existing?['photoUrl']),
-      'customerId': _string(existing?['customerId']).isNotEmpty
-          ? _string(existing?['customerId'])
-          : _customerIdFromUid(current.uid),
-      'kycStatus': _string(existing?['kycStatus']).isNotEmpty
-          ? _string(existing?['kycStatus'])
-          : 'Pending',
-      'accountType': _string(existing?['accountType']).isNotEmpty
-          ? _string(existing?['accountType'])
-          : 'Savings Account',
-      'balanceValue': _int(existing?['balanceValue']),
-      'isAdmin': (_int(existing?['isAdmin']) == 1 || _isAdminEmail(email))
-          ? 1
-          : 0,
-      'updatedAt': nowIso,
-    };
-
-    if (existing == null) {
-      payload['createdAt'] =
-          current.metadata.creationTime?.toIso8601String() ?? nowIso;
-      await _db.insertUser(payload);
-    } else {
-      await _db.updateUser(current.uid, payload);
-    }
+  Future<void> syncLoanApplicationsFromRemote() async {
+    _bus.notify(DbTables.loanApplications);
   }
+
+  Future<void> syncUserCollectionsFromRemote(String userId) async {
+    _bus.notify(DbTables.transactions);
+    _bus.notify(DbTables.notifications);
+  }
+
+  // ---------------------------------------------------------------------------
+  // User queries
+  // ---------------------------------------------------------------------------
 
   Future<List<AdminUserModel>> getUsers({
     String searchQuery = '',
     String statusFilter = 'All',
   }) async {
-    final rows = await _db.getAllUsersForAdmin();
-    var users = rows.map(AdminUserModel.fromSqlMap).toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('users')
+          .select()
+          .order('created_at', ascending: false);
+      var users =
+          rows.map(AdminUserModel.fromSqlMap).toList(growable: false);
 
-    final normalizedQuery = searchQuery.trim().toLowerCase();
-    if (normalizedQuery.isNotEmpty) {
-      users = users
-          .where((user) {
-            return user.fullName.toLowerCase().contains(normalizedQuery) ||
-                user.email.toLowerCase().contains(normalizedQuery);
-          })
-          .toList(growable: false);
+      final normalizedQuery = searchQuery.trim().toLowerCase();
+      if (normalizedQuery.isNotEmpty) {
+        users = users.where((u) {
+          return u.fullName.toLowerCase().contains(normalizedQuery) ||
+              u.email.toLowerCase().contains(normalizedQuery);
+        }).toList(growable: false);
+      }
+
+      users = users.where((u) {
+        if (statusFilter == 'All') return true;
+        if (statusFilter == 'KYC Verified') return u.kycStatus == 'KYC Verified';
+        if (statusFilter == 'Rejected') return u.kycStatus == 'Rejected';
+        if (statusFilter == 'Pending') {
+          return u.kycStatus != 'KYC Verified' &&
+              u.kycStatus != 'Rejected';
+        }
+        return true;
+      }).toList(growable: false);
+
+      return users;
+    } catch (_) {
+      return [];
     }
-
-    users = users
-        .where((user) {
-          if (statusFilter == 'All') {
-            return true;
-          }
-          if (statusFilter == 'KYC Verified') {
-            return user.kycStatus == 'KYC Verified';
-          }
-          if (statusFilter == 'Rejected') {
-            return user.kycStatus == 'Rejected';
-          }
-          if (statusFilter == 'Pending') {
-            return user.kycStatus != 'KYC Verified' &&
-                user.kycStatus != 'Rejected';
-          }
-          return true;
-        })
-        .toList(growable: false);
-
-    return users;
   }
 
   Future<void> updateKycStatus(String userId, String status) async {
-    final now = DateTime.now().toIso8601String();
-    await _db.updateUser(userId, {'kycStatus': status, 'updatedAt': now});
+    try {
+      await _sb.from('users').update({
+        'kyc_status': status,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
+      _bus.notify(DbTables.users);
+    } catch (_) {}
   }
 
   Future<void> toggleAdminRole(String userId, bool makeAdmin) async {
-    final now = DateTime.now().toIso8601String();
-    await _db.updateUser(userId, {
-      'isAdmin': makeAdmin ? 1 : 0,
-      'updatedAt': now,
-    });
-
-    await _firestore.collection('users').doc(userId).set({
-      'role': makeAdmin ? 'admin' : 'client',
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    try {
+      await _sb.from('users').update({
+        'is_admin': makeAdmin,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', userId);
+      _bus.notify(DbTables.users);
+    } catch (_) {}
   }
 
   Future<void> deleteUser(String userId) async {
-    await _db.deleteUserRelatedData(userId);
-
-    await _firestore.collection('users').doc(userId).set({
-      'deleted': true,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-  }
-
-  Future<void> syncLoanApplicationsFromRemote() async {
-    // SQLite-only mode: no remote source to sync.
+    try {
+      // Delete related data first (RLS permitting)
+      await _sb.from('notifications').delete().eq('user_id', userId);
+      await _sb.from('transactions').delete().eq('user_id', userId);
+      await _sb.from('loan_applications').delete().eq('user_id', userId);
+      await _sb.from('loans').delete().eq('user_id', userId);
+      await _sb.from('users').delete().eq('id', userId);
+      _bus.notify(DbTables.users);
+    } catch (_) {}
   }
 
   Future<List<AdminLoanApplicationModel>> getLoanApplications({
     String statusFilter = 'All',
   }) async {
-    final rows = await _db.getAllLoanApplications();
-    var apps = rows
-        .map(AdminLoanApplicationModel.fromSqlMap)
-        .toList(growable: false);
+    try {
+      var query = _sb
+          .from('loan_applications')
+          .select()
+          .order('created_at', ascending: false);
 
-    if (statusFilter != 'All') {
-      apps = apps
-          .where((app) => app.status == statusFilter)
+      final rows = await query;
+      var apps = rows
+          .map(AdminLoanApplicationModel.fromSqlMap)
           .toList(growable: false);
-    }
 
-    return apps;
+      if (statusFilter != 'All') {
+        apps = apps
+            .where((app) => app.status == statusFilter)
+            .toList(growable: false);
+      }
+
+      return apps;
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<AdminUserModel?> getUserById(String userId) async {
-    final row = await _db.getUser(userId);
-    if (row == null) {
+    try {
+      final row = await _sb
+          .from('users')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+      if (row == null) return null;
+      return AdminUserModel.fromSqlMap(row);
+    } catch (_) {
       return null;
     }
-    return AdminUserModel.fromSqlMap(row);
-  }
-
-  Future<void> syncUserCollectionsFromRemote(String userId) async {
-    // SQLite-only mode: no remote source to sync.
   }
 
   Future<Map<String, int>> getDashboardMetrics() async {
-    final totalUsers = await _db.getTotalUsersCount();
-    final activeLoans = await _db.getActiveLoansCount();
+    final totalUsers = await _getTotalUsersCount();
+    final activeLoans = await _getActiveLoansCount();
     final defaulters = await getDefaultersCount();
-    final totalRevenue = await _db.getTotalIncomeFromTransactions();
+    final totalRevenue = await _getTotalIncomeFromTransactions();
     return <String, int>{
       'totalUsers': totalUsers,
       'activeLoans': activeLoans,
@@ -413,37 +339,37 @@ class AdminLocalRepository {
   }
 
   Future<Set<String>> getDefaulterUserIds() async {
-    final rows = await _db.getAllLoansForAdmin();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final defaulterIds = <String>{};
+    try {
+      final rows = await _sb.from('loans').select();
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final defaulterIds = <String>{};
 
-    for (final row in rows) {
-      final status = _string(row['status']).toLowerCase();
-      if (status != 'active' && status != 'approved') {
-        continue;
-      }
+      for (final row in rows) {
+        final status = _str(row['status']).toLowerCase();
+        if (status != DbStatus.active.toLowerCase() &&
+            status != DbStatus.approved.toLowerCase()) {
+          continue;
+        }
 
-      final remaining = _int(row['remainingBalanceValue']);
-      if (remaining <= 0) {
-        continue;
-      }
+        final remaining = _int(row['remaining_balance_value']);
+        if (remaining <= 0) continue;
 
-      final dueDate = _parseFlexibleDate(_string(row['nextPaymentDate']));
-      if (dueDate == null) {
-        continue;
-      }
+        final dueDate = _parseFlexibleDate(_str(row['next_payment_date']));
+        if (dueDate == null) continue;
 
-      final normalizedDue = DateTime(dueDate.year, dueDate.month, dueDate.day);
-      if (normalizedDue.isBefore(today)) {
-        final userId = _string(row['userId']);
-        if (userId.isNotEmpty) {
-          defaulterIds.add(userId);
+        final normalizedDue =
+            DateTime(dueDate.year, dueDate.month, dueDate.day);
+        if (normalizedDue.isBefore(today)) {
+          final userId = _str(row['user_id']);
+          if (userId.isNotEmpty) defaulterIds.add(userId);
         }
       }
-    }
 
-    return defaulterIds;
+      return defaulterIds;
+    } catch (_) {
+      return {};
+    }
   }
 
   Future<int> sendClientNotification({
@@ -458,328 +384,446 @@ class AdminLocalRepository {
       throw ArgumentError('Title and message are required.');
     }
 
-    final allUsers = await _db.getAllUsersForAdmin();
-    final allUserIds = allUsers
-        .map((row) => _string(row['id']))
-        .where((id) => id.isNotEmpty)
-        .toSet();
+    List<String> allUserIds = [];
+    try {
+      final rows = await _sb.from('users').select('id');
+      allUserIds = rows.map((r) => _str(r['id'])).where((id) => id.isNotEmpty).toList();
+    } catch (_) {}
 
-    Set<String> recipients;
+    List<String> recipients;
     if (audience == 'specific') {
       final selected = (userId ?? '').trim();
-      if (selected.isEmpty) {
-        throw ArgumentError('Please select a recipient.');
-      }
+      if (selected.isEmpty) throw ArgumentError('Please select a recipient.');
       if (!allUserIds.contains(selected)) {
         throw StateError('Selected recipient does not exist.');
       }
-      recipients = <String>{selected};
+      recipients = [selected];
     } else if (audience == 'defaulters') {
-      recipients = await getDefaulterUserIds();
+      recipients = (await getDefaulterUserIds()).toList();
     } else {
       recipients = allUserIds;
     }
 
-    if (recipients.isEmpty) {
-      return 0;
+    if (recipients.isEmpty) return 0;
+
+    final nowIso = DateTime.now().toIso8601String();
+    for (int i = 0; i < recipients.length; i++) {
+      try {
+        await _sb.from('notifications').insert({
+          'user_id': recipients[i],
+          'title': cleanTitle,
+          'message': cleanMessage,
+          'type': 'admin_update',
+          'is_read': false,
+          'created_at': nowIso,
+          'updated_at': nowIso,
+          'sync_status': DbSyncStatus.synced,
+          'version': 0,
+        });
+      } catch (_) {}
     }
 
-    final createdAt = DateTime.now();
-    final createdAtIso = createdAt.toIso8601String();
-    final sortedRecipients = recipients.toList()..sort();
-
-    for (int i = 0; i < sortedRecipients.length; i++) {
-      final recipientId = sortedRecipients[i];
-      await _db.insertNotification({
-        'id': 'notif_admin_${createdAt.microsecondsSinceEpoch}_$i',
-        'userId': recipientId,
-        'title': cleanTitle,
-        'message': cleanMessage,
-        'type': 'admin_update',
-        'isRead': 0,
-        'createdAt': createdAtIso,
-      });
-    }
-
-    return sortedRecipients.length;
+    _bus.notify(DbTables.notifications);
+    return recipients.length;
   }
 
   Future<List<AdminUserModel>> getRecentUsers({int limit = 5}) async {
-    final rows = await _db.getRecentUsersForAdmin(limit: limit);
-    return rows.map(AdminUserModel.fromSqlMap).toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('users')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(limit);
+      return rows.map(AdminUserModel.fromSqlMap).toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
-  Future<void> approveLoanApplication({
-    required String applicationId,
-    required String userId,
-    required int amountValue,
-    required String loanType,
-    required String period,
-    required String purpose,
-  }) async {
-    final application = await _db.getLoanApplication(applicationId);
-    final now = DateTime.now();
-    final nowIso = now.toIso8601String();
+  // ---------------------------------------------------------------------------
+  // Loan approval / rejection
+  // ---------------------------------------------------------------------------
 
-    if (application == null) {
-      // ADD THIS: Firestore-first decision path when admin device has no local row.
-      await _firestore.collection('loan_applications').doc(applicationId).set({
-        'status': 'approved',
-        'decisionAt': FieldValue.serverTimestamp(),
-        'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+Future<void> approveLoanApplication({
+  required String applicationId,
+  required String userId,
+  required int amountValue,
+  required String loanType,
+  required String period,
+  required String purpose,
+}) async {
+  final now = DateTime.now();
+  final nowIso = now.toIso8601String();
 
-      final approvedNotifRef = _firestore.collection('notifications').doc();
-      await approvedNotifRef.set({
-        'id': approvedNotifRef.id,
-        'userId': userId,
-        'title': 'Loan Approved',
-        'message':
-            'Your loan application ($applicationId) was approved. Funds have been credited to your account.',
-        'type': 'loan',
-        'read': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      return;
+  print('🟡 START approveLoanApplication');
+  print('➡️ applicationId: $applicationId');
+  print('➡️ userId: $userId');
+  print('➡️ amountValue: $amountValue');
+  print('➡️ loanType: $loanType');
+
+  // =========================================================
+  // 🔍 SAFE APPLICATION LOOKUP (FIXED UUID CRASH HERE)
+  // =========================================================
+  List<Map<String, dynamic>> appRows = [];
+
+  try {
+    print('🔍 fetching loan_application by application_id...');
+
+    // 1️⃣ try application_id (TEXT)
+    appRows = await _sb
+        .from('loan_applications')
+        .select()
+        .eq('application_id', applicationId)
+        .limit(1);
+
+    print('📌 step 1 result (application_id): $appRows');
+
+    // 2️⃣ fallback to UUID id ONLY if needed
+    if (appRows.isEmpty) {
+      print('🔁 fallback: trying UUID id match...');
+
+      appRows = await _sb
+          .from('loan_applications')
+          .select()
+          .eq('id', applicationId) // SAFE: only UUID column here
+          .limit(1);
+
+      print('📌 step 2 result (id): $appRows');
     }
+  } catch (e, st) {
+    print('❌ ERROR fetching loan application: $e');
+    print(st);
+  }
 
-    final currentStatus = _string(application['status']);
-    if (currentStatus != 'Pending Review') {
-      throw StateError('Only pending applications can be approved.');
-    }
+  if (appRows.isEmpty) {
+    print('❌ Loan application NOT FOUND');
+    throw StateError('Loan application not found.');
+  }
 
-    final effectiveApplicationId =
-        _string(application['applicationId']).isNotEmpty
-        ? _string(application['applicationId'])
-        : _string(application['id']);
-    if (effectiveApplicationId.isEmpty) {
-      throw StateError('Loan application has no valid identifier.');
-    }
+  final application = appRows.first;
+  final currentStatus = _str(application['status']);
 
-    await _db.updateLoanApplication(effectiveApplicationId, {
-      'status': 'Approved',
-      'rejectionReason': null,
-      'reviewedBy': 'local_admin',
-      'reviewedAt': nowIso,
-      'updatedAt': nowIso,
-    });
+  print('📌 currentStatus: $currentStatus');
 
-    final latestLoan = await _db.getLatestLoanForUser(userId);
-    if (latestLoan == null) {
-      await _db.insertLoan({
-        'id': 'active_$userId',
-        'userId': userId,
-        'loanId': 'LN${now.millisecondsSinceEpoch}',
-        'type': loanType,
-        'status': 'Active',
-        'amountValue': amountValue,
-        'remainingBalanceValue': amountValue,
+  if (currentStatus != DbStatus.pending &&
+      currentStatus != 'Pending Review') {
+    print('❌ Invalid status for approval: $currentStatus');
+    throw StateError('Only pending applications can be approved.');
+  }
+
+  final effectiveAppId = _str(
+    application['application_id'] ?? application['id'],
+  );
+
+  print('📌 effectiveAppId: $effectiveAppId');
+
+  if (effectiveAppId.isEmpty) {
+    throw StateError('Loan application has no valid identifier.');
+  }
+
+  // =========================================================
+  // ✏️ UPDATE APPLICATION
+  // =========================================================
+  try {
+    print('✏️ updating loan_application status...');
+
+    final res = await _sb.from('loan_applications').update({
+      'status': DbStatus.approved,
+      'rejection_reason': null,
+      'reviewed_by': 'admin',
+      'reviewed_at': nowIso,
+      'updated_at': nowIso,
+    }).eq('application_id', application['application_id']);
+
+    print('✅ loan_applications update response: $res');
+  } catch (e, st) {
+    print('❌ ERROR updating loan application: $e');
+    print(st);
+  }
+
+  // =========================================================
+  // 🏦 LOAN FETCH
+  // =========================================================
+  List<Map<String, dynamic>> loanRows = [];
+
+  try {
+    print('🔍 fetching loans for user...');
+
+    loanRows = await _sb
+        .from('loans')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .limit(1);
+
+    print('📌 loan fetch result: $loanRows');
+  } catch (e, st) {
+    print('❌ ERROR fetching loans: $e');
+    print(st);
+  }
+
+  try {
+    if (loanRows.isEmpty) {
+      print('➕ creating new loan...');
+
+      final insertRes = await _sb.from('loans').insert({
+        'user_id': userId,
+        'loan_id': 'LN${now.millisecondsSinceEpoch}',
+        'loan_type': loanType,
+        'status': DbStatus.active,
+        'amount_value': amountValue,
+        'remaining_balance_value': amountValue,
         'period': period,
         'purpose': purpose,
-        'nextPaymentDate': now.add(const Duration(days: 30)).toIso8601String(),
-        'repaymentProgress': 0,
-        'createdAt': nowIso,
-        'updatedAt': nowIso,
+        'next_payment_date':
+            now.add(const Duration(days: 30)).toIso8601String(),
+        'repayment_progress': 0,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+        'sync_status': DbSyncStatus.synced,
+        'version': 0,
       });
+
+      print('✅ loan insert response: $insertRes');
     } else {
-      final latestStatus = _string(latestLoan['status']);
-      if (latestStatus == 'Active' || latestStatus == 'Approved') {
-        final currentRemaining = _int(latestLoan['remainingBalanceValue']);
-        final currentPrincipal = _int(latestLoan['amountValue']);
-        await _db.updateLoan(latestLoan['id'].toString(), {
-          'remainingBalanceValue': currentRemaining + amountValue,
-          'amountValue': currentPrincipal + amountValue,
-          'updatedAt': nowIso,
-        });
+      final existingLoan = loanRows.first;
+      final existingStatus = _str(existingLoan['status']);
+
+      print('📌 existing loan status: $existingStatus');
+
+      if (existingStatus == DbStatus.active ||
+          existingStatus == DbStatus.approved) {
+        final currentRemaining =
+            _int(existingLoan['remaining_balance_value']);
+        final currentPrincipal =
+            _int(existingLoan['amount_value']);
+
+        print('🔄 updating existing active loan...');
+
+        final updateRes = await _sb.from('loans').update({
+          'remaining_balance_value': currentRemaining + amountValue,
+          'amount_value': currentPrincipal + amountValue,
+          'updated_at': nowIso,
+        }).eq('id', existingLoan['id']);
+
+        print('✅ loan update response: $updateRes');
       } else {
-        await _db.updateLoan(latestLoan['id'].toString(), {
-          'loanId': _string(latestLoan['loanId']).isNotEmpty
-              ? _string(latestLoan['loanId'])
+        print('🔄 reactivating loan...');
+
+        final updateRes = await _sb.from('loans').update({
+          'loan_id': _str(existingLoan['loan_id']).isNotEmpty
+              ? _str(existingLoan['loan_id'])
               : 'LN${now.millisecondsSinceEpoch}',
-          'type': loanType,
-          'status': 'Active',
-          'amountValue': amountValue,
-          'remainingBalanceValue': amountValue,
+          'loan_type': loanType,
+          'status': DbStatus.active,
+          'amount_value': amountValue,
+          'remaining_balance_value': amountValue,
           'period': period,
           'purpose': purpose,
-          'nextPaymentDate': now
-              .add(const Duration(days: 30))
-              .toIso8601String(),
-          'repaymentProgress': 0,
-          'updatedAt': nowIso,
-        });
+          'next_payment_date':
+              now.add(const Duration(days: 30)).toIso8601String(),
+          'repayment_progress': 0,
+          'updated_at': nowIso,
+        }).eq('id', existingLoan['id']);
+
+        print('✅ loan reactivation response: $updateRes');
       }
     }
+  } catch (e, st) {
+    print('❌ ERROR handling loan creation/update: $e');
+    print(st);
+  }
 
-    final user = await _db.getUser(userId);
-    final currentBalance = _int(user?['balanceValue']);
-    await _db.updateUser(userId, {
-      'balanceValue': currentBalance + amountValue,
-      'updatedAt': nowIso,
-    });
+  // =========================================================
+  // 💰 USER BALANCE UPDATE
+  // =========================================================
+  try {
+    print('💰 fetching user balance...');
 
-    await _db.insertTransaction({
-      'id': 'tx_${now.microsecondsSinceEpoch}',
-      'userId': userId,
+    final userRow = await _sb
+        .from('users')
+        .select('balance_value')
+        .eq('id', userId)
+        .maybeSingle();
+
+    print('👤 user row: $userRow');
+
+    final currentBalance = _int(userRow?['balance_value']);
+
+    final updateRes = await _sb.from('users').update({
+      'balance_value': currentBalance + amountValue,
+      'updated_at': nowIso,
+    }).eq('id', userId);
+
+    print('✅ user balance update: $updateRes');
+  } catch (e, st) {
+    print('❌ ERROR updating user balance: $e');
+    print(st);
+  }
+
+  // =========================================================
+  // 💳 TRANSACTION
+  // =========================================================
+  try {
+    print('💳 inserting transaction...');
+
+    final txRes = await _sb.from('transactions').insert({
+      'user_id': userId,
       'title': 'Loan Approved',
       'subtitle': '$loanType approved and credited',
-      'amountValue': amountValue,
-      'isCredit': 1,
-      'createdAt': nowIso,
+      'amount_value': amountValue,
+      'is_credit': true,
+      'created_at': nowIso,
+      'updated_at': nowIso,
+      'sync_status': DbSyncStatus.synced,
+      'version': 0,
     });
 
-    await _db.insertNotification({
-      'id': 'notif_${now.microsecondsSinceEpoch}',
-      'userId': userId,
-      'title': 'Loan Approved',
-      'message':
-          'Your loan application ($effectiveApplicationId) was approved. Funds have been credited to your account.',
-      'type': 'loan_approved',
-      'isRead': 0,
-      'createdAt': nowIso,
-    });
-
-    // ADD THIS: keep Firestore admin loan workflow updated.
-    await _firestore
-        .collection('loan_applications')
-        .doc(effectiveApplicationId)
-        .set({
-          'status': 'approved',
-          'decisionAt': FieldValue.serverTimestamp(),
-          'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-    final approvedNotifRef = _firestore.collection('notifications').doc();
-    await approvedNotifRef.set({
-      'id': approvedNotifRef.id,
-      'userId': userId,
-      'title': 'Loan Approved',
-      'message':
-          'Your loan application ($effectiveApplicationId) was approved. Funds have been credited to your account.',
-      'type': 'loan',
-      'read': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    print('✅ transaction insert: $txRes');
+  } catch (e, st) {
+    print('❌ ERROR inserting transaction: $e');
+    print(st);
   }
+
+  // =========================================================
+  // 🔔 NOTIFICATION
+  // =========================================================
+  try {
+    print('🔔 inserting notification...');
+
+    final noteRes = await _sb.from('notifications').insert({
+      'user_id': userId,
+      'title': 'Loan Approved',
+      'message':
+          'Your loan application ($effectiveAppId) was approved. Funds have been credited to your account.',
+      'type': 'loan_approved',
+      'is_read': false,
+      'created_at': nowIso,
+      'updated_at': nowIso,
+      'sync_status': DbSyncStatus.synced,
+      'version': 0,
+    });
+
+    print('✅ notification insert: $noteRes');
+  } catch (e, st) {
+    print('❌ ERROR inserting notification: $e');
+    print(st);
+  }
+
+  print('🏁 FINISHED approveLoanApplication');
+
+  _bus.notify(DbTables.loanApplications);
+  _bus.notify(DbTables.loans);
+  _bus.notify(DbTables.transactions);
+  _bus.notify(DbTables.notifications);
+  _bus.notify(DbTables.users);
+}
 
   Future<void> rejectLoanApplication({
     required String applicationId,
     required String userId,
     required String reason,
   }) async {
-    final application = await _db.getLoanApplication(applicationId);
     final cleanReason = reason.trim().isEmpty
         ? 'Please contact support for guidance.'
         : reason.trim();
     final nowIso = DateTime.now().toIso8601String();
 
-    if (application == null) {
-      // ADD THIS: Firestore-first decision path when admin device has no local row.
-      await _firestore.collection('loan_applications').doc(applicationId).set({
-        'status': 'rejected',
-        'rejectionReason': cleanReason,
-        'decisionAt': FieldValue.serverTimestamp(),
-        'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    List<Map<String, dynamic>> appRows = [];
+    try {
+      appRows = await _sb
+          .from('loan_applications')
+          .select()
+          .or('application_id.eq.$applicationId,id.eq.$applicationId')
+          .limit(1);
+    } catch (_) {}
 
-      final rejectedNotifRef = _firestore.collection('notifications').doc();
-      await rejectedNotifRef.set({
-        'id': rejectedNotifRef.id,
-        'userId': userId,
-        'title': 'Loan Rejected',
-        'message':
-            'Your loan application ($applicationId) was rejected. Reason: $cleanReason',
-        'type': 'loan',
-        'read': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      return;
-    }
+    if (appRows.isEmpty) throw StateError('Loan application not found.');
 
-    final currentStatus = _string(application['status']);
-    if (currentStatus != 'Pending Review') {
+    final currentStatus = _str(appRows.first['status']);
+    if (currentStatus != DbStatus.pending &&
+        currentStatus != 'Pending Review') {
       throw StateError('Only pending applications can be rejected.');
     }
 
-    final effectiveApplicationId =
-        _string(application['applicationId']).isNotEmpty
-        ? _string(application['applicationId'])
-        : _string(application['id']);
-    if (effectiveApplicationId.isEmpty) {
-      throw StateError('Loan application has no valid identifier.');
-    }
+    final effectiveAppId = _str(
+      appRows.first['application_id'] ?? appRows.first['id'],
+    );
 
-    await _db.updateLoanApplication(effectiveApplicationId, {
-      'status': 'Rejected',
-      'rejectionReason': cleanReason,
-      'reviewedBy': 'local_admin',
-      'reviewedAt': nowIso,
-      'updatedAt': nowIso,
-    });
+    try {
+      await _sb.from('loan_applications').update({
+        'status': DbStatus.rejected,
+        'rejection_reason': cleanReason,
+        'reviewed_by': 'admin',
+        'reviewed_at': nowIso,
+        'updated_at': nowIso,
+      }).or('application_id.eq.$effectiveAppId,id.eq.$effectiveAppId');
+    } catch (_) {}
 
-    final latestLoan = await _db.getLatestLoanForUser(userId);
-    if (latestLoan != null &&
-        _string(latestLoan['status']) == 'Pending Review') {
-      await _db.updateLoan(latestLoan['id'].toString(), {
-        'status': 'Rejected',
-        'nextPaymentDate': 'Awaiting new application',
-        'repaymentProgress': 0,
-        'updatedAt': nowIso,
+    // Update loan status if pending
+    try {
+      final loanRows = await _sb
+          .from('loans')
+          .select('id, status')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(1);
+      if (loanRows.isNotEmpty) {
+        final loanStatus = _str(loanRows.first['status']);
+        if (loanStatus == DbStatus.pending ||
+            loanStatus == 'Pending Review') {
+          await _sb.from('loans').update({
+            'status': DbStatus.rejected,
+            'next_payment_date': 'Awaiting new application',
+            'repayment_progress': 0,
+            'updated_at': nowIso,
+          }).eq('id', loanRows.first['id']);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      await _sb.from('notifications').insert({
+        'user_id': userId,
+        'title': 'Loan Rejected',
+        'message':
+            'Your loan application ($effectiveAppId) was rejected. Reason: $cleanReason',
+        'type': 'loan_rejected',
+        'is_read': false,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+        'sync_status': DbSyncStatus.synced,
+        'version': 0,
       });
-    }
+    } catch (_) {}
 
-    await _db.insertNotification({
-      'id': 'notif_${DateTime.now().microsecondsSinceEpoch}',
-      'userId': userId,
-      'title': 'Loan Rejected',
-      'message':
-          'Your loan application ($effectiveApplicationId) was rejected. Reason: $cleanReason',
-      'type': 'loan_rejected',
-      'isRead': 0,
-      'createdAt': nowIso,
-    });
-
-    // ADD THIS: keep Firestore admin loan workflow updated.
-    await _firestore
-        .collection('loan_applications')
-        .doc(effectiveApplicationId)
-        .set({
-          'status': 'rejected',
-          'rejectionReason': cleanReason,
-          'decisionAt': FieldValue.serverTimestamp(),
-          'adminId': FirebaseAuth.instance.currentUser?.uid ?? 'admin',
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-    final rejectedNotifRef = _firestore.collection('notifications').doc();
-    await rejectedNotifRef.set({
-      'id': rejectedNotifRef.id,
-      'userId': userId,
-      'title': 'Loan Rejected',
-      'message':
-          'Your loan application ($effectiveApplicationId) was rejected. Reason: $cleanReason',
-      'type': 'loan',
-      'read': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    _bus.notify(DbTables.loanApplications);
+    _bus.notify(DbTables.loans);
+    _bus.notify(DbTables.notifications);
   }
+
+  // ---------------------------------------------------------------------------
+  // Paged queries for user detail
+  // ---------------------------------------------------------------------------
 
   Future<List<AdminLoanApplicationModel>> getUserLoanApplicationsPaged(
     String userId, {
     int limit = 20,
     int offset = 0,
   }) async {
-    final rows = await _db.getLoanApplicationsPaged(
-      userId,
-      limit: limit,
-      offset: offset,
-    );
-    return rows
-        .map(AdminLoanApplicationModel.fromSqlMap)
-        .toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('loan_applications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+      return rows
+          .map(AdminLoanApplicationModel.fromSqlMap)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<AdminTransactionModel>> getUserTransactionsPaged(
@@ -787,12 +831,19 @@ class AdminLocalRepository {
     int limit = 20,
     int offset = 0,
   }) async {
-    final rows = await _db.getTransactionsPaged(
-      userId,
-      limit: limit,
-      offset: offset,
-    );
-    return rows.map(AdminTransactionModel.fromSqlMap).toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('transactions')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+      return rows
+          .map(AdminTransactionModel.fromSqlMap)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<AdminNotificationModel>> getUserNotificationsPaged(
@@ -800,62 +851,377 @@ class AdminLocalRepository {
     int limit = 20,
     int offset = 0,
   }) async {
-    final rows = await _db.getNotificationsPaged(
-      userId,
-      limit: limit,
-      offset: offset,
-    );
-    return rows.map(AdminNotificationModel.fromSqlMap).toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('notifications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+      return rows
+          .map(AdminNotificationModel.fromSqlMap)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<AdminLoanApplicationModel>> getAllLoanApplicationsForUser(
     String userId,
   ) async {
-    final rows = await _db.getLoanApplications(userId);
-    return rows
-        .map(AdminLoanApplicationModel.fromSqlMap)
-        .toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('loan_applications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      return rows
+          .map(AdminLoanApplicationModel.fromSqlMap)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<AdminTransactionModel>> getAllTransactionsForUser(
     String userId,
   ) async {
-    final rows = await _db.getTransactions(userId, limit: 100000);
-    return rows.map(AdminTransactionModel.fromSqlMap).toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('transactions')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      return rows
+          .map(AdminTransactionModel.fromSqlMap)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<List<AdminNotificationModel>> getAllNotificationsForUser(
     String userId,
   ) async {
-    final rows = await _db.getNotifications(userId, limit: 100000);
-    return rows.map(AdminNotificationModel.fromSqlMap).toList(growable: false);
+    try {
+      final rows = await _sb
+          .from('notifications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+      return rows
+          .map(AdminNotificationModel.fromSqlMap)
+          .toList(growable: false);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Direct loan creation (no application required)
+  // ---------------------------------------------------------------------------
+
+  Future<void> createLoanForUser({
+    required String userId,
+    required int amountValue,
+    required String loanType,
+    required String period,
+    required String purpose,
+  }) async {
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+
+    try {
+      await _sb.from('loans').insert({
+        'user_id': userId,
+        'loan_id': 'LN${now.millisecondsSinceEpoch}',
+        'loan_type': loanType,
+        'status': DbStatus.active,
+        'amount_value': amountValue,
+        'remaining_balance_value': amountValue,
+        'period': period,
+        'purpose': purpose,
+        'next_payment_date': now.add(const Duration(days: 30)).toIso8601String(),
+        'repayment_progress': 0,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+        'sync_status': DbSyncStatus.synced,
+        'version': 0,
+      });
+    } catch (_) {}
+
+    try {
+      final userRow = await _sb
+          .from('users')
+          .select('balance_value')
+          .eq('id', userId)
+          .maybeSingle();
+      final current = _int(userRow?['balance_value']);
+      await _sb.from('users').update({
+        'balance_value': current + amountValue,
+        'updated_at': nowIso,
+      }).eq('id', userId);
+    } catch (_) {}
+
+    try {
+      await _sb.from('transactions').insert({
+        'user_id': userId,
+        'title': 'Loan Disbursed',
+        'subtitle': '$loanType issued by admin',
+        'amount_value': amountValue,
+        'is_credit': true,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+        'sync_status': DbSyncStatus.synced,
+        'version': 0,
+      });
+    } catch (_) {}
+
+    try {
+      await _sb.from('notifications').insert({
+        'user_id': userId,
+        'title': 'Loan Issued',
+        'message':
+            'A $loanType loan of UGX ${_formatAmount(amountValue)} has been credited to your account.',
+        'type': 'loan_approved',
+        'is_read': false,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+        'sync_status': DbSyncStatus.synced,
+        'version': 0,
+      });
+    } catch (_) {}
+
+    _bus.notify(DbTables.loans);
+    _bus.notify(DbTables.transactions);
+    _bus.notify(DbTables.notifications);
+    _bus.notify(DbTables.users);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Active loans
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getAllActiveLoans() async {
+    try {
+      return await _sb
+          .from('loans')
+          .select()
+          .order('created_at', ascending: false);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> markLoanAsPaidOff(String loanId) async {
+    final nowIso = DateTime.now().toIso8601String();
+    try {
+      await _sb.from('loans').update({
+        'status': 'Paid Off',
+        'remaining_balance_value': 0,
+        'repayment_progress': 100,
+        'updated_at': nowIso,
+      }).eq('id', loanId);
+      _bus.notify(DbTables.loans);
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // All transactions (admin view)
+  // ---------------------------------------------------------------------------
+
+  Future<List<AdminTransactionModel>> getAllTransactions({
+    int limit = 200,
+  }) async {
+    try {
+      final rows = await _sb
+          .from('transactions')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(limit);
+      return rows.map(AdminTransactionModel.fromSqlMap).toList(growable: false);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Loan products CRUD
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getLoanProducts() async {
+    try {
+      return await _sb
+          .from('loan_products')
+          .select()
+          .order('created_at', ascending: false);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> createLoanProduct({
+    required String name,
+    required int maxAmountValue,
+    required int interestRateBps,
+    required String periods,
+    bool isActive = true,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+    try {
+      await _sb.from('loan_products').insert({
+        'name': name,
+        'max_amount_value': maxAmountValue,
+        'interest_rate_bps': interestRateBps,
+        'periods': periods,
+        'is_active': isActive,
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> updateLoanProduct(
+    String id, {
+    String? name,
+    int? maxAmountValue,
+    int? interestRateBps,
+    String? periods,
+    bool? isActive,
+  }) async {
+    final nowIso = DateTime.now().toIso8601String();
+    final updates = <String, dynamic>{'updated_at': nowIso};
+    if (name != null) updates['name'] = name;
+    if (maxAmountValue != null) updates['max_amount_value'] = maxAmountValue;
+    if (interestRateBps != null) updates['interest_rate_bps'] = interestRateBps;
+    if (periods != null) updates['periods'] = periods;
+    if (isActive != null) updates['is_active'] = isActive;
+    try {
+      await _sb.from('loan_products').update(updates).eq('id', id);
+    } catch (_) {}
+  }
+
+  Future<void> deleteLoanProduct(String id) async {
+    try {
+      await _sb.from('loan_products').delete().eq('id', id);
+    } catch (_) {}
+  }
+
+  // ---------------------------------------------------------------------------
+  // Report data
+  // ---------------------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getReportData() async {
+    int totalDeposits = 0;
+    int totalWithdrawals = 0;
+    int totalLoansIssued = 0;
+    int totalRepayments = 0;
+    int outstandingBalance = 0;
+
+    try {
+      final txRows = await _sb.from('transactions').select(
+            'amount_value, is_credit, title',
+          );
+      for (final row in txRows) {
+        final amt = _int(row['amount_value']);
+        final isCredit = row['is_credit'] == true;
+        final title = _str(row['title']).toLowerCase();
+        if (isCredit && title.contains('deposit')) totalDeposits += amt;
+        if (!isCredit && title.contains('withdrawal')) totalWithdrawals += amt;
+        if (isCredit && (title.contains('loan') || title.contains('disburs'))) {
+          totalLoansIssued += amt;
+        }
+        if (!isCredit && title.contains('repayment')) totalRepayments += amt;
+      }
+    } catch (_) {}
+
+    try {
+      final loanRows = await _sb
+          .from('loans')
+          .select('remaining_balance_value, status');
+      for (final row in loanRows) {
+        final status = _str(row['status']).toLowerCase();
+        if (status == 'active' || status == 'approved') {
+          outstandingBalance += _int(row['remaining_balance_value']);
+        }
+      }
+    } catch (_) {}
+
+    return {
+      'totalDeposits': totalDeposits,
+      'totalWithdrawals': totalWithdrawals,
+      'totalLoansIssued': totalLoansIssued,
+      'totalRepayments': totalRepayments,
+      'outstandingBalance': outstandingBalance,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  String _formatAmount(int amount) {
+    final digits = amount.toString();
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      final idxFromEnd = digits.length - i;
+      buffer.write(digits[i]);
+      if (idxFromEnd > 1 && idxFromEnd % 3 == 1) buffer.write(',');
+    }
+    return buffer.toString();
+  }
+
+  Future<int> _getTotalUsersCount() async {
+    try {
+      final rows = await _sb.from('users').select('id');
+      return rows.length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> _getActiveLoansCount() async {
+    try {
+      final rows = await _sb
+          .from('loan_applications')
+          .select('id')
+          .or('status.eq.${DbStatus.approved},status.eq.${DbStatus.active}');
+      return rows.length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> _getTotalIncomeFromTransactions() async {
+    try {
+      final rows = await _sb
+          .from('transactions')
+          .select('amount_value, is_credit, title');
+      int total = 0;
+      for (final row in rows) {
+        final isCredit = row['is_credit'] == true;
+        final title = (row['title'] ?? '').toString().toLowerCase();
+        if (isCredit || title.contains('repayment')) {
+          total += _int(row['amount_value']);
+        }
+      }
+      return total;
+    } catch (_) {
+      return 0;
+    }
   }
 
   int _int(dynamic value) {
+    if (value is bool) return value ? 1 : 0;
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value.trim()) ?? 0;
     return 0;
   }
 
-  String _string(dynamic value) {
-    if (value == null) {
-      return '';
-    }
+  String _str(dynamic value) {
+    if (value == null) return '';
     return value.toString().trim();
-  }
-
-  String _customerIdFromUid(String uid) {
-    final normalized = uid.codeUnits.fold<int>(
-      0,
-      (accumulator, code) => (accumulator + code) % 99999,
-    );
-    final suffix = normalized.toString().padLeft(5, '0');
-    return 'CUS$suffix';
-  }
-
-  bool _isAdminEmail(String email) {
-    return email.trim().toLowerCase() == 'admin@twezimbe.co.ug';
   }
 
   DateTime? _parseFlexibleDate(String? raw) {
@@ -866,43 +1232,14 @@ class AdminLocalRepository {
         text == 'Awaiting approval') {
       return null;
     }
-
     final iso = DateTime.tryParse(text);
-    if (iso != null) {
-      return iso;
-    }
-
+    if (iso != null) return iso;
     final parts = text.split('/');
-    if (parts.length != 3) {
-      return null;
-    }
-
+    if (parts.length != 3) return null;
     final day = int.tryParse(parts[0]);
     final month = int.tryParse(parts[1]);
     final year = int.tryParse(parts[2]);
-    if (day == null || month == null || year == null) {
-      return null;
-    }
-
+    if (day == null || month == null || year == null) return null;
     return DateTime(year, month, day);
-  }
-
-  DateTime? _toDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    if (value is Timestamp) return value.toDate();
-    if (value is String && value.trim().isNotEmpty) {
-      return DateTime.tryParse(value);
-    }
-    return null;
-  }
-
-  String _normalizeLoanStatus(String raw) {
-    final value = raw.toLowerCase();
-    if (value == 'approved') return 'Approved';
-    if (value == 'rejected') return 'Rejected';
-    if (value == 'pending') return 'Pending';
-    if (raw.trim().isEmpty) return 'Pending';
-    return raw;
   }
 }
