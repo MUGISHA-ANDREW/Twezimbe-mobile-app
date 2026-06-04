@@ -10,6 +10,7 @@ service cloud.firestore {
         request.auth.token.email != null &&
         request.auth.token.email.lower() == 'admin@twezimbe.co.ug';
     }
+    
 
     function isAdmin() {
       return isSignedIn() &&
