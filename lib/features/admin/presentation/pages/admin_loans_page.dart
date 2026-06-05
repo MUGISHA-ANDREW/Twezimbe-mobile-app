@@ -222,6 +222,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                     ),
                   ],
                 ),
+                
                 child: snapshot.connectionState == ConnectionState.waiting
                     ? const Center(
                         child: Padding(
