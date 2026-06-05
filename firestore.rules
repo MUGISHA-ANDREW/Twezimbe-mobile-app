@@ -11,6 +11,7 @@ service cloud.firestore {
         request.auth.token.email.lower() == 'admin@twezimbe.co.ug';
     }
 
+
     function isAdmin() {
       return isSignedIn() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
