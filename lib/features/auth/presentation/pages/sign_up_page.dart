@@ -120,6 +120,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
       if (!mounted) return;
 
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
