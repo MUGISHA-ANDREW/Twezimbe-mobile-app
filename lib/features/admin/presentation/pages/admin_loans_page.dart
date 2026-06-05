@@ -221,8 +221,7 @@ class _AdminLoansPageState extends State<AdminLoansPage> {
                       offset: const Offset(0, 8),
                     ),
                   ],
-                ),
-                
+                ),  
                 child: snapshot.connectionState == ConnectionState.waiting
                     ? const Center(
                         child: Padding(
